@@ -1,2 +1,126 @@
+# ============================================================
+# Vantage — Monorepo .gitignore
+# ============================================================
+
+# ------------------------------------------------------------
+# Plans & Internal Docs (not for version control)
+# ------------------------------------------------------------
 .plans/
 vantage_ai/
+
+# ------------------------------------------------------------
+# Environment Variables — NEVER commit secrets
+# ------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# ------------------------------------------------------------
+# Python
+# ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+*.egg
+*.egg-info/
+dist/
+build/
+wheels/
+*.whl
+*.tar.gz
+MANIFEST
+
+# MyPy / type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+*.coveragerc
+
+# Ruff / linting
+.ruff_cache/
+
+# ------------------------------------------------------------
+# Node / Frontend (for when Phase 4+ frontend is added)
+# ------------------------------------------------------------
+node_modules/
+.next/
+.nuxt/
+dist/
+build/
+
+# Package manager lock files (keep one, ignore others)
+# Uncomment the one you are NOT using:
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# ------------------------------------------------------------
+# Docker
+# ------------------------------------------------------------
+# Local override files
+docker-compose.override.yml
+
+# ------------------------------------------------------------
+# OS & Editor Noise
+# ------------------------------------------------------------
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# VSCode
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# JetBrains / PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+\#*\#
+
+# ------------------------------------------------------------
+# Logs
+# ------------------------------------------------------------
+*.log
+logs/
+*.log.*
+
+# ------------------------------------------------------------
+# Ollama / Model Artifacts (large binary files)
+# vantage_ai/ — local model store (already ignored above)
+# /models/    — root-level models dir if ever used
+# *.gguf / *.bin cover all binary model files everywhere
+# ------------------------------------------------------------
+*.gguf
+*.bin
+/models/
