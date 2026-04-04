@@ -1,22 +1,9 @@
-from typing import List, TypedDict
+from typing import List
 
 from pydantic import BaseModel, field_validator
 
-# ---------------------------------------------------------------------------
-# LangGraph Agent State
-# Internal state object passed between every node in the agent graph.
-# ---------------------------------------------------------------------------
-
-
-class AgentState(TypedDict):
-    ticker: str
-    news_context: List[str]
-    sentiment_score: float  # range: -1.0 to 1.0
-    volatility_index: float
-    risk_approved: bool
-    final_memo: str
-    current_step: str
-
+# AgentState now lives in app.models.state — re-exported here for backward compat
+from app.models.state import AgentState as AgentState  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # FastAPI Request / Response Schemas

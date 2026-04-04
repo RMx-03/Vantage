@@ -1,7 +1,8 @@
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
+from app.agents.graph import run_analysis
 from app.models.schemas import AnalyzeRequest, AnalyzeResponse
 
 logger = logging.getLogger(__name__)
@@ -17,11 +18,11 @@ router = APIRouter(tags=["analysis"])
         "Accepts a stock ticker symbol and runs it through the Vantage multi-agent "
         "pipeline: **Scraper → Analyst → QuantRisk**. Returns a structured investment "
         "memo and an approval flag indicating whether risk thresholds are met.\n\n"
-        "> **Phase 1 stub** — returns a placeholder response. "
-        "Full agent graph is wired in Phase 2."
+        "**Phase 2**: Real LangGraph pipeline with live yfinance market data. "
+        "Analyst sentiment is stubbed at 0.65 — live LLM inference wired in Phase 3."
     ),
 )
-async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
+def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     """
     Entry point for the Vantage agentic research pipeline.
 
@@ -29,22 +30,39 @@ async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     (Scraper → Analyst → QuantRisk), and returns a structured investment
     memo alongside a binary risk-approval decision.
 
-    Phase 1: Returns a deterministic stub response so the API contract
-    is immediately testable end-to-end before agent logic is wired in.
+    Uses a synchronous route handler because the pipeline makes blocking
+    yfinance HTTP calls. FastAPI automatically runs sync handlers in a
+    thread pool executor, keeping the event loop unblocked.
     """
     logger.info("[analyze] Received ticker: %s", request.ticker)
 
-    # TODO(Phase 2): Replace this stub with a real LangGraph pipeline call.
-    #   from app.agents.graph import run_analysis
-    #   result = run_analysis(request.ticker)
-    #   return AnalyzeResponse(
-    #       ticker=result["ticker"],
-    #       memo=result["final_memo"],
-    #       approved=result["risk_approved"],
-    #   )
+    try:
+        result = run_analysis(request.ticker)
+    except ValueError as exc:
+        logger.warning("[analyze] Invalid ticker '%s': %s", request.ticker, exc)
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        logger.error(
+            "[analyze] Pipeline failed for '%s': %s",
+            request.ticker,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Analysis pipeline failed. Check server logs for details.",
+        )
+
+    logger.info(
+        "[analyze] Analysis complete for %s: approved=%s, vol=%.4f, sentiment=%.2f",
+        request.ticker,
+        result["risk_approved"],
+        result["volatility_index"],
+        result["sentiment_score"],
+    )
 
     return AnalyzeResponse(
-        ticker=request.ticker,
-        memo=f"[STUB] Analysis for {request.ticker} is pending agent implementation.",
-        approved=False,
+        ticker=result["ticker"],
+        memo=result["final_memo"],
+        approved=result["risk_approved"],
     )
