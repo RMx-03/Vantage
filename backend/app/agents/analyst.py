@@ -28,28 +28,35 @@ def run_analyst(state: AgentState) -> dict:
         len(news_context),
     )
 
-    # TODO(Phase 3): Replace this stub with a real Ollama HTTP call.
-    #   from app.prompts.sentiment_prompt import build_sentiment_prompt
-    #   from app.core.config import settings
-    #   import httpx, json, time
-    #
-    #   prompt = build_sentiment_prompt(ticker, news_context)
-    #   payload = {
-    #       "model": settings.OLLAMA_MODEL,
-    #       "prompt": prompt,
-    #       "stream": False,
-    #       "format": "json",
-    #   }
-    #   with httpx.Client(timeout=settings.OLLAMA_TIMEOUT_SECONDS) as client:
-    #       resp = client.post(f"{settings.OLLAMA_BASE_URL}/api/generate", json=payload)
-    #       outer = resp.json()
-    #       inner = json.loads(outer["response"])
-    #       sentiment_score = max(-1.0, min(1.0, float(inner["sentiment_score"])))
+    from app.prompts.sentiment_prompt import build_sentiment_prompt
+    from app.core.config import settings
+    import httpx, json, time
 
-    sentiment_score: float = 0.65  # Stub — moderate positive sentiment
+    prompt = build_sentiment_prompt(ticker, news_context)
+    payload = {
+        "model": settings.OLLAMA_MODEL,
+        "prompt": prompt,
+        "stream": False,
+        "format": "json",
+    }
+    
+    try:
+        with httpx.Client(timeout=settings.OLLAMA_TIMEOUT_SECONDS) as client:
+            resp = client.post(f"{settings.OLLAMA_BASE_URL}/api/generate", json=payload)
+            resp.raise_for_status()
+            outer = resp.json()
+            # Some models may return the stringified JSON or proper object inside response
+            # Let's handle both
+            response_text = outer.get("response", "{}")
+            inner = json.loads(response_text) if isinstance(response_text, str) else response_text
+            sentiment_score = max(-1.0, min(1.0, float(inner.get("sentiment_score", 0.0))))
+            logger.info("[analyst] Successfully retrieved sentiment from Ollama.")
+    except Exception as e:
+        logger.error("[analyst] Failed to connect / parse Ollama. Error: %s", e)
+        sentiment_score = 0.0 # Default if failed
 
     logger.info(
-        "[analyst] Sentiment score for %s: %.2f (stub — Phase 3 pending)",
+        "[analyst] Sentiment score for %s: %.2f",
         ticker,
         sentiment_score,
     )
