@@ -92,7 +92,7 @@ export default function Landing() {
             {/* Footer */}
             <footer className="bg-[#0e0e0e] border-t border-[#191a1a] py-12">
                 <div className="flex flex-col items-center gap-4 w-full max-w-2xl mx-auto px-6">
-                    <p className="font-['Inter'] text-xs tracking-tight text-[#484848]">© 2024 Vantage. Wall Street Intelligence. Local Execution.</p>
+                    <p className="font-['Inter'] text-xs tracking-tight text-[#484848]">© 2026 Vantage. Wall Street Intelligence. Local Execution.</p>
                     <div className="flex gap-6">
                         <a className="text-[#484848] text-xs font-['Inter'] hover:text-[#c6c6c7] transition-colors" href="#">Documentation</a>
                         <a className="text-[#484848] text-xs font-['Inter'] hover:text-[#c6c6c7] transition-colors" href="#">Privacy</a>

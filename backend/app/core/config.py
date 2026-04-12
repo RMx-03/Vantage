@@ -46,10 +46,20 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Ollama — local LLM server (used from Phase 3 onwards)
     # ------------------------------------------------------------------
+    LLM_PROVIDER: str = "ollama"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "vantage-fin"
     OLLAMA_TIMEOUT_SECONDS: int = 60
     OLLAMA_MAX_RETRIES: int = 2
+
+    # ------------------------------------------------------------------
+    # Multi-Provider Cloud LLMs (Phase 3 Architecture Shift)
+    # ------------------------------------------------------------------
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama3-8b-8192"
 
     # ------------------------------------------------------------------
     # Risk thresholds (used from Phase 2 onwards)

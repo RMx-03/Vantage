@@ -8,10 +8,7 @@ logger = logging.getLogger(__name__)
 def run_analyst(state: AgentState) -> dict:
     """
     Analyst node — produces a sentiment score from scraped news context.
-
-    Phase 2 stub: returns a hardcoded positive sentiment score so the
-    full graph can be tested end-to-end. Replaced with a real Ollama
-    HTTP call in Phase 3.
+    Supports multi-provider routing (Ollama, Gemini, Groq).
 
     Args:
         state: Current AgentState (reads 'ticker' and 'news_context')
@@ -30,29 +27,65 @@ def run_analyst(state: AgentState) -> dict:
 
     from app.prompts.sentiment_prompt import build_sentiment_prompt
     from app.core.config import settings
-    import httpx, json, time
+    import json
 
     prompt = build_sentiment_prompt(ticker, news_context)
-    payload = {
-        "model": settings.OLLAMA_MODEL,
-        "prompt": prompt,
-        "stream": False,
-        "format": "json",
-    }
-    
+    sentiment_score = 0.0
+
     try:
-        with httpx.Client(timeout=settings.OLLAMA_TIMEOUT_SECONDS) as client:
-            resp = client.post(f"{settings.OLLAMA_BASE_URL}/api/generate", json=payload)
-            resp.raise_for_status()
-            outer = resp.json()
-            # Some models may return the stringified JSON or proper object inside response
-            # Let's handle both
-            response_text = outer.get("response", "{}")
-            inner = json.loads(response_text) if isinstance(response_text, str) else response_text
-            sentiment_score = max(-1.0, min(1.0, float(inner.get("sentiment_score", 0.0))))
-            logger.info("[analyst] Successfully retrieved sentiment from Ollama.")
+        provider = settings.LLM_PROVIDER.lower()
+        response_text = ""
+
+        if provider == "gemini":
+            import google.generativeai as genai
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            model = genai.GenerativeModel(settings.GEMINI_MODEL)
+            # Use JSON mode if model supports it, but relies mainly on the prompt
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    response_mime_type="application/json",
+                )
+            )
+            response_text = response.text
+
+        elif provider == "groq":
+            from groq import Groq
+            client = Groq(api_key=settings.GROQ_API_KEY)
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+                model=settings.GROQ_MODEL,
+                response_format={"type": "json_object"},
+            )
+            response_text = chat_completion.choices[0].message.content
+
+        else:
+            # Default to Ollama
+            import httpx
+            payload = {
+                "model": settings.OLLAMA_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "format": "json",
+            }
+            with httpx.Client(timeout=settings.OLLAMA_TIMEOUT_SECONDS) as client:
+                resp = client.post(f"{settings.OLLAMA_BASE_URL}/api/generate", json=payload)
+                resp.raise_for_status()
+                outer = resp.json()
+                response_text = outer.get("response", "{}")
+
+        # Unified Parsing
+        inner = json.loads(response_text) if isinstance(response_text, str) else response_text
+        sentiment_score = max(-1.0, min(1.0, float(inner.get("sentiment_score", 0.0))))
+        logger.info("[analyst] Successfully retrieved sentiment from %s.", provider)
+
     except Exception as e:
-        logger.error("[analyst] Failed to connect / parse Ollama. Error: %s", e)
+        logger.error("[analyst] Failed to connect / parse %s. Error: %s", settings.LLM_PROVIDER, e)
         sentiment_score = 0.0 # Default if failed
 
     logger.info(

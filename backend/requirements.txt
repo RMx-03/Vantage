@@ -29,3 +29,11 @@ yfinance>=0.2.40
 
 # Numerical computing (volatility calculations)
 numpy>=1.26.0
+
+# ============================================================
+# Phase 3 — Multi-Provider LLM Integration
+# ============================================================
+
+# Cloud LLM SDKs
+google-generativeai>=0.4.0
+groq>=0.4.0

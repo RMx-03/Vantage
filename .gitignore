@@ -5,8 +5,8 @@
 # ------------------------------------------------------------
 # Plans & Internal Docs (not for version control)
 # ------------------------------------------------------------
-.plans/
-vantage_ai/
+# .plans/
+# vantage_ai/
 
 # ------------------------------------------------------------
 # Environment Variables — NEVER commit secrets

@@ -15,4 +15,6 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "uvicorn[standard]>=0.44.0",
     "yfinance>=1.2.1",
+    "google-generativeai>=0.4.0",
+    "groq>=0.4.0",
 ]
