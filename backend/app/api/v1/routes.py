@@ -1,8 +1,9 @@
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.agents.graph import run_analysis
+from app.api.deps import get_current_user
 from app.models.schemas import AnalyzeRequest, AnalyzeResponse
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ router = APIRouter(tags=["analysis"])
         "Analyst sentiment is stubbed at 0.65 — live LLM inference wired in Phase 3."
     ),
 )
-def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
+def analyze(request: AnalyzeRequest, _user: dict = Depends(get_current_user)) -> AnalyzeResponse:
     """
     Entry point for the Vantage agentic research pipeline.
 

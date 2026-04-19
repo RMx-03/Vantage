@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     SENTIMENT_REJECTION_THRESHOLD: float = 0.2  # sentiment floor
 
     # ------------------------------------------------------------------
+    # Supabase Authentication
+    # ------------------------------------------------------------------
+    SUPABASE_URL: str = ""
+    SUPABASE_KEY: str = ""
+
+    # ------------------------------------------------------------------
     # Logging
     # ------------------------------------------------------------------
     LOG_LEVEL: str = "INFO"

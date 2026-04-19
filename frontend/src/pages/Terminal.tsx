@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface AnalyzeResponse {
     ticker: string;
@@ -17,9 +18,16 @@ export default function Terminal() {
         setResult(null);
 
         try {
+            // Retrieve the active session to obtain the JWT.
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
             const resp = await fetch('http://localhost:8000/api/v1/analyze', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                },
                 body: JSON.stringify({ ticker: tickerInput.trim() })
             });
 
