@@ -1,6 +1,6 @@
 from pathlib import Path
-from typing import List
-
+from typing import List, Union, Any
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Root of the repository (two levels up from this file: core/ → app/ → backend/)
@@ -38,10 +38,24 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # CORS — origins allowed to call the API
     # ------------------------------------------------------------------
-    ALLOWED_ORIGINS: List[str] = [
+    ALLOWED_ORIGINS: Union[List[str], str] = [
         "http://localhost:5173",
         "http://localhost:3000",
     ]
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, v: Any) -> List[str]:
+        if isinstance(v, str):
+            if v.startswith("[") and v.endswith("]"):
+                import json
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [i.strip() for i in v.split(",") if i.strip()]
+        return v
+
 
     # ------------------------------------------------------------------
     # Ollama — local LLM server (used from Phase 3 onwards)
@@ -56,7 +70,7 @@ class Settings(BaseSettings):
     # Multi-Provider Cloud LLMs (Phase 3 Architecture Shift)
     # ------------------------------------------------------------------
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3-flash-preview"
 
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama3-8b-8192"
