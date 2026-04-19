@@ -68,6 +68,55 @@
     vertical-align: middle;
 }
 
+/* Fix for browser autofill background colors */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px #131313 inset !important;
+    -webkit-text-fill-color: #e7e5e4 !important;
+    caret-color: #e7e5e4 !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+/* For Firefox */
+input {
+    filter: none;
+}
+
 body {
     background-color: var(--color-background);
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100%;
+}
+
+html {
+    height: 100%;
+    overflow: hidden;
+}
+
+#root {
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Custom Scrollbar for Terminal */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #000000;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #191a1a;
+    border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #252626;
 }

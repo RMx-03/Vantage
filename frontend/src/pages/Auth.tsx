@@ -116,7 +116,7 @@ export default function Auth() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="OPERATOR@VANTAGE.QUANT"
-                  className="w-full bg-transparent border-0 border-b border-outline-variant text-on-surface focus:ring-0 focus:border-primary px-0 pl-8 py-3 text-sm font-body transition-colors duration-200 placeholder:text-surface-variant outline-none"
+                  className="w-full bg-[#131313] border-0 border-b border-[#484848] text-[#c6c6c7] focus:ring-0 focus:border-primary px-4 pl-10 py-4 text-sm font-body transition-all duration-200 placeholder:text-[#484848] outline-none"
                 />
               </div>
             </div>
@@ -140,7 +140,7 @@ export default function Auth() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full bg-transparent border-0 border-b border-outline-variant text-on-surface focus:ring-0 focus:border-primary px-0 pl-8 py-3 text-sm font-body transition-colors duration-200 placeholder:text-surface-variant outline-none"
+                  className="w-full bg-[#131313] border-0 border-b border-[#484848] text-[#c6c6c7] focus:ring-0 focus:border-primary px-4 pl-10 py-4 text-sm font-body transition-all duration-200 placeholder:text-[#484848] outline-none"
                 />
               </div>
             </div>
@@ -153,7 +153,7 @@ export default function Auth() {
                     id="remember-me"
                     name="remember-me"
                     type="checkbox"
-                    className="h-4 w-4 rounded-none border-outline-variant bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-background"
+                    className="h-4 w-4 rounded-none border border-[#484848] bg-[#000000] text-primary focus:ring-0 focus:ring-offset-0 appearance-none checked:bg-primary"
                   />
                   <label
                     htmlFor="remember-me"
