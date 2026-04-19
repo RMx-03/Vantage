@@ -3,8 +3,8 @@ import {
   useContext,
   useEffect,
   useState,
-  ReactNode,
 } from 'react';
+import type { ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
