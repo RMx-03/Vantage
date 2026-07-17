@@ -5,8 +5,11 @@
 # ------------------------------------------------------------
 # Plans & Internal Docs (not for version control)
 # ------------------------------------------------------------
-# .plans/
-# vantage_ai/
+.agent/
+.agents/
+.docs/
+.plans/
+vantage_ai/
 
 # ------------------------------------------------------------
 # Environment Variables — NEVER commit secrets
@@ -124,3 +127,9 @@ logs/
 *.gguf
 *.bin
 /models/
+
+# ------------------------------------------------------------
+# Local Tooling (Graphify, etc)
+# ------------------------------------------------------------
+.graphifyignore
+graphify-out/
