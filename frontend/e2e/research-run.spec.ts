@@ -1,0 +1,115 @@
+import { test, expect, type Page } from '@playwright/test';
+import { informationalRun, reviewRun } from '../src/test/fixtures';
+
+async function installAuthAndApiMocks(page: Page) {
+  // Inject authenticated Supabase session in localStorage
+  await page.addInitScript(() => {
+    const mockSession = {
+      access_token: 'mock-access-token-123',
+      token_type: 'bearer',
+      expires_in: 3600,
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      refresh_token: 'mock-refresh-token-123',
+      user: {
+        id: '11111111-1111-1111-1111-111111111111',
+        email: 'operator@example.com',
+        role: 'authenticated',
+        aud: 'authenticated',
+      },
+    };
+    window.localStorage.setItem(
+      'sb-keusiyiyupmnskmlztmb-auth-token',
+      JSON.stringify(mockSession)
+    );
+  });
+
+  // Mock Supabase Auth API
+  await page.route('**/auth/v1/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: '11111111-1111-1111-1111-111111111111',
+        email: 'operator@example.com',
+        role: 'authenticated',
+        aud: 'authenticated',
+      }),
+    });
+  });
+
+  // Mock Research Runs API
+  await page.route('**/api/v1/research-runs*', async (route) => {
+    const req = route.request();
+    if (req.method() === 'POST') {
+      const data = JSON.parse(req.postData() || '{}');
+      if (data.symbol === 'DEGRADED') {
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ...reviewRun,
+            symbol: 'DEGRADED',
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify(informationalRun),
+        });
+      }
+    } else {
+      // GET list or get run
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [informationalRun],
+          next_cursor: null,
+        }),
+      });
+    }
+  });
+}
+
+test.describe('Research Run User Journey', () => {
+  test('creates, inspects, and reopens transparent research runs', async ({ page }) => {
+    await installAuthAndApiMocks(page);
+
+    await page.goto('/app');
+
+    // Verify workspace loaded
+    await expect(page.getByLabel(/US equity symbol/i)).toBeVisible();
+
+    // 1. Submit valid symbol
+    await page.getByLabel(/US equity symbol/i).fill('AAPL');
+    await page.getByRole('button', { name: /Run research/i }).click();
+
+    // 2. Verify all six levels of information hierarchy
+    await expect(page.getByRole('heading', { name: 'AAPL', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Why this result?' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Metrics' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Data quality' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sources' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Run details' })).toBeVisible();
+
+    // Confirm no forbidden language
+    await expect(page.getByText(/trade approved|trade rejected/i)).not.toBeVisible();
+
+    // 3. Reopen historical run from history sidebar
+    const historyButton = page.getByRole('button', { name: /AAPL.*Sep 11, 2026/i });
+    await expect(historyButton).toBeVisible();
+    await historyButton.click();
+
+    await expect(page.getByText(/Historical/i)).toBeVisible();
+    await expect(page.getByText(/Original as of/i)).toBeVisible();
+
+    // 4. Exercise degraded model run without losing quantitative metrics
+    await page.getByLabel(/US equity symbol/i).fill('DEGRADED');
+    await page.getByRole('button', { name: /Run research/i }).click();
+
+    await expect(page.getByRole('heading', { name: 'DEGRADED', exact: true })).toBeVisible();
+    await expect(page.getByText('AI interpretation unavailable', { exact: true })).toBeVisible();
+    await expect(page.getByText('20-Session Return')).toBeVisible();
+  });
+});

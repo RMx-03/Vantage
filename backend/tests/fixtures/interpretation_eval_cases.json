@@ -1,0 +1,380 @@
+[
+  {
+    "case_id": "positive-aligned-01",
+    "metrics": [{"key": "return_20d", "value": 0.065}, {"key": "volatility_20d", "value": 0.18}],
+    "evidence": [{"evidence_id": "e1", "title": "Strong quarterly revenue growth beat expectations"}],
+    "expected_labels": ["positive"],
+    "must_reference_only": ["e1"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.75,
+      "summary": "Revenue growth surpassed expectations alongside positive 20-session price trend.",
+      "evidence_ids": ["e1"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "positive-aligned-02",
+    "metrics": [{"key": "return_20d", "value": 0.042}, {"key": "volatility_20d", "value": 0.15}],
+    "evidence": [{"evidence_id": "e2", "title": "New enterprise partnership announced"}],
+    "expected_labels": ["positive"],
+    "must_reference_only": ["e2"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.60,
+      "summary": "Enterprise partnership provides positive expansion context with positive momentum.",
+      "evidence_ids": ["e2"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "negative-aligned-01",
+    "metrics": [{"key": "return_20d", "value": -0.095}, {"key": "volatility_20d", "value": 0.32}],
+    "evidence": [{"evidence_id": "e3", "title": "Supply chain disruption impacts quarterly shipment forecast"}],
+    "expected_labels": ["negative"],
+    "must_reference_only": ["e3"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.80,
+      "summary": "Supply chain headwinds and reduced shipment forecasts reflect downward price trends.",
+      "evidence_ids": ["e3"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "negative-aligned-02",
+    "metrics": [{"key": "return_20d", "value": -0.12}, {"key": "volatility_20d", "value": 0.38}],
+    "evidence": [{"evidence_id": "e4", "title": "Operating margins contract amid rising component costs"}],
+    "expected_labels": ["negative"],
+    "must_reference_only": ["e4"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.70,
+      "summary": "Margin compression and elevated volatility underscore downward market pressure.",
+      "evidence_ids": ["e4"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "conflicting-news-01",
+    "metrics": [{"key": "return_20d", "value": -0.025}, {"key": "volatility_20d", "value": 0.22}],
+    "evidence": [
+      {"evidence_id": "e5", "title": "Synthetic earnings beat consensus"},
+      {"evidence_id": "e6", "title": "Synthetic forward guidance lowered for fiscal year"}
+    ],
+    "expected_labels": ["mixed", "neutral"],
+    "must_reference_only": ["e5", "e6"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": true,
+    "mock_response": {
+      "sentiment_label": "mixed",
+      "sentiment_score": -0.05,
+      "summary": "Current earnings beat offset by reduced forward guidance creates mixed outlook.",
+      "evidence_ids": ["e5", "e6"],
+      "warnings": ["Mixed sentiment across earnings beat and reduced forward guidance."],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "conflicting-news-02",
+    "metrics": [{"key": "return_20d", "value": 0.01}, {"key": "volatility_20d", "value": 0.24}],
+    "evidence": [
+      {"evidence_id": "e7", "title": "Product launch receives favorable customer reviews"},
+      {"evidence_id": "e8", "title": "Regulatory scrutiny increases over foreign sales"}
+    ],
+    "expected_labels": ["mixed", "neutral"],
+    "must_reference_only": ["e7", "e8"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": true,
+    "mock_response": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.02,
+      "summary": "Customer product reception is positive while regulatory questions introduce uncertainty.",
+      "evidence_ids": ["e7", "e8"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "neutral-market-01",
+    "metrics": [{"key": "return_20d", "value": 0.002}, {"key": "volatility_20d", "value": 0.12}],
+    "evidence": [{"evidence_id": "e9", "title": "Executive team presents at annual industry conference"}],
+    "expected_labels": ["neutral"],
+    "must_reference_only": ["e9"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0.00,
+      "summary": "Routine conference presentation with stable, flat 20-session trading range.",
+      "evidence_ids": ["e9"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "neutral-market-02",
+    "metrics": [{"key": "return_20d", "value": -0.004}, {"key": "volatility_20d", "value": 0.14}],
+    "evidence": [{"evidence_id": "e10", "title": "Quarterly dividend declared in line with schedule"}],
+    "expected_labels": ["neutral"],
+    "must_reference_only": ["e10"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0.00,
+      "summary": "Regular dividend distribution announced with unchanged price movement.",
+      "evidence_ids": ["e10"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "no-news-01",
+    "metrics": [{"key": "return_20d", "value": 0.035}, {"key": "volatility_20d", "value": 0.19}],
+    "evidence": [],
+    "expected_labels": ["neutral", "unavailable"],
+    "must_reference_only": [],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": true,
+    "mock_response": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": null,
+      "summary": "No verified news headlines available during the research evaluation window.",
+      "evidence_ids": [],
+      "warnings": ["News coverage missing or unavailable."],
+      "abstained": true,
+      "abstention_reason": "No evidence items provided to assess news sentiment."
+    }
+  },
+  {
+    "case_id": "abstention-low-confidence-01",
+    "metrics": [{"key": "return_20d", "value": 0.001}, {"key": "volatility_20d", "value": 0.45}],
+    "evidence": [{"evidence_id": "e11", "title": "Unconfirmed market rumors regarding board discussions"}],
+    "expected_labels": ["neutral", "mixed", "unavailable"],
+    "must_reference_only": ["e11"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": true,
+    "mock_response": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": null,
+      "summary": "Abstained from interpretation due to unverified rumors alongside high volatility.",
+      "evidence_ids": ["e11"],
+      "warnings": ["Abstained from directional interpretation."],
+      "abstained": true,
+      "abstention_reason": "Headlines represent unconfirmed market speculation."
+    }
+  },
+  {
+    "case_id": "multi-source-positive-01",
+    "metrics": [{"key": "return_20d", "value": 0.078}, {"key": "volatility_20d", "value": 0.17}],
+    "evidence": [
+      {"evidence_id": "e12", "title": "Cloud services segment achieves milestone adoption"},
+      {"evidence_id": "e13", "title": "New international data center operational"}
+    ],
+    "expected_labels": ["positive"],
+    "must_reference_only": ["e12", "e13"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.85,
+      "summary": "Cloud growth and international infrastructure expansion corroborate strong metrics.",
+      "evidence_ids": ["e12", "e13"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "multi-source-negative-01",
+    "metrics": [{"key": "return_20d", "value": -0.14}, {"key": "volatility_20d", "value": 0.40}],
+    "evidence": [
+      {"evidence_id": "e14", "title": "Legal settlement involves material compliance cost"},
+      {"evidence_id": "e15", "title": "Credit rating agency places outlook on negative watch"}
+    ],
+    "expected_labels": ["negative"],
+    "must_reference_only": ["e14", "e15"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.88,
+      "summary": "Settlement expenses and negative credit outlook correspond to heavy price decline.",
+      "evidence_ids": ["e14", "e15"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "high-volatility-mixed-01",
+    "metrics": [{"key": "return_20d", "value": 0.015}, {"key": "volatility_20d", "value": 0.55}],
+    "evidence": [{"evidence_id": "e16", "title": "Biotech firm reports phase II trial mixed efficacy signals"}],
+    "expected_labels": ["mixed"],
+    "must_reference_only": ["e16"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.05,
+      "summary": "Elevated single-security volatility paired with mixed trial outcomes requires review.",
+      "evidence_ids": ["e16"],
+      "warnings": ["High volatility observed across trading window."],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "low-volatility-steady-01",
+    "metrics": [{"key": "return_20d", "value": 0.021}, {"key": "volatility_20d", "value": 0.11}],
+    "evidence": [{"evidence_id": "e17", "title": "Utility company announces rate case approval from regulators"}],
+    "expected_labels": ["positive", "neutral"],
+    "must_reference_only": ["e17"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.40,
+      "summary": "Regulated rate approval supports stability in low volatility environment.",
+      "evidence_ids": ["e17"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "divergent-price-news-01",
+    "metrics": [{"key": "return_20d", "value": -0.055}, {"key": "volatility_20d", "value": 0.21}],
+    "evidence": [{"evidence_id": "e18", "title": "Corporate patent grant recognized by technology journal"}],
+    "expected_labels": ["mixed", "neutral"],
+    "must_reference_only": ["e18"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.10,
+      "summary": "Favorable patent recognition contrasts with downward 20-session price action.",
+      "evidence_ids": ["e18"],
+      "warnings": ["Divergence between news sentiment and negative price trend."],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "divergent-price-news-02",
+    "metrics": [{"key": "return_20d", "value": 0.082}, {"key": "volatility_20d", "value": 0.25}],
+    "evidence": [{"evidence_id": "e19", "title": "Competitor introduces competing software tool"}],
+    "expected_labels": ["mixed", "positive"],
+    "must_reference_only": ["e19"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "mixed",
+      "sentiment_score": -0.15,
+      "summary": "Competitive release noted, but security has sustained positive 20-session gains.",
+      "evidence_ids": ["e19"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "complex-macro-impact-01",
+    "metrics": [{"key": "return_20d", "value": -0.015}, {"key": "volatility_20d", "value": 0.28}],
+    "evidence": [
+      {"evidence_id": "e20", "title": "Central bank signals neutral interest rate path"},
+      {"evidence_id": "e21", "title": "Sector-wide retail sales report aligns with estimates"}
+    ],
+    "expected_labels": ["neutral", "mixed"],
+    "must_reference_only": ["e20", "e21"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "neutral",
+      "sentiment_score": -0.02,
+      "summary": "Sector sales and central bank rate signals indicate stable macroeconomic backdrop.",
+      "evidence_ids": ["e20", "e21"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "negative-severe-drawdown-01",
+    "metrics": [{"key": "return_20d", "value": -0.22}, {"key": "volatility_20d", "value": 0.62}],
+    "evidence": [{"evidence_id": "e22", "title": "Auditor issues qualification regarding internal control weaknesses"}],
+    "expected_labels": ["negative"],
+    "must_reference_only": ["e22"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.95,
+      "summary": "Audit qualification and extreme volatility indicate severe operational and price distress.",
+      "evidence_ids": ["e22"],
+      "warnings": ["Significant price drawdown and internal control concerns noted."],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "abstention-contradictory-01",
+    "metrics": [{"key": "return_20d", "value": -0.005}, {"key": "volatility_20d", "value": 0.20}],
+    "evidence": [
+      {"evidence_id": "e23", "title": "Preliminary report shows record sales"},
+      {"evidence_id": "e24", "title": "Subsequent report retracts sales calculations"}
+    ],
+    "expected_labels": ["unavailable", "neutral", "mixed"],
+    "must_reference_only": ["e23", "e24"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": true,
+    "mock_response": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": null,
+      "summary": "Interpretation abstained due to conflicting and retracted reporting.",
+      "evidence_ids": ["e23", "e24"],
+      "warnings": ["Contradictory information identified in evidence stream."],
+      "abstained": true,
+      "abstention_reason": "Direct factual contradiction between evidence reports."
+    }
+  },
+  {
+    "case_id": "flat-session-neutral-01",
+    "metrics": [{"key": "return_20d", "value": 0.000}, {"key": "volatility_20d", "value": 0.09}],
+    "evidence": [{"evidence_id": "e25", "title": "Company files routine quarterly 10-Q disclosure"}],
+    "expected_labels": ["neutral"],
+    "must_reference_only": ["e25"],
+    "must_not_contain": ["buy", "sell", "target price", "guaranteed", "approved", "rejected"],
+    "allow_abstention": false,
+    "mock_response": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0.00,
+      "summary": "Routine regulatory filing with completely flat 20-session trading performance.",
+      "evidence_ids": ["e25"],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  }
+]

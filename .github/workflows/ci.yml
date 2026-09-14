@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend Tests & Quality Gates
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: vantage_test
+          POSTGRES_PASSWORD: vantage_test
+          POSTGRES_DB: vantage_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql+psycopg://vantage_test:vantage_test@localhost:5432/vantage_test
+      MIGRATION_DATABASE_URL: postgresql+psycopg://vantage_test:vantage_test@localhost:5432/vantage_test
+      TRACE_EXPORT_ENABLED: "false"
+      SUPABASE_JWT_SECRET: "ci-dummy-jwt-secret-not-for-production-use"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies (frozen)
+        run: uv sync --frozen
+
+      - name: Run database migrations
+        run: uv run alembic upgrade head
+
+      - name: Run Ruff linter
+        run: uv run ruff check app tests migrations
+
+      - name: Run Mypy type checker
+        run: uv run mypy app/domain app/services app/providers app/repositories app/telemetry
+
+      - name: Run Pytest with coverage gate (>=85%)
+        run: uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=85
+
+  frontend:
+    name: Frontend Tests, Lint & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.x"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies (ci)
+        run: npm ci
+
+      - name: Run Vitest unit tests with coverage
+        run: npm test -- --run --coverage
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Production Build
+        run: npm run build
+
+  browser:
+    name: Browser E2E Journey (Playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.x"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies (ci)
+        run: npm ci
+
+      - name: Install Playwright Chromium with system dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E journey
+        run: npm run test:e2e -- --project=chromium
