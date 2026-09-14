@@ -11,6 +11,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
+    pool: 'forks',
     coverage: { provider: 'v8', thresholds: { lines: 80, functions: 80 } },
   },
 })
