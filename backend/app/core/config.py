@@ -99,6 +99,15 @@ class Settings(BaseSettings):
     MIGRATION_DATABASE_URL: str = "postgresql+psycopg://vantage_owner:vantage_owner@localhost:5433/vantage_test"
 
     # ------------------------------------------------------------------
+    # Telemetry and Observability (Phase 1 Task 8)
+    # ------------------------------------------------------------------
+    TRACE_EXPORT_ENABLED: bool = False
+    TELEMETRY_USER_SALT: str = "vantage-telemetry-salt"
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+
+    # ------------------------------------------------------------------
     # Logging
     # ------------------------------------------------------------------
     LOG_LEVEL: str = "INFO"

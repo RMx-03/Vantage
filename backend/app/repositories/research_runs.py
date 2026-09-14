@@ -50,6 +50,7 @@ class ResearchRunRepository:
         user_id: UUID,
         symbol: str,
         versions: VersionInfo,
+        trace_id: str | None = None,
     ) -> RunningResearchRun:
         now = datetime.now(UTC)
         normalized_symbol = symbol.strip().upper()
@@ -74,6 +75,7 @@ class ResearchRunRepository:
                     workflow_version=versions.workflow,
                     metrics_version=versions.metrics,
                     code_version=versions.code,
+                    trace_id=trace_id,
                 )
                 session.add(row)
                 session.flush()

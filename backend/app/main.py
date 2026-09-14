@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.routes import router as v1_router
 from app.core.config import settings
 from app.domain.errors import SafeError, VantageError
+from app.telemetry.tracing import configure_telemetry
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -21,7 +22,6 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-
 # ---------------------------------------------------------------------------
 # Lifespan (startup / shutdown)
 # ---------------------------------------------------------------------------
@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_telemetry(app)
     logger.info("Vantage backend started")
     logger.info("Swagger UI available at http://localhost:8000/docs")
     logger.info("Ollama endpoint configured at %s", settings.OLLAMA_BASE_URL)

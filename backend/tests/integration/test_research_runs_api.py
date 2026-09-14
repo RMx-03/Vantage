@@ -162,9 +162,9 @@ class TrackingRepo(ResearchRunRepository):
         self.events: list[str] = []
         self.last_run: Any = None
 
-    def create_running(self, user_id: UUID, symbol: str, versions: VersionInfo):
+    def create_running(self, user_id: UUID, symbol: str, versions: VersionInfo, trace_id: str | None = None, **kwargs: Any):
         self.events.append("create_running")
-        res = super().create_running(user_id=user_id, symbol=symbol, versions=versions)
+        res = super().create_running(user_id=user_id, symbol=symbol, versions=versions, trace_id=trace_id, **kwargs)
         self.last_run = res
         return res
 

@@ -14,6 +14,8 @@ from app.domain.research import ResearchRun, ResearchRunPage, ResearchRunRequest
 from app.repositories.research_runs import ResearchRunRepository
 from app.services.research_run import ResearchRunService
 
+from app.telemetry.tracing import get_tracer
+
 router = APIRouter(tags=["research-runs"])
 
 
@@ -27,7 +29,17 @@ def create_run(
     """
     Create and synchronously execute a durable, bounded research run.
     """
-    return service.create(user_id=user.id, symbol=request.symbol, now=datetime.now(UTC))
+    tracer = get_tracer()
+    with tracer.start_as_current_span("research_run") as root_span:
+        run = service.create(
+            user_id=user.id,
+            symbol=request.symbol,
+            now=datetime.now(UTC),
+            root_span=root_span,
+        )
+        with tracer.start_as_current_span("serialize_response") as s_span:
+            s_span.set_attribute("vantage.run_id", str(run.run_id))
+            return run
 
 
 @router.get("/{run_id}", response_model=ResearchRun)

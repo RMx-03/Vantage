@@ -1,0 +1,310 @@
+from datetime import UTC, date, datetime
+import hmac
+import hashlib
+from typing import Any
+from unittest.mock import MagicMock
+from uuid import UUID, uuid4
+import pytest
+from fastapi import Request
+from fastapi.testclient import TestClient
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+from app.api.deps import AuthenticatedUser, get_current_user, get_research_repository
+from app.core.config import settings
+from app.domain.research import (
+    AIInterpretation,
+    ComponentQuality,
+    DailyBar,
+    MarketSnapshot,
+    NewsItem,
+    NewsSnapshot,
+    ResearchMetric,
+    VersionInfo,
+)
+from app.main import app
+from app.repositories.research_runs import ResearchRunRepository
+from app.services.research_run import (
+    ResearchRunService,
+    get_research_service,
+)
+from app.telemetry.redaction import (
+    ALLOWED_ATTRIBUTES,
+    RedactingSpanProcessor,
+    safe_attributes,
+    user_hash,
+)
+from app.telemetry.tracing import (
+    SafeExportSpanProcessor,
+    configure_telemetry,
+    get_tracer,
+)
+
+
+@pytest.fixture
+def test_user_id() -> UUID:
+    return uuid4()
+
+
+@pytest.fixture
+def secret_token() -> str:
+    return "secret-token-super-secret-12345"
+
+
+@pytest.fixture
+def user_email() -> str:
+    return "trader@example.com"
+
+
+@pytest.fixture
+def sample_bars() -> list[DailyBar]:
+    now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
+    bars = []
+    for i in range(25):
+        session_d = date(2026, 8, 10) + __import__("datetime").timedelta(days=i)
+        bars.append(
+            DailyBar(
+                symbol="AAPL",
+                session_date=session_d,
+                open=150.0 + i,
+                high=155.0 + i,
+                low=149.0 + i,
+                close=152.0 + i,
+                adjusted_close=152.0 + i,
+                volume=1_000_000,
+                currency="USD",
+                provider="mock_market",
+                retrieved_at=now,
+                adjustment_state="split_adjusted",
+            )
+        )
+    return bars
+
+
+@pytest.fixture
+def mock_market(sample_bars: list[DailyBar]):
+    market = MagicMock()
+    market.name = "mock_market"
+
+    def fetch(symbol: str, start: date, end: date) -> MarketSnapshot:
+        now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
+        return MarketSnapshot(
+            symbol=symbol,
+            bars=sample_bars,
+            provider="mock_market",
+            retrieved_at=now,
+            as_of=now,
+            latest_completed_session=sample_bars[-1].session_date,
+            content_hash="a" * 64,
+            quality=ComponentQuality.FRESH,
+        )
+
+    market.fetch_daily_snapshot.side_effect = fetch
+    return market
+
+
+@pytest.fixture
+def mock_news():
+    news = MagicMock()
+    news.name = "mock_news"
+
+    def fetch(symbol: str, as_of: datetime, limit: int) -> NewsSnapshot:
+        now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
+        item = NewsItem(
+            evidence_id="news-1",
+            provider="mock_news",
+            publisher="Reuters",
+            title="Apple quarterly progress",
+            url="https://example.com/news-1",
+            event_time=now,
+            retrieved_at=now,
+            content_hash="b" * 64,
+        )
+        return NewsSnapshot(
+            symbol=symbol,
+            items=[item],
+            provider="mock_news",
+            retrieved_at=now,
+            coverage_start=now,
+            coverage_end=now,
+            quality=ComponentQuality.FRESH,
+        )
+
+    news.fetch_company_news.side_effect = fetch
+    return news
+
+
+@pytest.fixture
+def mock_llm():
+    llm = MagicMock()
+    llm.name = "gemini"
+    llm.model = "gemini-2.5-flash"
+
+    def interpret(*, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot) -> AIInterpretation:
+        return AIInterpretation(
+            sentiment_label="positive",
+            sentiment_score=0.75,
+            summary="Solid performance and market resilience.",
+            evidence_ids=["news-1"],
+            warnings=[],
+            abstained=False,
+            abstention_reason=None,
+        )
+
+    llm.interpret.side_effect = interpret
+    return llm
+
+
+@pytest.fixture
+def service(mock_market, mock_news, mock_llm):
+    return ResearchRunService(
+        repo=ResearchRunRepository(),
+        market_provider=mock_market,
+        news_provider=mock_news,
+        interpretation_provider=mock_llm,
+    )
+
+
+@pytest.fixture
+def memory_exporter():
+    return InMemorySpanExporter()
+
+
+@pytest.fixture
+def traced_client(memory_exporter, service, test_user_id: UUID, secret_token: str, user_email: str):
+    trace._TRACER_PROVIDER = None
+    trace._TRACER_PROVIDER_SET_ONCE._done = False
+    provider = TracerProvider()
+    provider.add_span_processor(RedactingSpanProcessor())
+    provider.add_span_processor(SimpleSpanProcessor(memory_exporter))
+    trace.set_tracer_provider(provider)
+
+    def fake_auth(request: Request) -> AuthenticatedUser:
+        tracer = get_tracer()
+        with tracer.start_as_current_span("authenticate_request"):
+            return AuthenticatedUser(id=test_user_id)
+
+    app.dependency_overrides[get_current_user] = fake_auth
+    app.dependency_overrides[get_research_service] = lambda: service
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()
+    memory_exporter.clear()
+
+
+class FailingExporter(SpanExporter):
+    def export(self, spans):
+        raise RuntimeError("Langfuse exporter network failure!")
+
+    def shutdown(self):
+        pass
+
+
+@pytest.fixture
+def client_with_failing_exporter(service, test_user_id: UUID):
+    trace._TRACER_PROVIDER = None
+    trace._TRACER_PROVIDER_SET_ONCE._done = False
+    provider = TracerProvider()
+    provider.add_span_processor(RedactingSpanProcessor())
+    provider.add_span_processor(SafeExportSpanProcessor(FailingExporter()))
+    trace.set_tracer_provider(provider)
+
+    def fake_auth(request: Request) -> AuthenticatedUser:
+        tracer = get_tracer()
+        with tracer.start_as_current_span("authenticate_request"):
+            return AuthenticatedUser(id=test_user_id)
+
+    app.dependency_overrides[get_current_user] = fake_auth
+    app.dependency_overrides[get_research_service] = lambda: service
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()
+
+
+def test_redaction_helpers(test_user_id: UUID) -> None:
+    h1 = user_hash(test_user_id, "salt1")
+    h2 = user_hash(test_user_id, "salt1")
+    h3 = user_hash(test_user_id, "salt2")
+    assert h1 == h2
+    assert h1 != h3
+    assert len(h1) == 64
+
+    filtered = safe_attributes({
+        "vantage.run_id": "123",
+        "user.email": "leak@example.com",
+        "authorization": "Bearer token",
+        "vantage.workflow_status": "succeeded",
+    })
+    assert "vantage.run_id" in filtered
+    assert "vantage.workflow_status" in filtered
+    assert "user.email" not in filtered
+    assert "authorization" not in filtered
+
+
+def test_trace_has_stable_tree_and_run_correlation(
+    traced_client: TestClient, memory_exporter: InMemorySpanExporter, secret_token: str
+) -> None:
+    response = traced_client.post(
+        "/api/v1/research-runs",
+        json={"symbol": "AAPL"},
+        headers={"Authorization": f"Bearer {secret_token}"},
+    )
+    assert response.status_code == 201
+    spans = memory_exporter.get_finished_spans()
+    span_names = {s.name for s in spans}
+    expected_spans = {
+        "research_run",
+        "authenticate_request",
+        "create_run_record",
+        "fetch_market_snapshot",
+        "fetch_news_snapshot",
+        "calculate_metrics",
+        "generate_interpretation",
+        "apply_research_policy",
+        "persist_result",
+        "serialize_response",
+    }
+    assert span_names >= expected_spans
+
+    run_id = response.json()["run_id"]
+    for s in spans:
+        if s.name != "authenticate_request":
+            assert s.attributes.get("vantage.run_id") == run_id
+
+
+def test_secrets_and_identity_are_never_exported(
+    traced_client: TestClient,
+    memory_exporter: InMemorySpanExporter,
+    secret_token: str,
+    test_user_id: UUID,
+    user_email: str,
+) -> None:
+    traced_client.post(
+        "/api/v1/research-runs",
+        json={"symbol": "AAPL"},
+        headers={"Authorization": f"Bearer {secret_token}"},
+    )
+    spans = memory_exporter.get_finished_spans()
+    encoded = repr(spans)
+    assert secret_token not in encoded
+    assert str(test_user_id) not in encoded
+    assert user_email not in encoded
+    assert "postgresql" not in encoded
+
+
+def test_export_failure_does_not_change_run_result(
+    client_with_failing_exporter: TestClient, secret_token: str
+) -> None:
+    response = client_with_failing_exporter.post(
+        "/api/v1/research-runs",
+        json={"symbol": "AAPL"},
+        headers={"Authorization": f"Bearer {secret_token}"},
+    )
+    assert response.status_code == 201
+    assert response.json()["workflow_status"] == "succeeded"

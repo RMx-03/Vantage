@@ -9,6 +9,7 @@ from app.services.research_run import (
     ResearchRunService,
     get_research_service as get_research_service,
 )
+from app.telemetry.tracing import get_tracer
 
 
 class AuthenticatedUser(BaseModel):
@@ -25,27 +26,29 @@ async def get_current_user(
     """
     FastAPI dependency that validates a Supabase JWT and returns an AuthenticatedUser.
     """
-    if credentials is None or not credentials.credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization credentials.",
-        )
+    tracer = get_tracer()
+    with tracer.start_as_current_span("authenticate_request"):
+        if credentials is None or not credentials.credentials:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing or invalid authorization credentials.",
+            )
 
-    token = credentials.credentials
+        token = credentials.credentials
 
-    try:
-        response = supabase_client.auth.get_user(token)
-        user = response.user
-        if user is None or not hasattr(user, "id"):
-            raise ValueError("No user returned from authentication service")
-        return AuthenticatedUser(id=UUID(str(user.id)))
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized",
-        )
+        try:
+            response = supabase_client.auth.get_user(token)
+            user = response.user
+            if user is None or not hasattr(user, "id"):
+                raise ValueError("No user returned from authentication service")
+            return AuthenticatedUser(id=UUID(str(user.id)))
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+            )
 
 
 def get_research_repository() -> ResearchRunRepository:
