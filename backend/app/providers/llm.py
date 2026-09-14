@@ -296,7 +296,7 @@ class OllamaInterpretationProvider(InterpretationProvider):
             if status_code in {401, 403}:
                 raise VantageError(
                     code="MODEL_OUTPUT_INVALID",
-                    safe_message="Ollama request was rejected.",
+                    safe_message="Ollama request was refused or unauthorized.",
                 )
             if status_code >= 400:
                 if attempt == 0:

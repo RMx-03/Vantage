@@ -49,10 +49,17 @@ export default function ResearchResult({ run, historical = false }: ResearchResu
       {/* Historical Marker */}
       {historical && (
         <div className="flex items-center justify-between rounded-lg border border-indigo-500/30 bg-indigo-950/30 px-4 py-2 text-xs text-indigo-300">
-          <span className="font-semibold uppercase tracking-wider">Historical run</span>
+          <span className="font-semibold uppercase tracking-wider">Historical run result</span>
           <span>
-            Original As-Of:{' '}
-            {run.as_of ? new Date(run.as_of).toLocaleDateString() : 'Unavailable'}
+            Original as of:{' '}
+            {run.as_of
+              ? new Date(run.as_of).toLocaleDateString('en-US', {
+                  timeZone: 'UTC',
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : 'Unavailable'}
           </span>
         </div>
       )}
