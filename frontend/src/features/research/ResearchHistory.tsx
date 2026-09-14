@@ -78,6 +78,7 @@ export default function ResearchHistory({
               key={run.run_id}
               onClick={() => onSelectRun?.(run)}
               aria-label={accessibleName}
+              aria-current={isSelected ? 'true' : undefined}
               className={`w-full text-left p-3.5 rounded-lg border transition-all flex flex-col gap-1.5 ${
                 isSelected
                   ? 'border-indigo-500 bg-indigo-950/40 text-white'

@@ -5,7 +5,7 @@ from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 import pytest
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -42,6 +42,7 @@ from app.telemetry.redaction import (
     user_hash,
 )
 from app.telemetry.tracing import (
+    TRACER_NAME,
     SafeExportSpanProcessor,
     configure_telemetry,
     get_tracer,
@@ -215,6 +216,50 @@ class FailingExporter(SpanExporter):
         pass
 
 
+class ResultFailingExporter(SpanExporter):
+    def export(self, spans):
+        return SpanExportResult.FAILURE
+
+    def shutdown(self):
+        pass
+
+
+def test_export_failure_result_is_counted() -> None:
+    processor = SafeExportSpanProcessor(ResultFailingExporter())
+
+    processor.on_end(MagicMock())
+
+    assert processor.export_failures == 1
+
+
+def test_exporter_lifecycle_failures_are_isolated() -> None:
+    exporter = MagicMock()
+    exporter.shutdown.side_effect = RuntimeError("shutdown-secret")
+    exporter.force_flush.side_effect = RuntimeError("flush-secret")
+    processor = SafeExportSpanProcessor(exporter)
+
+    processor.shutdown()
+
+    assert processor.force_flush(125) is True
+
+
+def test_redaction_supports_plain_attribute_mappings() -> None:
+    span = MagicMock()
+    span._attributes = {
+        "vantage.run_id": "safe-run-id",
+        "authorization": "Bearer secret-token",
+    }
+    span._events = None
+    span.status = Status(StatusCode.UNSET)
+    processor = RedactingSpanProcessor()
+
+    processor.on_end(span)
+
+    assert span._attributes == {"vantage.run_id": "safe-run-id"}
+    assert processor.force_flush() is True
+    assert processor.shutdown() is None
+
+
 @pytest.fixture
 def client_with_failing_exporter(service, test_user_id: UUID):
     trace._TRACER_PROVIDER = None
@@ -382,3 +427,49 @@ def test_configure_telemetry_registers_langfuse_with_shared_provider(
     assert captured["public_key"] == "pk-test"
     assert captured["secret_key"] == "sk-test"
     assert callable(captured["should_export_span"])
+    should_export = captured["should_export_span"]
+    assert should_export(MagicMock(instrumentation_scope=None)) is False
+    matching_span = MagicMock()
+    matching_span.instrumentation_scope.name = TRACER_NAME
+    assert should_export(matching_span) is True
+
+
+def test_langfuse_configuration_failure_is_sanitized(
+    monkeypatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from app.telemetry import tracing
+
+    class BrokenLangfuse:
+        def __init__(self, **kwargs):
+            raise RuntimeError("langfuse-secret-must-not-leak")
+
+    monkeypatch.setattr("langfuse.Langfuse", BrokenLangfuse)
+    monkeypatch.setattr(settings, "TRACE_EXPORT_ENABLED", True)
+    monkeypatch.setattr(settings, "LANGFUSE_PUBLIC_KEY", "pk-test")
+    monkeypatch.setattr(settings, "LANGFUSE_SECRET_KEY", "sk-test")
+    monkeypatch.setattr(trace, "set_tracer_provider", lambda provider: None)
+
+    provider = tracing.configure_telemetry()
+
+    assert isinstance(provider, TracerProvider)
+    assert tracing._langfuse_client is None
+    assert "langfuse-secret" not in caplog.text
+
+
+def test_fastapi_instrumentation_failure_does_not_break_startup(
+    monkeypatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+    monkeypatch.setattr(settings, "TRACE_EXPORT_ENABLED", False)
+    monkeypatch.setattr(trace, "set_tracer_provider", lambda provider: None)
+    monkeypatch.setattr(
+        FastAPIInstrumentor,
+        "instrument_app",
+        MagicMock(side_effect=RuntimeError("instrumentation-secret-must-not-leak")),
+    )
+
+    provider = configure_telemetry(FastAPI())
+
+    assert isinstance(provider, TracerProvider)
+    assert "instrumentation-secret" not in caplog.text

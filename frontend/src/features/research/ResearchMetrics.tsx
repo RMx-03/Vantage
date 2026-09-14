@@ -2,6 +2,7 @@ import type { ResearchMetric } from '../../types/research';
 
 interface ResearchMetricsProps {
   metrics: ResearchMetric[];
+  version: string;
 }
 
 function formatMetricValue(value: number | null, unit: ResearchMetric['unit']): string {
@@ -40,14 +41,14 @@ function formatMetricValue(value: number | null, unit: ResearchMetric['unit']): 
   }
 }
 
-export default function ResearchMetrics({ metrics }: ResearchMetricsProps) {
+export default function ResearchMetrics({ metrics, version }: ResearchMetricsProps) {
   const hasVolatility = metrics.some((m) => m.key.includes('volatility'));
 
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-sm">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold text-slate-100">Metrics</h2>
-        <span className="text-xs font-mono text-slate-500">eod-metrics-v1</span>
+        <span className="text-xs font-mono text-slate-500">{version}</span>
       </div>
 
       {metrics.length === 0 ? (

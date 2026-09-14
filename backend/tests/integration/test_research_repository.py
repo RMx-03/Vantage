@@ -191,6 +191,26 @@ def test_snapshot_is_unique_per_run(
     with pytest.raises(IntegrityError):
         repo.save_snapshot(running_run.id, running_run.user_id, market, news, sources)
 
+    with SessionFactory() as session:
+        snapshot_count = session.execute(
+            text(
+                "SELECT count(*) FROM vantage_app.research_snapshots "
+                "WHERE run_id = :run_id"
+            ),
+            {"run_id": running_run.id},
+        ).scalar_one()
+        source_count = session.execute(
+            text(
+                "SELECT count(*) FROM vantage_app.research_sources "
+                "WHERE snapshot_id IN "
+                "(SELECT id FROM vantage_app.research_snapshots WHERE run_id = :run_id)"
+            ),
+            {"run_id": running_run.id},
+        ).scalar_one()
+
+    assert snapshot_count == 1
+    assert source_count == 1
+
 
 def test_snapshot_write_is_owner_scoped(
     repo: ResearchRunRepository, running_run, other_user_id: UUID, valid_snapshot

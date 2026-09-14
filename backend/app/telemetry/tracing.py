@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import FastAPI
 from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor, TracerProvider
-from opentelemetry.sdk.trace.export import SpanExporter
+from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
 from app.core.config import settings
 from app.telemetry.redaction import RedactingSpanProcessor
@@ -30,7 +30,10 @@ class SafeExportSpanProcessor(SpanProcessor):
 
     def on_end(self, span: ReadableSpan) -> None:
         try:
-            self.exporter.export([span])
+            result = self.exporter.export([span])
+            if result == SpanExportResult.FAILURE:
+                self.export_failures += 1
+                logger.warning("Telemetry export failed safely")
         except Exception:
             self.export_failures += 1
             logger.warning("Telemetry export failed safely")

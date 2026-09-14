@@ -221,6 +221,87 @@ def test_invalid_price_series_has_one_specific_blocking_reason(
     assert blocking_codes == ["INVALID_PRICE_SERIES"]
 
 
+def test_market_provider_failure_has_one_explicit_blocking_reason(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    failed_market = valid_market.model_copy(
+        update={
+            "quality": ComponentQuality.FAILED,
+            "error_code": "MARKET_DATA_PROVIDER_FAILED",
+        }
+    )
+
+    result = apply_policy(failed_market, healthy_news, healthy_model, metrics=[])
+
+    assert result.research_status == ResearchStatus.INSUFFICIENT_DATA
+    assert [reason.code for reason in result.reasons] == ["MARKET_DATA_PROVIDER_FAILED"]
+
+
+def test_news_provider_failure_is_an_explicit_degraded_warning(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    failed_news = healthy_news.model_copy(
+        update={
+            "quality": ComponentQuality.FAILED,
+            "error_code": "NEWS_PROVIDER_FAILED",
+        }
+    )
+
+    result = apply_policy(valid_market, failed_news, healthy_model, metrics=[])
+
+    assert result.research_status == ResearchStatus.REVIEW
+    assert result.data_quality.news == ComponentQuality.FAILED
+    assert [reason.code for reason in result.reasons] == ["NEWS_PROVIDER_FAILED"]
+
+
+def test_partial_news_is_an_explicit_degraded_warning(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    partial_news = healthy_news.model_copy(update={"quality": ComponentQuality.PARTIAL})
+
+    result = apply_policy(valid_market, partial_news, healthy_model, metrics=[])
+
+    assert result.research_status == ResearchStatus.REVIEW
+    assert result.data_quality.news == ComponentQuality.PARTIAL
+    assert [reason.code for reason in result.reasons] == ["PARTIAL_NEWS_COVERAGE"]
+
+
+def test_stale_news_degrades_overall_quality(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    stale_news = healthy_news.model_copy(update={"quality": ComponentQuality.STALE})
+
+    result = apply_policy(valid_market, stale_news, healthy_model, metrics=[])
+
+    assert result.research_status == ResearchStatus.REVIEW
+    assert result.data_quality.news == ComponentQuality.STALE
+    assert result.data_quality.overall == OverallQuality.DEGRADED
+
+
+def test_model_warning_degrades_quality_without_discarding_interpretation(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    warned_model = healthy_model.model_copy(
+        update={"warnings": ["Interpretation confidence is limited."]}
+    )
+
+    result = apply_policy(valid_market, healthy_news, warned_model, metrics=[])
+
+    assert result.research_status == ResearchStatus.REVIEW
+    assert result.data_quality.model == ModelQuality.DEGRADED
+    assert result.warnings == ["Interpretation confidence is limited."]
+
+
 def test_healthy_run_is_informational(
     valid_market: MarketSnapshot,
     healthy_news: NewsSnapshot,

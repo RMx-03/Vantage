@@ -54,6 +54,14 @@ function renderWorkspace() {
   );
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 describe('ResearchWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -167,6 +175,74 @@ describe('ResearchWorkspace', () => {
     await userEvent.click(runButton);
     expect(await screen.findByText(/Market data could not be retrieved/i)).toBeVisible();
     expect(screen.queryByText(informationalRun.summary!)).not.toBeInTheDocument();
+  });
+
+  it('shows correlation IDs and retries the failed symbol', async () => {
+    vi.mocked(api.createResearchRun)
+      .mockRejectedValueOnce(
+        new api.ApiError(503, {
+          code: 'MARKET_DATA_PROVIDER_FAILED',
+          message: 'Market data could not be retrieved.',
+          run_id: 'failed-run-id',
+          request_id: 'request-correlation-id',
+          retryable: true,
+        })
+      )
+      .mockResolvedValueOnce(informationalRun);
+
+    renderWorkspace();
+    await userEvent.type(screen.getByLabelText(/US equity symbol/i), 'AAPL');
+    await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
+
+    expect(await screen.findByText('Run ID: failed-run-id')).toBeVisible();
+    expect(screen.getByText('Request ID: request-correlation-id')).toBeVisible();
+
+    await userEvent.click(screen.getByRole('button', { name: /Retry research/i }));
+
+    expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
+    expect(api.createResearchRun).toHaveBeenCalledTimes(2);
+    expect(api.createResearchRun).toHaveBeenLastCalledWith('AAPL');
+  });
+
+  it('announces pending work and prevents duplicate submission', async () => {
+    const pendingRun = deferred<typeof informationalRun>();
+    vi.mocked(api.createResearchRun).mockReturnValueOnce(pendingRun.promise);
+
+    renderWorkspace();
+    await userEvent.type(screen.getByLabelText(/US equity symbol/i), 'AAPL');
+    await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Running research analysis for AAPL'
+    );
+    expect(screen.getByRole('button', { name: /Run research/i })).toBeDisabled();
+
+    pendingRun.resolve(informationalRun);
+    expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
+  });
+
+  it('renders a safe network error and allows retry', async () => {
+    vi.mocked(api.createResearchRun).mockRejectedValueOnce(
+      new Error('Network connection unavailable.')
+    );
+
+    renderWorkspace();
+    await userEvent.type(screen.getByLabelText(/US equity symbol/i), 'AAPL');
+    await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
+
+    expect(await screen.findByText('Network connection unavailable.')).toBeVisible();
+    expect(screen.getByRole('button', { name: /Retry research/i })).toBeVisible();
+  });
+
+  it('toggles owner-scoped history without affecting the workspace', async () => {
+    renderWorkspace();
+    expect(await screen.findByRole('heading', { name: /Research History/i })).toBeVisible();
+
+    await userEvent.click(screen.getByRole('button', { name: /Hide History/i }));
+    expect(screen.queryByRole('heading', { name: /Research History/i })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /View History/i }));
+    expect(screen.getByRole('heading', { name: /Research History/i })).toBeVisible();
   });
 
   it('does not display fabricated latency or node counts', async () => {

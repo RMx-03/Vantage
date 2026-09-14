@@ -128,7 +128,7 @@ export default function ResearchResult({ run, historical = false }: ResearchResu
       <ReasonsPanel reasons={run.reasons} warnings={run.warnings} />
 
       {/* Level 3: Metrics */}
-      <ResearchMetrics metrics={run.metrics} />
+      <ResearchMetrics metrics={run.metrics} version={run.versions.metrics} />
 
       {/* Level 4: Data Quality */}
       <DataQualityPanel dataQuality={run.data_quality} modelInfo={run.model_info} />

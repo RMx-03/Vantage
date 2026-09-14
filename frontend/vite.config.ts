@@ -17,7 +17,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/api/researchRuns.ts', 'src/features/research/**/*.{ts,tsx}'],
-      thresholds: { lines: 80, functions: 80 },
+      thresholds: { branches: 85, lines: 80, functions: 80 },
     },
   },
 })

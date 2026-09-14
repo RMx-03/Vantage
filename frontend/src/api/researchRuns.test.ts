@@ -86,6 +86,21 @@ describe('research-runs API client', () => {
     });
   });
 
+  it('uses the default safe message when a failed response has no status text', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('', { status: 500, statusText: '' })
+    );
+
+    await expect(getResearchRun('run-id')).rejects.toMatchObject({
+      status: 500,
+      error: {
+        code: 'REQUEST_FAILED',
+        message: 'An error occurred while communicating with the server.',
+        retryable: true,
+      },
+    });
+  });
+
   it('encodes pagination cursors', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify({ items: [], next_cursor: null }), {

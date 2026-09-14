@@ -85,4 +85,32 @@ describe('ResearchHistory', () => {
     await userEvent.click(loadMoreButton);
     expect(await screen.findByRole('button', { name: /AAPL.*Jul 31, 2026/i })).toBeVisible();
   });
+
+  it('recovers from a history request failure', async () => {
+    vi.mocked(api.listResearchRuns)
+      .mockRejectedValueOnce(new Error('History is temporarily unavailable.'))
+      .mockResolvedValueOnce({ items: [], next_cursor: null });
+
+    renderWithQuery(<ResearchHistory />);
+
+    expect(await screen.findByText('History is temporarily unavailable.')).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: /Try again/i }));
+    expect(await screen.findByText(/no previous research runs/i)).toBeVisible();
+  });
+
+  it('exposes the selected historical run to assistive technology', async () => {
+    vi.mocked(api.listResearchRuns).mockResolvedValueOnce({
+      items: [historicalRun],
+      next_cursor: null,
+    });
+
+    renderWithQuery(
+      <ResearchHistory selectedRunId={historicalRun.run_id} onSelectRun={vi.fn()} />
+    );
+
+    const selected = await screen.findByRole('button', {
+      name: /AAPL.*Jul 31, 2026/i,
+    });
+    expect(selected).toHaveAttribute('aria-current', 'true');
+  });
 });

@@ -274,6 +274,26 @@ def test_market_failure_finalizes_and_returns_run_id(
     assert tracking_repo.last_run.workflow_status == "failed"
 
 
+def test_unexpected_failure_is_sanitized_and_finalized(
+    client: TestClient, auth_headers: dict, tracking_repo: TrackingRepo, mock_market
+) -> None:
+    mock_market.fetch_daily_snapshot.side_effect = RuntimeError(
+        "database-password-must-not-leak"
+    )
+
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
+
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert detail["code"] == "INTERNAL_ERROR"
+    assert detail["run_id"]
+    assert "password" not in detail["message"]
+    assert tracking_repo.last_run.workflow_status == "failed"
+    assert tracking_repo.last_run.error_code == "INTERNAL_ERROR"
+
+
 def test_invalid_price_series_is_persisted_as_insufficient_data(
     client: TestClient, auth_headers: dict, mock_market, mock_llm
 ) -> None:

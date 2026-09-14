@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import ResearchResult from './ResearchResult';
 import {
@@ -45,6 +45,20 @@ describe('ResearchResult', () => {
     ).toBeVisible();
   });
 
+  it('renders the metrics version stored with a historical run', () => {
+    const versionedRun = {
+      ...historicalRun,
+      versions: { ...historicalRun.versions, metrics: 'eod-metrics-v0' },
+    };
+
+    render(<ResearchResult run={versionedRun} historical />);
+
+    const metricsSection = screen.getByRole('heading', { name: 'Metrics' }).closest('section');
+    expect(metricsSection).not.toBeNull();
+    expect(within(metricsSection!).getByText('eod-metrics-v0')).toBeVisible();
+    expect(screen.queryByText('eod-metrics-v1')).not.toBeInTheDocument();
+  });
+
   it('renders neutral research status styling without trade approval', () => {
     render(<ResearchResult run={informationalRun} historical={false} />);
     expect(screen.getAllByText('informational').length).toBeGreaterThan(0);
@@ -57,5 +71,36 @@ describe('ResearchResult', () => {
     expect(screen.getByText('Market data provider returned an error.')).toBeVisible();
     expect(screen.getAllByText(failedMarketRun.run_id).length).toBeGreaterThan(0);
     expect(screen.getAllByText(failedMarketRun.run_id)[0]).toBeVisible();
+  });
+
+  it('renders absent optional run and source fields as unavailable, never fabricated', () => {
+    const incompleteRun = {
+      ...informationalRun,
+      completed_at: null,
+      as_of: null,
+      research_status: null,
+      summary: null,
+      model_info: null,
+      sources: [
+        {
+          ...informationalRun.sources[0],
+          publisher: null,
+          url: null,
+          event_time: null,
+          content_hash: null,
+          title: 'Source with limited metadata',
+        },
+      ],
+    };
+
+    render(<ResearchResult run={incompleteRun} historical />);
+
+    expect(screen.getByText('Summary unavailable for this run.')).toBeVisible();
+    expect(screen.getByText('Source with limited metadata')).toBeVisible();
+    expect(
+      screen.queryByRole('link', { name: /Source with limited metadata/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Pending')).toBeInTheDocument();
+    expect(screen.getByText('None')).toBeInTheDocument();
   });
 });
