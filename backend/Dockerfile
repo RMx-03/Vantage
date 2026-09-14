@@ -2,13 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Upgrade pip and install requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# Copy source code
+COPY --from=ghcr.io/astral-sh/uv:0.11.2 /uv /uvx /bin/
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 COPY . .
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Create non-root user
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /app
