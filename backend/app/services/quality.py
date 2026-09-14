@@ -18,7 +18,7 @@ def assess_quality(
     elif len(market.bars) < 21:
         prices_quality = ComponentQuality.PARTIAL
     elif market.quality == ComponentQuality.STALE or (
-        market.bars and market.bars[-1].session_date < market.latest_completed_session
+        market.bars and market.bars[-1].session_date != market.latest_completed_session
     ):
         prices_quality = ComponentQuality.STALE
     else:
@@ -37,7 +37,9 @@ def assess_quality(
         news_quality = ComponentQuality.FRESH
 
     # 3. Model Quality
-    if interpretation.abstained or interpretation.sentiment_label == "unavailable":
+    if interpretation.abstention_reason == "MODEL_NOT_RUN":
+        model_quality = ModelQuality.NOT_RUN
+    elif interpretation.abstained or interpretation.sentiment_label == "unavailable":
         model_quality = ModelQuality.FAILED
     elif interpretation.warnings:
         model_quality = ModelQuality.DEGRADED
@@ -46,7 +48,8 @@ def assess_quality(
 
     # 4. Overall Quality
     if (
-        prices_quality in (ComponentQuality.FAILED, ComponentQuality.STALE, ComponentQuality.MISSING)
+        prices_quality
+        in (ComponentQuality.FAILED, ComponentQuality.STALE, ComponentQuality.MISSING)
         or len(market.bars) < 21
     ):
         overall_quality = OverallQuality.INSUFFICIENT

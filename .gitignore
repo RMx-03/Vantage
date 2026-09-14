@@ -9,7 +9,11 @@
 .agents/
 .docs/
 .plans/
+.planning/
 vantage_ai/
+
+# Generated local assessments and exports
+/output/
 
 # ------------------------------------------------------------
 # Environment Variables — NEVER commit secrets
@@ -98,6 +102,9 @@ $RECYCLE.BIN/
 .vscode/
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# Visual Studio local workspace state
+.vs/
 
 # JetBrains / PyCharm
 .idea/

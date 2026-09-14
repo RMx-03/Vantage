@@ -3,24 +3,27 @@ import hmac
 from typing import Any, Mapping
 from uuid import UUID
 
-from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor
+from opentelemetry.sdk.trace import Event, ReadableSpan, SpanProcessor
+from opentelemetry.trace import Status, StatusCode
 
-ALLOWED_ATTRIBUTES = frozenset({
-    "vantage.run_id",
-    "vantage.request_id",
-    "vantage.user_hash",
-    "vantage.instrument_symbol",
-    "vantage.workflow_version",
-    "vantage.response_schema_version",
-    "vantage.prompt_version",
-    "vantage.snapshot_hash",
-    "vantage.workflow_status",
-    "vantage.research_status",
-    "vantage.quality.overall",
-    "gen_ai.provider.name",
-    "gen_ai.request.model",
-    "error.type",
-})
+ALLOWED_ATTRIBUTES = frozenset(
+    {
+        "vantage.run_id",
+        "vantage.request_id",
+        "vantage.user_hash",
+        "vantage.instrument_symbol",
+        "vantage.workflow_version",
+        "vantage.response_schema_version",
+        "vantage.prompt_version",
+        "vantage.snapshot_hash",
+        "vantage.workflow_status",
+        "vantage.research_status",
+        "vantage.quality.overall",
+        "gen_ai.provider.name",
+        "gen_ai.request.model",
+        "error.type",
+    }
+)
 
 
 def user_hash(user_id: UUID, salt: str) -> str:
@@ -58,6 +61,20 @@ class RedactingSpanProcessor(SpanProcessor):
             unallowed = [k for k in list(attrs.keys()) if k not in ALLOWED_ATTRIBUTES]
             for k in unallowed:
                 del attrs[k]
+
+        events = getattr(span, "_events", None)
+        if events is not None:
+            span._events = [
+                Event(event.name, attributes={}, timestamp=event.timestamp)
+                for event in events
+            ]
+
+        current_status = span.status
+        if (
+            current_status.status_code == StatusCode.ERROR
+            and current_status.description
+        ):
+            span._status = Status(StatusCode.ERROR, "Operation failed.")
 
     def shutdown(self) -> None:
         pass

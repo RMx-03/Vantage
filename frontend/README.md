@@ -1,111 +1,43 @@
 # Vantage Frontend — Transparent Research Workspace
 
-A modern, responsive React + TypeScript web application for running and inspecting transparent equity research analyses on US markets.
+The React workspace creates and inspects synchronous US-equity end-of-day research runs. It shows deterministic metrics, data/model quality, registered reasons, evidence sources, version information, owner-scoped history, and safe actionable error states.
 
----
+## Stack
 
-## Overview
+- React 19 and TypeScript 6
+- Vite 8 and Tailwind CSS 4
+- TanStack Query for server state
+- Supabase Auth for the browser session
+- Vitest, Testing Library, and Playwright
+- Node.js `>=22.22 <23`
 
-The Vantage Research Workspace enables analysts and researchers to:
-- **Execute Transparent Research Runs**: Trigger asynchronous, observable market research pipelines for US equities.
-- **Inspect Real-time Execution**: Track pipeline status across steps (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`).
-- **Review Market Snapshot Metrics**: View end-of-day pricing, technical indicators (SMA-20, SMA-50, RSI-14, annualized volatility), and valuation metrics with full provenance.
-- **Assess Data Quality**: Review automated quality audit badges (complete, partial, or stale data flags).
-- **Inspect Structured AI Interpretations**: Read thesis statements, key drivers, risk assessments, and confidence scores.
-- **Graceful Degraded State Handling**: If AI synthesis is unavailable (e.g. provider timeout or offline service), the UI clearly indicates the degraded state while preserving access to all computed market metrics.
+## Configuration
 
----
+Copy `.env.example` to `.env` and set:
 
-## Architecture & Technology Stack
+| Variable | Purpose |
+|---|---|
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Public Supabase anon/publishable key |
+| `VITE_API_URL` | Backend origin, such as `http://localhost:8000` |
 
-- **Framework**: [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
-- **Bundler & Dev Server**: [Vite](https://vitejs.dev/)
-- **Styling**: Vanilla CSS / CSS Modules with bespoke design tokens and dark mode
-- **Authentication**: [Supabase Auth](https://supabase.com/docs/guides/auth)
-- **Unit & Component Testing**: [Vitest](https://vitest.dev/) + [Testing Library](https://testing-library.com/)
-- **End-to-End Testing**: [Playwright](https://playwright.dev/)
+Vite values are build-time configuration. The Docker image accepts the same three values as build arguments through Docker Compose.
 
----
-
-## Getting Started
-
-### 1. Prerequisites
-
-- Node.js 20+ (Node.js 22 LTS recommended)
-- npm 10+
-
-### 2. Environment Configuration
-
-Copy the example environment file:
+## Run and verify
 
 ```bash
-cp .env.example .env
-```
-
-Configure the following environment variables:
-
-| Variable | Description | Example / Default |
-|---|---|---|
-| `VITE_SUPABASE_URL` | Your Supabase project URL | `https://xyzcompany.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | Public anon key from Supabase Dashboard | `eyJhbGciOi...` |
-| `VITE_API_URL` | Backend API base URL | `http://localhost:8000` |
-| `VITE_API_BASE_URL` | Alternate alias for backend API base URL | `http://localhost:8000` |
-
-### 3. Install Dependencies
-
-```bash
-npm install
-```
-
-### 4. Start Development Server
-
-```bash
+npm ci
 npm run dev
-```
-
-The application will be accessible at `http://localhost:5173`.
-
----
-
-## Verification & Testing
-
-### Unit & Component Tests
-
-Run the Vitest test suite with coverage tracking:
-
-```bash
 npm test -- --run --coverage
-```
-
-### Linting & Formatting
-
-Check code quality and TypeScript types:
-
-```bash
 npm run lint
-```
-
-### Production Build
-
-Verify production bundle compilation:
-
-```bash
 npm run build
+npm run test:e2e -- --project=chromium
 ```
 
-### End-to-End Browser Tests
+Coverage is measured over the Phase 1 research feature and its API client with an 80% line/function gate.
 
-Run the Playwright user journey test in headless Chromium:
+## User-visible states
 
-```bash
-npx playwright test --project=chromium
-```
+The UI shows one current result or one selected historical result. Starting a request shows a bounded loading state; a failed newer request suppresses any older result so stale output cannot be mistaken for the latest run. Authentication failures offer “Sign in again”; retryable provider/server failures offer “Retry research.”
 
----
-
-## User Journey & Degraded States
-
-1. **Authenticated Session**: The workspace validates user sessions via Supabase. All API calls inject the Supabase JWT in the `Authorization: Bearer <token>` header.
-2. **Launch Run**: Users enter a US equity ticker (e.g. `AAPL`, `MSFT`) and initiate research.
-3. **Execution Inspection**: The run detail view displays the step timeline, duration, and error details (if any).
-4. **Degraded Interpretation Handling**: If the backend encounters an AI provider failure, the run still succeeds with market snapshot data, and the workspace displays an informational warning with the degradation reason code (e.g. `PROVIDER_UNAVAILABLE`), preventing any loss of quantitative market context.
+Results use only the backend contract states: `informational`, `review`, `insufficient_data`, and `failed`, with model quality `healthy`, `degraded`, `failed`, or `not_run`. The Phase 1 UI does not claim real-time progress, latency, node counts, valuation metrics, SMA/RSI indicators, forecasts, confidence scores, or trade approval.

@@ -3,20 +3,28 @@ from pathlib import Path
 import pytest
 from app.domain.research import AIInterpretation
 
-EVAL_FIXTURE_PATH = Path(__file__).parent.parent / "fixtures" / "interpretation_eval_cases.json"
+EVAL_FIXTURE_PATH = (
+    Path(__file__).parent.parent / "fixtures" / "interpretation_eval_cases.json"
+)
 
 
 @pytest.fixture
 def eval_cases() -> list[dict]:
-    assert EVAL_FIXTURE_PATH.exists(), f"Evaluation fixture missing: {EVAL_FIXTURE_PATH}"
+    assert EVAL_FIXTURE_PATH.exists(), (
+        f"Evaluation fixture missing: {EVAL_FIXTURE_PATH}"
+    )
     cases = json.loads(EVAL_FIXTURE_PATH.read_text(encoding="utf-8"))
-    assert len(cases) >= 20, f"Evaluation dataset must contain at least 20 cases, found {len(cases)}"
+    assert len(cases) >= 20, (
+        f"Evaluation dataset must contain at least 20 cases, found {len(cases)}"
+    )
     return cases
 
 
 def test_eval_dataset_structure_and_completeness(eval_cases: list[dict]) -> None:
     case_ids = [c["case_id"] for c in eval_cases]
-    assert len(case_ids) == len(set(case_ids)), "All case_ids in eval dataset must be unique"
+    assert len(case_ids) == len(set(case_ids)), (
+        "All case_ids in eval dataset must be unique"
+    )
     for case in eval_cases:
         assert "case_id" in case
         assert "metrics" in case
@@ -60,11 +68,15 @@ def test_eval_dataset_schema_and_safety_gate(eval_cases: list[dict]) -> None:
             assert case["allow_abstention"] is True, (
                 f"Case {case['case_id']}: abstained but allow_abstention is False"
             )
-            assert interpretation.abstention_reason is not None and len(interpretation.abstention_reason) > 0, (
-                f"Case {case['case_id']}: abstained without providing abstention_reason"
-            )
+            assert (
+                interpretation.abstention_reason is not None
+                and len(interpretation.abstention_reason) > 0
+            ), f"Case {case['case_id']}: abstained without providing abstention_reason"
             assert interpretation.sentiment_score is None, (
                 f"Case {case['case_id']}: abstained output must not have a numeric sentiment score"
             )
         else:
-            assert interpretation.sentiment_score is not None or interpretation.sentiment_label == "unavailable"
+            assert (
+                interpretation.sentiment_score is not None
+                or interpretation.sentiment_label == "unavailable"
+            )

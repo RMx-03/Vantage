@@ -155,7 +155,9 @@ def test_model_failure_is_review_not_neutral(
 
 
 def test_stale_prices_are_blocking(
-    stale_market: MarketSnapshot, healthy_news: NewsSnapshot, healthy_model: AIInterpretation
+    stale_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
 ) -> None:
     result = apply_policy(stale_market, healthy_news, healthy_model, metrics=[])
     assert result.research_status == ResearchStatus.INSUFFICIENT_DATA
@@ -164,8 +166,65 @@ def test_stale_prices_are_blocking(
     assert result.reasons[0].severity == "blocking"
 
 
+def test_bar_after_latest_completed_session_is_blocking(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    future_market = valid_market.model_copy(
+        update={
+            "latest_completed_session": valid_market.bars[-1].session_date
+            - timedelta(days=1)
+        }
+    )
+    result = apply_policy(future_market, healthy_news, healthy_model, metrics=[])
+    assert result.research_status == ResearchStatus.INSUFFICIENT_DATA
+    assert result.data_quality.prices == ComponentQuality.STALE
+    assert "STALE_PRICE_DATA" in [reason.code for reason in result.reasons]
+
+
+def test_model_not_run_is_not_reported_as_model_failure(
+    stale_market: MarketSnapshot, healthy_news: NewsSnapshot
+) -> None:
+    interpretation = AIInterpretation(
+        sentiment_label="unavailable",
+        summary="Automated interpretation was not run because price data was inadequate.",
+        abstained=True,
+        abstention_reason="MODEL_NOT_RUN",
+    )
+    result = apply_policy(stale_market, healthy_news, interpretation, metrics=[])
+    assert result.data_quality.model == ModelQuality.NOT_RUN
+    assert "MODEL_UNAVAILABLE" not in [reason.code for reason in result.reasons]
+    assert "MODEL_OUTPUT_INVALID" not in [reason.code for reason in result.reasons]
+
+
+def test_invalid_price_series_has_one_specific_blocking_reason(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+) -> None:
+    invalid_market = valid_market.model_copy(
+        update={
+            "quality": ComponentQuality.FAILED,
+            "error_code": "INVALID_PRICE_SERIES",
+        }
+    )
+    interpretation = AIInterpretation(
+        sentiment_label="unavailable",
+        summary="Automated interpretation was not run because price data was invalid.",
+        abstained=True,
+        abstention_reason="MODEL_NOT_RUN",
+    )
+    result = apply_policy(invalid_market, healthy_news, interpretation, metrics=[])
+    blocking_codes = [
+        reason.code for reason in result.reasons if reason.severity == "blocking"
+    ]
+    assert blocking_codes == ["INVALID_PRICE_SERIES"]
+
+
 def test_healthy_run_is_informational(
-    valid_market: MarketSnapshot, healthy_news: NewsSnapshot, healthy_model: AIInterpretation
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
 ) -> None:
     result = apply_policy(valid_market, healthy_news, healthy_model, metrics=[])
     assert result.research_status == ResearchStatus.INFORMATIONAL
@@ -176,7 +235,9 @@ def test_healthy_run_is_informational(
 
 
 def test_elevated_volatility_triggers_review(
-    valid_market: MarketSnapshot, healthy_news: NewsSnapshot, healthy_model: AIInterpretation
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
 ) -> None:
     high_vol_metric = ResearchMetric(
         key="annualized_volatility_20",
@@ -188,7 +249,9 @@ def test_elevated_volatility_triggers_review(
         calculation_version="eod-metrics-v1",
         quality=ComponentQuality.FRESH,
     )
-    result = apply_policy(valid_market, healthy_news, healthy_model, metrics=[high_vol_metric])
+    result = apply_policy(
+        valid_market, healthy_news, healthy_model, metrics=[high_vol_metric]
+    )
     assert result.research_status == ResearchStatus.REVIEW
     assert "ELEVATED_VOLATILITY" in [r.code for r in result.reasons]
 
@@ -209,12 +272,34 @@ def test_negative_sentiment_triggers_review(
     assert "NEGATIVE_NEWS_SENTIMENT" in [r.code for r in result.reasons]
 
 
-def test_reason_ordering_places_blocking_before_warning_and_follows_registry_index() -> None:
+def test_reason_ordering_places_blocking_before_warning_and_follows_registry_index() -> (
+    None
+):
     reasons = [
-        Reason(code="ELEVATED_VOLATILITY", label="Elevated Volatility", severity="warning", description="d"),
-        Reason(code="STALE_PRICE_DATA", label="Stale Price Data", severity="blocking", description="d"),
-        Reason(code="MODEL_OUTPUT_INVALID", label="Model Output Invalid", severity="warning", description="d"),
-        Reason(code="MARKET_DATA_PROVIDER_FAILED", label="Market Provider Failed", severity="blocking", description="d"),
+        Reason(
+            code="ELEVATED_VOLATILITY",
+            label="Elevated Volatility",
+            severity="warning",
+            description="d",
+        ),
+        Reason(
+            code="STALE_PRICE_DATA",
+            label="Stale Price Data",
+            severity="blocking",
+            description="d",
+        ),
+        Reason(
+            code="MODEL_OUTPUT_INVALID",
+            label="Model Output Invalid",
+            severity="warning",
+            description="d",
+        ),
+        Reason(
+            code="MARKET_DATA_PROVIDER_FAILED",
+            label="Market Provider Failed",
+            severity="blocking",
+            description="d",
+        ),
     ]
     ordered = order_reasons(reasons)
     assert [r.code for r in ordered] == [

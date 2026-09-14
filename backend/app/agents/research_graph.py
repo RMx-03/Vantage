@@ -3,7 +3,7 @@ from typing import Any
 from langgraph.graph import END, StateGraph
 
 from app.domain.errors import VantageError
-from app.domain.research import AIInterpretation
+from app.domain.research import AIInterpretation, ComponentQuality
 from app.models.state import ResearchState
 from app.providers.contracts import InterpretationProvider
 from app.services.metrics import calculate_metrics
@@ -17,8 +17,41 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
         with tracer.start_as_current_span("calculate_metrics") as span:
             if "run_id" in state:
                 span.set_attribute("vantage.run_id", str(state["run_id"]))
-            metrics = calculate_metrics(state["market"])
-            return {"metrics": metrics}
+            try:
+                metrics = calculate_metrics(state["market"], state["news"])
+                return {"metrics": metrics}
+            except ValueError as exc:
+                if "INVALID_PRICE_SERIES" not in str(exc):
+                    raise
+                market = state["market"].model_copy(
+                    update={
+                        "quality": ComponentQuality.FAILED,
+                        "error_code": "INVALID_PRICE_SERIES",
+                    }
+                )
+                return {"market": market, "metrics": []}
+
+    def skip_interpretation_node(state: ResearchState) -> dict[str, Any]:
+        return {
+            "interpretation": AIInterpretation(
+                sentiment_label="unavailable",
+                summary="Automated interpretation was not run because price data was inadequate.",
+                abstained=True,
+                abstention_reason="MODEL_NOT_RUN",
+            ),
+            "model_failure_code": None,
+        }
+
+    def interpretation_route(state: ResearchState) -> str:
+        market = state["market"]
+        is_usable = (
+            market.error_code is None
+            and market.quality == ComponentQuality.FRESH
+            and len(market.bars) >= 21
+            and bool(market.bars)
+            and market.bars[-1].session_date == market.latest_completed_session
+        )
+        return "generate_interpretation" if is_usable else "skip_interpretation"
 
     def generate_interpretation_node(state: ResearchState) -> dict[str, Any]:
         tracer = get_tracer()
@@ -74,9 +107,18 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
     builder = StateGraph(ResearchState)
     builder.add_node("calculate_metrics", calculate_metrics_node)
     builder.add_node("generate_interpretation", generate_interpretation_node)
+    builder.add_node("skip_interpretation", skip_interpretation_node)
     builder.add_node("apply_research_policy", apply_research_policy_node)
     builder.set_entry_point("calculate_metrics")
-    builder.add_edge("calculate_metrics", "generate_interpretation")
+    builder.add_conditional_edges(
+        "calculate_metrics",
+        interpretation_route,
+        {
+            "generate_interpretation": "generate_interpretation",
+            "skip_interpretation": "skip_interpretation",
+        },
+    )
     builder.add_edge("generate_interpretation", "apply_research_policy")
+    builder.add_edge("skip_interpretation", "apply_research_policy")
     builder.add_edge("apply_research_policy", END)
     return builder.compile()

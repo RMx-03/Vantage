@@ -179,7 +179,7 @@ export default function ResearchWorkspace() {
 
           {renderError()}
 
-          {!mutation.isPending && selectedRun && (
+          {!mutation.isPending && !mutation.isError && selectedRun && (
             <ResearchResult run={selectedRun} historical={isHistorical} />
           )}
 

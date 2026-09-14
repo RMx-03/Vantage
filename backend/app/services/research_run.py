@@ -10,6 +10,7 @@ from app.domain.errors import VantageError
 from app.domain.research import (
     ComponentQuality,
     EvidenceSource,
+    MarketSnapshot,
     ModelInfo,
     NewsSnapshot,
     ResearchRun,
@@ -24,6 +25,7 @@ from app.providers.llm import build_interpretation_provider
 from app.providers.yfinance_provider import (
     YFinanceSnapshotProvider,
     latest_completed_xnys_session,
+    snapshot_hash as market_snapshot_hash,
 )
 from app.repositories.research_runs import ResearchRunRepository
 from app.services.metrics import METRICS_VERSION
@@ -34,7 +36,9 @@ from app.telemetry.tracing import get_tracer
 logger = logging.getLogger(__name__)
 
 CODE_VERSION = settings.APP_VERSION
-RESPONSE_SCHEMA_VERSION: Literal["research-run-response-v1"] = "research-run-response-v1"
+RESPONSE_SCHEMA_VERSION: Literal["research-run-response-v1"] = (
+    "research-run-response-v1"
+)
 WORKFLOW_VERSION: Literal["eod-research-v1"] = "eod-research-v1"
 
 
@@ -85,12 +89,18 @@ class ResearchRunService:
             span_ctx = root_span.get_span_context()
             if span_ctx and span_ctx.trace_id:
                 trace_id_hex = f"{span_ctx.trace_id:032x}"
-            root_span.set_attribute("vantage.user_hash", user_hash(user_id, settings.TELEMETRY_USER_SALT))
+            root_span.set_attribute(
+                "vantage.user_hash", user_hash(user_id, settings.TELEMETRY_USER_SALT)
+            )
             root_span.set_attribute("vantage.instrument_symbol", norm_symbol)
             root_span.set_attribute("vantage.workflow_version", self.versions.workflow)
-            root_span.set_attribute("vantage.response_schema_version", self.versions.response_schema)
+            root_span.set_attribute(
+                "vantage.response_schema_version", self.versions.response_schema
+            )
             root_span.set_attribute("gen_ai.provider.name", self.llm.name)
-            root_span.set_attribute("gen_ai.request.model", getattr(self.llm, "model", "default"))
+            root_span.set_attribute(
+                "gen_ai.request.model", getattr(self.llm, "model", "default")
+            )
 
         with tracer.start_as_current_span("create_run_record") as c_span:
             row = self.repo.create_running(
@@ -112,9 +122,26 @@ class ResearchRunService:
                 m_span.set_attribute("vantage.run_id", str(row.public_id))
                 with tracer.start_as_current_span("provider_request") as p_span:
                     p_span.set_attribute("vantage.run_id", str(row.public_id))
-                    market = self.market.fetch_daily_snapshot(
-                        norm_symbol, start_date, completed
-                    )
+                    try:
+                        market = self.market.fetch_daily_snapshot(
+                            norm_symbol, start_date, completed, now
+                        )
+                    except VantageError as exc:
+                        if exc.code != "INVALID_PRICE_SERIES":
+                            raise
+                        market = MarketSnapshot(
+                            symbol=norm_symbol,
+                            bars=[],
+                            provider=self.market.name,
+                            retrieved_at=now,
+                            as_of=now,
+                            latest_completed_session=completed,
+                            content_hash=market_snapshot_hash(norm_symbol, []),
+                            quality=ComponentQuality.FAILED,
+                            error_code="INVALID_PRICE_SERIES",
+                            missing_value_count=exc.missing_value_count,
+                            duplicate_session_count=exc.duplicate_session_count,
+                        )
                 with tracer.start_as_current_span("validate_price_quality") as v_span:
                     v_span.set_attribute("vantage.run_id", str(row.public_id))
 
@@ -151,9 +178,11 @@ class ResearchRunService:
                 for item in news.items
             ]
             # Persist snapshot before invoking graph
-            self.repo.save_snapshot(row.id, market, sources)
+            snapshot_hash = self.repo.save_snapshot(
+                row.id, user_id, market, news, sources
+            )
             if root_span is not None:
-                root_span.set_attribute("vantage.snapshot_hash", market.content_hash)
+                root_span.set_attribute("vantage.snapshot_hash", snapshot_hash)
 
             # Invoke research workflow
             state = self.workflow.invoke(
@@ -191,13 +220,21 @@ class ResearchRunService:
                 )
 
             if root_span is not None:
-                root_span.set_attribute("vantage.workflow_status", res.workflow_status.value)
+                root_span.set_attribute(
+                    "vantage.workflow_status", res.workflow_status.value
+                )
                 if res.research_status:
-                    root_span.set_attribute("vantage.research_status", res.research_status.value)
+                    root_span.set_attribute(
+                        "vantage.research_status", res.research_status.value
+                    )
                 if res.data_quality:
-                    root_span.set_attribute("vantage.quality.overall", res.data_quality.overall.value)
+                    root_span.set_attribute(
+                        "vantage.quality.overall", res.data_quality.overall.value
+                    )
                 if res.model_info:
-                    root_span.set_attribute("vantage.prompt_version", res.model_info.prompt_version)
+                    root_span.set_attribute(
+                        "vantage.prompt_version", res.model_info.prompt_version
+                    )
 
             return res
 
@@ -221,7 +258,7 @@ class ResearchRunService:
                 run_id=str(row.public_id),
             ) from exc
         except Exception as exc:
-            logger.exception("Unexpected error in research run: %s", exc)
+            logger.error("Unexpected internal error in research run")
             code = "INTERNAL_ERROR"
             safe_message = "An internal error occurred while processing research run."
             with tracer.start_as_current_span("persist_result") as p_span:

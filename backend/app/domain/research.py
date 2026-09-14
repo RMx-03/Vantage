@@ -79,7 +79,7 @@ class ResearchMetric(StrictModel):
     unit: Literal["ratio", "percent", "usd", "count", "sessions"]
     window_sessions: int | None
     as_of: datetime
-    calculation_version: Literal["eod-metrics-v1"]
+    calculation_version: str
     quality: ComponentQuality
 
     @field_validator("value")
@@ -97,13 +97,15 @@ class Reason(StrictModel):
     description: str
     metric_keys: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
-    policy_version: Literal["research-policy-v1"] = "research-policy-v1"
+    policy_version: str = "research-policy-v1"
     threshold: float | None = None
 
 
 class AIInterpretation(StrictModel):
     sentiment_label: Literal["positive", "mixed", "neutral", "negative", "unavailable"]
-    sentiment_score: float | None = Field(default=None, ge=-1, le=1, allow_inf_nan=False)
+    sentiment_score: float | None = Field(
+        default=None, ge=-1, le=1, allow_inf_nan=False
+    )
     summary: str = Field(min_length=1, max_length=600)
     evidence_ids: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -123,7 +125,9 @@ class DailyBar(StrictModel):
     currency: Literal["USD"]
     provider: str
     retrieved_at: datetime
-    adjustment_state: Literal["split_adjusted", "split_and_dividend_adjusted", "unadjusted"]
+    adjustment_state: Literal[
+        "split_adjusted", "split_and_dividend_adjusted", "unadjusted"
+    ]
 
 
 class MarketSnapshot(StrictModel):
@@ -136,6 +140,8 @@ class MarketSnapshot(StrictModel):
     content_hash: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
     quality: ComponentQuality = ComponentQuality.FRESH
     error_code: str | None = None
+    missing_value_count: int = Field(default=0, ge=0)
+    duplicate_session_count: int = Field(default=0, ge=0)
 
 
 class NewsItem(StrictModel):
@@ -174,15 +180,15 @@ class DataQuality(StrictModel):
 class ModelInfo(StrictModel):
     provider: str
     model: str
-    prompt_version: Literal["research-interpretation-v1"]
+    prompt_version: str
     failure_code: str | None = None
 
 
 class VersionInfo(StrictModel):
-    response_schema: Literal["research-run-response-v1"]
-    workflow: Literal["eod-research-v1"]
-    metrics: Literal["eod-metrics-v1"]
-    policy: Literal["research-policy-v1"]
+    response_schema: str
+    workflow: str
+    metrics: str
+    policy: str
     code: str
 
 

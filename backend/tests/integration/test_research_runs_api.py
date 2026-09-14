@@ -84,9 +84,11 @@ def mock_market(sample_bars: list[DailyBar]):
     market.name = "mock_market"
     market.calls = 0
 
-    def fetch(symbol: str, start: date, end: date) -> MarketSnapshot:
+    def fetch(
+        symbol: str, start: date, end: date, retrieved_at: datetime
+    ) -> MarketSnapshot:
         market.calls += 1
-        now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
+        now = retrieved_at
         return MarketSnapshot(
             symbol=symbol,
             bars=sample_bars,
@@ -141,7 +143,9 @@ def mock_llm():
     llm.name = "gemini"
     llm.model = "gemini-2.5-flash"
 
-    def interpret(*, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot) -> AIInterpretation:
+    def interpret(
+        *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+    ) -> AIInterpretation:
         return AIInterpretation(
             sentiment_label="positive",
             sentiment_score=0.75,
@@ -162,13 +166,33 @@ class TrackingRepo(ResearchRunRepository):
         self.events: list[str] = []
         self.last_run: Any = None
 
-    def create_running(self, user_id: UUID, symbol: str, versions: VersionInfo, trace_id: str | None = None, **kwargs: Any):
+    def create_running(
+        self,
+        user_id: UUID,
+        symbol: str,
+        versions: VersionInfo,
+        trace_id: str | None = None,
+        **kwargs: Any,
+    ):
         self.events.append("create_running")
-        res = super().create_running(user_id=user_id, symbol=symbol, versions=versions, trace_id=trace_id, **kwargs)
+        res = super().create_running(
+            user_id=user_id,
+            symbol=symbol,
+            versions=versions,
+            trace_id=trace_id,
+            **kwargs,
+        )
         self.last_run = res
         return res
 
-    def finalize_failure(self, *, internal_id: int, user_id: UUID, error_code: str, error_message_safe: str):
+    def finalize_failure(
+        self,
+        *,
+        internal_id: int,
+        user_id: UUID,
+        error_code: str,
+        error_message_safe: str,
+    ):
         res = super().finalize_failure(
             internal_id=internal_id,
             user_id=user_id,
@@ -197,7 +221,9 @@ def service(tracking_repo, mock_market, mock_news, mock_llm):
 @pytest.fixture
 def client(service, tracking_repo, test_user_id: UUID, other_user_id: UUID):
     def fake_auth(request: Request) -> AuthenticatedUser:
-        auth_str = request.headers.get("authorization", "") or request.headers.get("Authorization", "")
+        auth_str = request.headers.get("authorization", "") or request.headers.get(
+            "Authorization", ""
+        )
         if str(other_user_id) in auth_str:
             return AuthenticatedUser(id=other_user_id)
         return AuthenticatedUser(id=test_user_id)
@@ -213,9 +239,15 @@ def client(service, tracking_repo, test_user_id: UUID, other_user_id: UUID):
 
 
 def test_post_persists_before_fetch_and_uses_each_provider_once(
-    client: TestClient, auth_headers: dict, tracking_repo: TrackingRepo, mock_market, mock_news
+    client: TestClient,
+    auth_headers: dict,
+    tracking_repo: TrackingRepo,
+    mock_market,
+    mock_news,
 ) -> None:
-    response = client.post("/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers)
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
     assert response.status_code == 201
     assert tracking_repo.events[0] == "create_running"
     assert mock_market.calls == 1
@@ -232,12 +264,39 @@ def test_market_failure_finalizes_and_returns_run_id(
         code="MARKET_DATA_PROVIDER_FAILED",
         safe_message="Failed to retrieve market prices.",
     )
-    response = client.post("/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers)
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
     assert response.status_code == 503
     detail = response.json()["detail"]
     assert detail["code"] == "MARKET_DATA_PROVIDER_FAILED"
     assert detail["run_id"]
     assert tracking_repo.last_run.workflow_status == "failed"
+
+
+def test_invalid_price_series_is_persisted_as_insufficient_data(
+    client: TestClient, auth_headers: dict, mock_market, mock_llm
+) -> None:
+    mock_market.fetch_daily_snapshot.side_effect = VantageError(
+        code="INVALID_PRICE_SERIES",
+        safe_message="Market price series failed integrity checks.",
+        duplicate_session_count=1,
+    )
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["workflow_status"] == "succeeded"
+    assert body["research_status"] == "insufficient_data"
+    assert body["data_quality"]["model"] == "not_run"
+    assert [
+        reason["code"] for reason in body["reasons"] if reason["severity"] == "blocking"
+    ] == ["INVALID_PRICE_SERIES"]
+    metrics = {metric["key"]: metric["value"] for metric in body["metrics"]}
+    assert metrics["price_duplicate_session_count"] == 1
+    assert metrics["price_missing_value_count"] == 0
+    mock_llm.interpret.assert_not_called()
 
 
 def test_model_failure_is_a_persisted_degraded_success(
@@ -247,7 +306,9 @@ def test_model_failure_is_a_persisted_degraded_success(
         code="MODEL_UNAVAILABLE",
         safe_message="LLM service unavailable.",
     )
-    response = client.post("/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers)
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
     assert response.status_code == 201
     body = response.json()
     assert body["research_status"] == "review"
@@ -255,15 +316,39 @@ def test_model_failure_is_a_persisted_degraded_success(
     assert body["model_info"]["failure_code"] == "MODEL_UNAVAILABLE"
 
 
+def test_inadequate_prices_skip_model_and_return_typed_outcome(
+    client: TestClient, auth_headers: dict, mock_market, mock_llm
+) -> None:
+    original_fetch = mock_market.fetch_daily_snapshot.side_effect
+
+    def stale_fetch(*args, **kwargs):
+        market = original_fetch(*args, **kwargs)
+        return market.model_copy(update={"quality": ComponentQuality.STALE})
+
+    mock_market.fetch_daily_snapshot.side_effect = stale_fetch
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["research_status"] == "insufficient_data"
+    assert body["data_quality"]["model"] == "not_run"
+    mock_llm.interpret.assert_not_called()
+
+
 def test_get_cross_user_returns_404(
     client: TestClient, auth_headers: dict, other_auth_headers: dict
 ) -> None:
-    create_resp = client.post("/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers)
+    create_resp = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
     assert create_resp.status_code == 201
     run_id = create_resp.json()["run_id"]
 
     # Other user lookup must return 404
-    other_resp = client.get(f"/api/v1/research-runs/{run_id}", headers=other_auth_headers)
+    other_resp = client.get(
+        f"/api/v1/research-runs/{run_id}", headers=other_auth_headers
+    )
     assert other_resp.status_code == 404
 
     # Owning user lookup succeeds
@@ -274,7 +359,9 @@ def test_get_cross_user_returns_404(
 
 def test_list_owned_pagination(client: TestClient, auth_headers: dict) -> None:
     for sym in ["MSFT", "GOOGL", "AMZN"]:
-        r = client.post("/api/v1/research-runs", json={"symbol": sym}, headers=auth_headers)
+        r = client.post(
+            "/api/v1/research-runs", json={"symbol": sym}, headers=auth_headers
+        )
         assert r.status_code == 201
 
     page1 = client.get("/api/v1/research-runs?limit=2", headers=auth_headers)
@@ -283,14 +370,45 @@ def test_list_owned_pagination(client: TestClient, auth_headers: dict) -> None:
     assert len(p1_data["items"]) == 2
     assert p1_data["next_cursor"] is not None
 
-    page2 = client.get(f"/api/v1/research-runs?limit=2&before={p1_data['next_cursor']}", headers=auth_headers)
+    page2 = client.get(
+        f"/api/v1/research-runs?limit=2&before={p1_data['next_cursor']}",
+        headers=auth_headers,
+    )
     assert page2.status_code == 200
     p2_data = page2.json()
     assert len(p2_data["items"]) >= 1
 
 
-def test_analyze_compat_endpoint(client: TestClient, auth_headers: dict) -> None:
-    response = client.post("/api/v1/analyze", json={"ticker": "AAPL"}, headers=auth_headers)
-    assert response.status_code in {200, 201}
-    assert response.json()["workflow_status"] == "succeeded"
-    assert "approved" not in response.json()
+def test_legacy_analyze_endpoint_is_absent(
+    client: TestClient, auth_headers: dict
+) -> None:
+    response = client.post(
+        "/api/v1/analyze", json={"ticker": "AAPL"}, headers=auth_headers
+    )
+    assert response.status_code == 404
+
+
+def test_validation_error_uses_safe_error_envelope(
+    client: TestClient, auth_headers: dict
+) -> None:
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "BTC-USD"}, headers=auth_headers
+    )
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": {
+            "code": "VALIDATION_ERROR",
+            "message": "Request validation failed.",
+            "run_id": None,
+            "request_id": None,
+            "retryable": False,
+        }
+    }
+
+
+def test_invalid_cursor_is_bad_request(client: TestClient, auth_headers: dict) -> None:
+    response = client.get(
+        "/api/v1/research-runs?before=not-a-cursor", headers=auth_headers
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "INVALID_CURSOR"

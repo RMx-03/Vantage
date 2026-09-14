@@ -17,8 +17,8 @@ jobs:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_USER: vantage_test
-          POSTGRES_PASSWORD: vantage_test
+          POSTGRES_USER: vantage_owner
+          POSTGRES_PASSWORD: vantage_owner
           POSTGRES_DB: vantage_test
         ports:
           - 5432:5432
@@ -31,8 +31,9 @@ jobs:
       run:
         working-directory: backend
     env:
-      DATABASE_URL: postgresql+psycopg://vantage_test:vantage_test@localhost:5432/vantage_test
-      MIGRATION_DATABASE_URL: postgresql+psycopg://vantage_test:vantage_test@localhost:5432/vantage_test
+      DATABASE_URL: postgresql+psycopg://vantage_runtime:vantage_runtime@localhost:5432/vantage_test
+      MIGRATION_DATABASE_URL: postgresql+psycopg://vantage_owner:vantage_owner@localhost:5432/vantage_test
+      VANTAGE_RUNTIME_DB_ROLE: vantage_runtime
       TRACE_EXPORT_ENABLED: "false"
       SUPABASE_JWT_SECRET: "ci-dummy-jwt-secret-not-for-production-use"
     steps:
@@ -41,7 +42,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          version: "latest"
+          version: "0.11.2"
           enable-cache: true
 
       - name: Set up Python 3.12
@@ -50,11 +51,28 @@ jobs:
       - name: Install dependencies (frozen)
         run: uv sync --frozen
 
+      - name: Create least-privilege runtime role
+        env:
+          PGPASSWORD: vantage_owner
+        run: >-
+          psql -h localhost -U vantage_owner -d vantage_test
+          -c "CREATE ROLE vantage_runtime LOGIN PASSWORD 'vantage_runtime'"
+
       - name: Run database migrations
         run: uv run alembic upgrade head
 
+      - name: Verify PUBLIC has no application privileges
+        env:
+          PGPASSWORD: vantage_owner
+        run: |
+          public_grants="$(psql -h localhost -U vantage_owner -d vantage_test -tAc "SELECT count(*) FROM information_schema.role_table_grants WHERE table_schema='vantage_app' AND grantee='PUBLIC'")"
+          test "$public_grants" = "0"
+
       - name: Run Ruff linter
         run: uv run ruff check app tests migrations
+
+      - name: Verify Ruff formatting
+        run: uv run ruff format --check app tests migrations
 
       - name: Run Mypy type checker
         run: uv run mypy app/domain app/services app/providers app/repositories app/telemetry
@@ -68,6 +86,10 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    env:
+      VITE_SUPABASE_URL: https://keusiyiyupmnskmlztmb.supabase.co
+      VITE_SUPABASE_ANON_KEY: ci-public-anon-key-not-for-production
+      VITE_API_URL: http://localhost:8000
     steps:
       - uses: actions/checkout@v4
 
@@ -80,6 +102,9 @@ jobs:
 
       - name: Install dependencies (ci)
         run: npm ci
+
+      - name: Audit dependency vulnerabilities
+        run: npm audit --audit-level=high
 
       - name: Run Vitest unit tests with coverage
         run: npm test -- --run --coverage
@@ -96,6 +121,10 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    env:
+      VITE_SUPABASE_URL: https://keusiyiyupmnskmlztmb.supabase.co
+      VITE_SUPABASE_ANON_KEY: ci-public-anon-key-not-for-production
+      VITE_API_URL: http://localhost:8000
     steps:
       - uses: actions/checkout@v4
 

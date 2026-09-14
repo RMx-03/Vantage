@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from opentelemetry import trace
 
 from app.api.deps import (
     AuthenticatedUser,
@@ -20,7 +21,12 @@ router = APIRouter(tags=["research-runs"])
 
 
 @router.post("", response_model=ResearchRun, status_code=status.HTTP_201_CREATED)
-@router.post("/", response_model=ResearchRun, status_code=status.HTTP_201_CREATED, include_in_schema=False)
+@router.post(
+    "/",
+    response_model=ResearchRun,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
 def create_run(
     request: ResearchRunRequest,
     user: AuthenticatedUser = Depends(get_current_user),
@@ -30,16 +36,16 @@ def create_run(
     Create and synchronously execute a durable, bounded research run.
     """
     tracer = get_tracer()
-    with tracer.start_as_current_span("research_run") as root_span:
-        run = service.create(
-            user_id=user.id,
-            symbol=request.symbol,
-            now=datetime.now(UTC),
-            root_span=root_span,
-        )
-        with tracer.start_as_current_span("serialize_response") as s_span:
-            s_span.set_attribute("vantage.run_id", str(run.run_id))
-            return run
+    root_span = trace.get_current_span()
+    run = service.create(
+        user_id=user.id,
+        symbol=request.symbol,
+        now=datetime.now(UTC),
+        root_span=root_span if root_span.is_recording() else None,
+    )
+    with tracer.start_as_current_span("serialize_response") as s_span:
+        s_span.set_attribute("vantage.run_id", str(run.run_id))
+        return run
 
 
 @router.get("/{run_id}", response_model=ResearchRun)
@@ -55,7 +61,9 @@ def get_run(
     if run is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=SafeError(code="RUN_NOT_FOUND", message="Research run was not found.").model_dump(),
+            detail=SafeError(
+                code="RUN_NOT_FOUND", message="Research run was not found."
+            ).model_dump(),
         )
     return run
 

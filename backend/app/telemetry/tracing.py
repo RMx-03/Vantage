@@ -12,6 +12,7 @@ from app.telemetry.redaction import RedactingSpanProcessor
 logger = logging.getLogger(__name__)
 
 TRACER_NAME = "vantage.research"
+_langfuse_client: Any | None = None
 
 
 class SafeExportSpanProcessor(SpanProcessor):
@@ -30,15 +31,15 @@ class SafeExportSpanProcessor(SpanProcessor):
     def on_end(self, span: ReadableSpan) -> None:
         try:
             self.exporter.export([span])
-        except Exception as exc:
+        except Exception:
             self.export_failures += 1
-            logger.warning("Telemetry export failed safely: %s", exc)
+            logger.warning("Telemetry export failed safely")
 
     def shutdown(self) -> None:
         try:
             self.exporter.shutdown()
-        except Exception as exc:
-            logger.warning("Telemetry exporter shutdown exception: %s", exc)
+        except Exception:
+            logger.warning("Telemetry exporter shutdown failed safely")
 
     def force_flush(self, timeout_millis: int = 30000) -> bool:
         try:
@@ -59,27 +60,44 @@ def configure_telemetry(app: FastAPI | None = None) -> TracerProvider:
     provider = TracerProvider()
     provider.add_span_processor(RedactingSpanProcessor())
 
+    global _langfuse_client
+    _langfuse_client = None
     if settings.TRACE_EXPORT_ENABLED:
         try:
             # When Langfuse v4 export is enabled, configure safe exporter
             if settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY:
                 from langfuse import Langfuse
-                # Langfuse integration placeholder using safe exporter
-                logger.info("Langfuse export configured for host: %s", settings.LANGFUSE_HOST)
-        except Exception as exc:
-            logger.warning("Failed to configure Langfuse exporter: %s", exc)
+
+                def should_export_span(span: ReadableSpan) -> bool:
+                    scope = span.instrumentation_scope
+                    return scope is not None and scope.name == TRACER_NAME
+
+                _langfuse_client = Langfuse(
+                    public_key=settings.LANGFUSE_PUBLIC_KEY,
+                    secret_key=settings.LANGFUSE_SECRET_KEY,
+                    base_url=settings.LANGFUSE_HOST,
+                    release=settings.APP_VERSION,
+                    tracer_provider=provider,
+                    should_export_span=should_export_span,
+                )
+                logger.info(
+                    "Langfuse export configured for host: %s", settings.LANGFUSE_HOST
+                )
+        except Exception:
+            logger.warning("Failed to configure Langfuse exporter")
 
     trace.set_tracer_provider(provider)
 
     if app is not None:
         try:
             from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
             FastAPIInstrumentor.instrument_app(
                 app,
                 tracer_provider=provider,
                 excluded_urls="/health,/",
             )
-        except Exception as exc:
-            logger.warning("FastAPI instrumentation failed: %s", exc)
+        except Exception:
+            logger.warning("FastAPI instrumentation failed")
 
     return provider

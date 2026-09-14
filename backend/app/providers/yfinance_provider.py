@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
 import hashlib
 import json
+import math
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -19,6 +20,9 @@ from app.domain.research import (
 from app.providers.contracts import MarketDataProvider, NewsProvider
 
 XNYS = exchange_calendars.get_calendar("XNYS")
+US_EQUITY_EXCHANGES = frozenset(
+    {"ASE", "BATS", "BTS", "IEX", "NCM", "NGM", "NMS", "NYQ", "PCX"}
+)
 
 
 def latest_completed_xnys_session(now: datetime) -> date:
@@ -44,9 +48,7 @@ def normalize_url(url: str | None) -> str | None:
             if not k.lower().startswith("utm_")
         ]
         clean_query = urlencode(sorted(query_pairs))
-        return urlunparse(
-            (clean_scheme, clean_netloc, clean_path, "", clean_query, "")
-        )
+        return urlunparse((clean_scheme, clean_netloc, clean_path, "", clean_query, ""))
     except Exception:
         return url.strip()
 
@@ -82,18 +84,37 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
         self._ticker_factory = ticker_factory or yf.Ticker
 
     def fetch_daily_snapshot(
-        self, symbol: str, start_session: date, end_session: date
+        self,
+        symbol: str,
+        start_session: date,
+        end_session: date,
+        retrieved_at: datetime,
     ) -> MarketSnapshot:
         normalized_symbol = symbol.strip().upper()
-        now = datetime.now(UTC)
+        now = retrieved_at.astimezone(UTC)
 
         try:
             ticker = self._ticker_factory(normalized_symbol)
         except Exception as e:
             raise VantageError(
                 code="MARKET_DATA_PROVIDER_FAILED",
-                safe_message=f"Failed to instantiate provider for {normalized_symbol}.",
+                safe_message="Market data provider was unavailable.",
             ) from e
+
+        try:
+            instrument_info = ticker.info
+            quote_type = str(instrument_info.get("quoteType", "")).upper()
+            exchange = str(instrument_info.get("exchange", "")).upper()
+        except Exception as e:
+            raise VantageError(
+                code="MARKET_DATA_PROVIDER_FAILED",
+                safe_message="Market instrument metadata could not be verified.",
+            ) from e
+        if quote_type != "EQUITY" or exchange not in US_EQUITY_EXCHANGES:
+            raise VantageError(
+                code="UNSUPPORTED_INSTRUMENT",
+                safe_message="The symbol must identify a supported US-listed equity.",
+            )
 
         # Validate currency if fast_info is present
         fast_info = getattr(ticker, "fast_info", None)
@@ -105,8 +126,8 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
             )
             if currency and currency.upper() != "USD":
                 raise VantageError(
-                    code="MARKET_DATA_PROVIDER_FAILED",
-                    safe_message=f"Unsupported currency: {currency}. Vantage requires USD.",
+                    code="UNSUPPORTED_INSTRUMENT",
+                    safe_message="The symbol must identify a USD-denominated US-listed equity.",
                 )
 
         # End date in yfinance history is exclusive, so add 1 day
@@ -122,21 +143,22 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
         except Exception as e:
             raise VantageError(
                 code="MARKET_DATA_PROVIDER_FAILED",
-                safe_message=f"Error retrieving market prices: {e}",
+                safe_message="Market prices could not be retrieved.",
             ) from e
 
         if df is None or df.empty:
             raise VantageError(
                 code="MARKET_DATA_PROVIDER_FAILED",
-                safe_message=f"No price data available for symbol {normalized_symbol}.",
+                safe_message="No market prices were available for the requested symbol.",
             )
 
         # Verify duplicate session dates
         session_dates = [ts.date() for ts in df.index]
         if len(session_dates) != len(set(session_dates)):
             raise VantageError(
-                code="MARKET_DATA_PROVIDER_FAILED",
-                safe_message="Duplicate session date in price data.",
+                code="INVALID_PRICE_SERIES",
+                safe_message="Market price series contains duplicate sessions.",
+                duplicate_session_count=len(session_dates) - len(set(session_dates)),
             )
 
         bars: list[DailyBar] = []
@@ -153,7 +175,11 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
             volume_val = int(row.get("Volume", 0))
 
             if (
-                open_val <= 0
+                not all(
+                    math.isfinite(value)
+                    for value in (open_val, high_val, low_val, close_val, adj_close_val)
+                )
+                or open_val <= 0
                 or high_val <= 0
                 or low_val <= 0
                 or close_val <= 0
@@ -162,6 +188,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                 raise VantageError(
                     code="INVALID_PRICE_SERIES",
                     safe_message="Price values must be positive and finite.",
+                    missing_value_count=1,
                 )
 
             bars.append(
@@ -177,7 +204,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                     currency="USD",
                     provider=self.name,
                     retrieved_at=now,
-                    adjustment_state="split_adjusted",
+                    adjustment_state="split_and_dividend_adjusted",
                 )
             )
 
@@ -187,6 +214,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                 safe_message="No daily bars in requested session range.",
             )
 
+        bars.sort(key=lambda bar: bar.session_date)
         c_hash = snapshot_hash(normalized_symbol, bars)
         latest_bar_session = bars[-1].session_date
         as_of = datetime.combine(
@@ -215,7 +243,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
         self, symbol: str, as_of: datetime, limit: int = 10
     ) -> NewsSnapshot:
         normalized_symbol = symbol.strip().upper()
-        now = datetime.now(UTC)
+        now = as_of.astimezone(UTC)
 
         try:
             ticker = self._ticker_factory(normalized_symbol)
@@ -223,7 +251,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
         except Exception as e:
             raise VantageError(
                 code="NEWS_PROVIDER_FAILED",
-                safe_message=f"Error retrieving company news: {e}",
+                safe_message="Company news could not be retrieved.",
             ) from e
 
         if not raw_news:
@@ -289,7 +317,9 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
 
             clean_title = str(title).strip()
             norm_url = normalize_url(url)
-            clean_pub = str(publisher).strip() if publisher and str(publisher).strip() else None
+            clean_pub = (
+                str(publisher).strip() if publisher and str(publisher).strip() else None
+            )
 
             # Calculate deterministic content hash
             time_str = event_time.isoformat() if event_time else ""
@@ -298,7 +328,11 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                 f"{pub_key}|{clean_title.lower()}|{time_str}".encode("utf-8")
             ).hexdigest()
 
-            ev_id = str(raw_id).strip() if raw_id and str(raw_id).strip() else f"news-{norm_hash[:16]}"
+            ev_id = (
+                str(raw_id).strip()
+                if raw_id and str(raw_id).strip()
+                else f"news-{norm_hash[:16]}"
+            )
 
             # Deduplication rules:
             # 1. Provider ID
@@ -330,6 +364,11 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
             )
 
         # Sort items by event_time descending (None at end)
+        items = [
+            item
+            for item in items
+            if item.event_time is None or item.event_time <= as_of
+        ]
         items.sort(
             key=lambda x: (
                 x.event_time is not None,
@@ -342,7 +381,10 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
 
         if not capped_items:
             quality = ComponentQuality.MISSING
-        elif len(capped_items) < limit:
+        elif any(
+            item.publisher is None or item.event_time is None or item.url is None
+            for item in capped_items
+        ):
             quality = ComponentQuality.PARTIAL
         else:
             quality = ComponentQuality.FRESH

@@ -19,6 +19,7 @@ from app.domain.research import (
     MarketSnapshot,
     ModelInfo,
     ModelQuality,
+    NewsSnapshot,
     OverallQuality,
     Reason,
     ResearchMetric,
@@ -63,7 +64,7 @@ def versions() -> VersionInfo:
 
 
 @pytest.fixture
-def valid_snapshot() -> tuple[MarketSnapshot, list[EvidenceSource]]:
+def valid_snapshot() -> tuple[MarketSnapshot, NewsSnapshot, list[EvidenceSource]]:
     now = datetime.now(UTC)
     bars = [
         DailyBar(
@@ -103,7 +104,16 @@ def valid_snapshot() -> tuple[MarketSnapshot, list[EvidenceSource]]:
             content_hash="b" * 64,
         )
     ]
-    return market, sources
+    news = NewsSnapshot(
+        symbol="AAPL",
+        items=sources,
+        provider="fixture-news",
+        retrieved_at=now,
+        coverage_start=now - timedelta(days=1),
+        coverage_end=now,
+        quality=ComponentQuality.FRESH,
+    )
+    return market, news, sources
 
 
 @pytest.fixture
@@ -112,10 +122,12 @@ def running_run(repo: ResearchRunRepository, user_id: UUID, versions: VersionInf
 
 
 @pytest.fixture
-def completed_run(repo: ResearchRunRepository, user_id: UUID, versions: VersionInfo, valid_snapshot):
+def completed_run(
+    repo: ResearchRunRepository, user_id: UUID, versions: VersionInfo, valid_snapshot
+):
     run = repo.create_running(user_id=user_id, symbol="AAPL", versions=versions)
-    market, sources = valid_snapshot
-    repo.save_snapshot(run.id, market, sources)
+    market, news, sources = valid_snapshot
+    repo.save_snapshot(run.id, user_id, market, news, sources)
     now = datetime.now(UTC)
     quality = DataQuality(
         overall=OverallQuality.SUFFICIENT,
@@ -163,7 +175,9 @@ def test_run_is_created_running_before_finalization(
 def test_cross_user_lookup_does_not_disclose_run(
     repo: ResearchRunRepository, user_id: UUID, other_user_id: UUID, completed_run
 ) -> None:
-    assert repo.get_owned(user_id=other_user_id, public_id=completed_run.public_id) is None
+    assert (
+        repo.get_owned(user_id=other_user_id, public_id=completed_run.public_id) is None
+    )
     owned = repo.get_owned(user_id=user_id, public_id=completed_run.public_id)
     assert owned is not None
     assert owned.run_id == completed_run.public_id
@@ -172,10 +186,101 @@ def test_cross_user_lookup_does_not_disclose_run(
 def test_snapshot_is_unique_per_run(
     repo: ResearchRunRepository, running_run, valid_snapshot
 ) -> None:
-    market, sources = valid_snapshot
-    repo.save_snapshot(running_run.id, market, sources)
+    market, news, sources = valid_snapshot
+    repo.save_snapshot(running_run.id, running_run.user_id, market, news, sources)
     with pytest.raises(IntegrityError):
-        repo.save_snapshot(running_run.id, market, sources)
+        repo.save_snapshot(running_run.id, running_run.user_id, market, news, sources)
+
+
+def test_snapshot_write_is_owner_scoped(
+    repo: ResearchRunRepository, running_run, other_user_id: UUID, valid_snapshot
+) -> None:
+    market, news, sources = valid_snapshot
+    with pytest.raises(VantageError) as exc_info:
+        repo.save_snapshot(running_run.id, other_user_id, market, news, sources)
+    assert exc_info.value.code == "RUN_NOT_FOUND"
+
+
+def test_snapshot_preserves_news_provenance_and_nulls(
+    repo: ResearchRunRepository, running_run, valid_snapshot
+) -> None:
+    market, news, sources = valid_snapshot
+    nullable_source = sources[0].model_copy(
+        update={
+            "publisher": None,
+            "url": None,
+            "event_time": None,
+            "content_hash": None,
+        }
+    )
+    combined_hash = repo.save_snapshot(
+        running_run.id,
+        running_run.user_id,
+        market,
+        news.model_copy(update={"items": [nullable_source]}),
+        [nullable_source],
+    )
+    with SessionFactory() as session:
+        row = (
+            session.execute(
+                text(
+                    "SELECT market_content_hash, content_hash, news_provider, news_quality "
+                    "FROM vantage_app.research_snapshots WHERE run_id = :run_id"
+                ),
+                {"run_id": running_run.id},
+            )
+            .mappings()
+            .one()
+        )
+        source = (
+            session.execute(
+                text(
+                    "SELECT publisher, url, event_time, content_hash "
+                    "FROM vantage_app.research_sources WHERE snapshot_id = "
+                    "(SELECT id FROM vantage_app.research_snapshots WHERE run_id = :run_id)"
+                ),
+                {"run_id": running_run.id},
+            )
+            .mappings()
+            .one()
+        )
+    assert row["market_content_hash"] == market.content_hash
+    assert row["content_hash"] == combined_hash
+    assert row["news_provider"] == "fixture-news"
+    assert row["news_quality"] == "fresh"
+    assert source == {
+        "publisher": None,
+        "url": None,
+        "event_time": None,
+        "content_hash": None,
+    }
+
+
+def test_stored_versions_are_returned_from_the_row(
+    repo: ResearchRunRepository, completed_run, user_id: UUID
+) -> None:
+    with SessionFactory() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE vantage_app.research_runs SET "
+                "response_schema_version='research-run-response-v0', "
+                "workflow_version='eod-research-v0', metrics_version='eod-metrics-v0', "
+                "policy_version='research-policy-v0', prompt_version='research-interpretation-v0' "
+                "WHERE public_id=:public_id"
+            ),
+            {"public_id": completed_run.run_id},
+        )
+    stored = repo.get_owned(user_id=user_id, public_id=completed_run.run_id)
+    assert stored is not None
+    assert stored.versions.model_dump() == {
+        "response_schema": "research-run-response-v0",
+        "workflow": "eod-research-v0",
+        "metrics": "eod-metrics-v0",
+        "policy": "research-policy-v0",
+        "code": "test-commit",
+    }
+    assert stored.model_info is not None
+    assert stored.model_info.prompt_version == "research-interpretation-v0"
 
 
 def test_history_cursor_is_stable(

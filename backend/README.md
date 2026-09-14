@@ -1,155 +1,65 @@
-# Vantage Backend — Transparent Research Run Engine
+# Vantage Backend — Transparent Research Runs
 
-The Vantage backend provides an asynchronous, observable, and resilient research run engine for US equity end-of-day (EOD) market analysis.
+The backend executes durable, synchronous, end-of-day research runs for supported US-listed equities. It returns deterministic metrics, typed quality states, registered reasons, evidence provenance, version identifiers, and an optional bounded AI interpretation. It does not place trades or provide investment advice.
 
-> **Disclaimer**: Vantage is an analytical and educational research platform for US equities. It does NOT provide automated trade execution, broker integration, trading recommendations, or financial advice.
+## Stack and boundaries
 
----
+- FastAPI on Python 3.12, managed with `uv`
+- PostgreSQL 17 through SQLAlchemy 2 and psycopg 3; Alembic owns schema changes
+- Supabase Auth only for bearer-token identity; research data is stored in PostgreSQL
+- Provider protocols in `app/providers/contracts.py`; the Phase 1 adapter is `YFinanceSnapshotProvider`
+- LangGraph for the deterministic metrics → optional interpretation → policy workflow
+- OpenTelemetry spans with allowlisted attributes and optional Langfuse v4 export
 
-## Architecture Overview
+`yfinance` is suitable for development and research prototyping, not a licensed production market-data entitlement. The adapter verifies `quoteType=EQUITY`, a supported US exchange code, and USD currency before accepting data.
 
-- **Framework**: FastAPI (Python 3.12, managed with `uv`)
-- **Database**: PostgreSQL with `psycopg` (v3) async/sync drivers and `SQLAlchemy` 2.0 / `Alembic`
-- **Authentication**: Supabase Auth (JWT bearer token validation)
-- **Market Data**: Protocol-driven snapshot abstraction (`MarketSnapshotProvider`), with `yfinance` as a development-only EOD adapter
-- **LLM Synthesis**: Multi-provider LLM interface (`LLMProvider`) supporting Ollama (local GGUF), Google Gemini, and Groq with deterministic schema-based fallback
-- **Observability**: Langfuse tracing with salted SHA-256 user pseudonymization and zero-leakage kill switch
+## API
 
----
+All research routes require a valid Supabase bearer token.
 
-## Quick Start & Local Setup
+- `POST /api/v1/research-runs` creates and completes one run synchronously
+- `GET /api/v1/research-runs/{run_id}` retrieves an owner-scoped run
+- `GET /api/v1/research-runs?limit=20&before=...` lists owner-scoped history
 
-### 1. Prerequisites
+Errors use the shared `SafeError` envelope. The incompatible legacy `/api/v1/analyze` route is intentionally absent.
 
-- Python 3.12+
-- `uv` package manager (`curl -LsSf https://astral.sh/uv/install.sh` or `winget install astral-sh.uv`)
-- Docker (for local PostgreSQL)
+## Deterministic results
 
-### 2. Environment Configuration
+The metrics registry currently emits one-, five-, and twenty-session return; twenty-session annualized volatility; twenty-session maximum drawdown; twenty-session average dollar volume; accepted, missing, and duplicate price counts; accepted news count; and distinct publisher count.
 
-Copy the sample environment file:
+Stale, invalid, or insufficient price series produce a typed `insufficient_data` result and skip the model (`model=not_run`). News or model failures degrade an otherwise usable run to `review` without discarding the deterministic metrics. Model-authored text may reference accepted evidence IDs but may not introduce numeric claims.
 
-```bash
-cp .env.example .env
-```
+## Local configuration
 
-Review and adjust variables in `.env`.
+Copy `.env.example` to `.env`. Required production values include Supabase credentials, separate database URLs, a high-entropy telemetry salt, and provider credentials for the selected LLM.
 
-### 3. Disposable PostgreSQL Setup
+The database split is intentional:
 
-Start a local PostgreSQL 17 container:
+- `MIGRATION_DATABASE_URL` connects as the DDL owner.
+- `DATABASE_URL` connects as the runtime role.
+- `VANTAGE_RUNTIME_DB_ROLE` names the existing role that receives schema usage, table `SELECT`/`INSERT`/`UPDATE`, and sequence usage during migration.
 
-```bash
-docker run -d \
-  --name vantage-test-postgres \
-  -e POSTGRES_USER=vantage_test \
-  -e POSTGRES_PASSWORD=vantage_test \
-  -e POSTGRES_DB=vantage_test \
-  -p 5433:5432 \
-  postgres:17-alpine
-```
+The initial migration revokes `PUBLIC` access. Its downgrade deliberately raises an error because research history is immutable. Roll back application code by deploying the prior application version; use a reviewed forward migration for schema corrections.
 
-Create the migration owner role (for DDL privileges):
+From the repository root, `docker compose up --build` creates the local owner/runtime roles, applies migrations, and then starts the API. For a manual backend setup:
 
 ```bash
-docker exec -i vantage-test-postgres psql -U vantage_test -d vantage_test << 'EOF'
-CREATE ROLE vantage_owner WITH LOGIN PASSWORD 'vantage_owner' SUPERUSER;
-GRANT ALL PRIVILEGES ON DATABASE vantage_test TO vantage_owner;
-EOF
+uv sync --frozen
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
 ```
 
-### 4. Database Connection Split
+## Telemetry
 
-Vantage enforces strict separation of privilege between runtime application access and schema migrations:
+`TRACE_EXPORT_ENABLED=false` keeps spans local and performs no Langfuse export. When enabled with `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST`, the Langfuse client registers its exporter on the same OpenTelemetry provider. Export is restricted to the Vantage instrumentation scope after attributes, exception events, and status descriptions are redacted. Raw tokens, emails, user IDs, provider payloads, and exception strings are not exported.
 
-- `DATABASE_URL`: Runtime connection string used by the application service for DML operations (`SELECT`, `INSERT`, `UPDATE`). Uses the `vantage_test` application role.
-- `MIGRATION_DATABASE_URL`: Administrative connection string used exclusively by Alembic for DDL operations (`CREATE TABLE`, `ALTER TABLE`, `CREATE INDEX`). Uses the `vantage_owner` role.
+## Verification
 
-```env
-DATABASE_URL=postgresql+psycopg://vantage_test:vantage_test@localhost:5433/vantage_test
-MIGRATION_DATABASE_URL=postgresql+psycopg://vantage_owner:vantage_owner@localhost:5433/vantage_test
-```
-
-### 5. Running Database Migrations
-
-Apply database migrations:
+Run from `backend/` with a PostgreSQL database whose name contains `vantage_test`:
 
 ```bash
 uv run alembic upgrade head
-```
-
-#### Additive Rollback Policy
-All schema migrations follow an **additive-only** evolution pattern:
-- New features introduce new tables or nullable columns with default values.
-- Existing columns and tables are never dropped or renamed in-place.
-- Rollbacks are applied cleanly via `alembic downgrade -1` or by applying forward additive fixes, preserving existing data integrity.
-
-### 6. Supabase Connection Boundaries
-
-Supabase is used **strictly for identity and authentication** (issuing and verifying JWT bearer tokens).
-- Vantage backend does **not** rely on Supabase database hosting, PostgREST, or proprietary Supabase client tables.
-- All domain data (research runs, snapshots, interpretations, execution logs) resides in the standard PostgreSQL database managed via SQLAlchemy and Alembic.
-
----
-
-## Market Data & Provider Selection
-
-### Market Data Boundary (`MarketSnapshotProvider`)
-- Market data ingestion is abstracted behind the `MarketSnapshotProvider` interface in `app/providers/market_data.py`.
-- The included `YFinanceSnapshotProvider` is strictly for **development, testing, and research-only** EOD market snapshots.
-- Production environments can swap in official licensed exchange data feeds (e.g. Polygon, Alpaca, IEX Cloud) without changing domain logic or the research graph.
-
-### LLM Provider Selection (`LLMProvider`)
-Configured via `LLM_PROVIDER` in `.env`:
-- `ollama`: Local inference via Ollama (`OLLAMA_BASE_URL`, `OLLAMA_MODEL`)
-- `gemini`: Google Gemini Cloud API (`GEMINI_API_KEY`, `GEMINI_MODEL`)
-- `groq`: Groq Cloud API (`GROQ_API_KEY`, `GROQ_MODEL`)
-
-#### Resilient Degradation Policy
-If the selected LLM provider is unreachable, times out, or returns malformed output:
-- The research run does **not** fail.
-- Market data metrics, quality status, and valuation analysis complete successfully.
-- An `InterpretationDegraded` state is generated with a safe fallback explanation code (e.g. `PROVIDER_UNAVAILABLE`, `TIMEOUT`, `MALFORMED_OUTPUT`).
-
----
-
-## Telemetry & Observability
-
-Observability is instrumented using Langfuse with strict privacy guarantees:
-
-- **Kill Switch**: Set `TRACE_EXPORT_ENABLED=false` to completely disable trace export. All spans execute as local no-ops with zero network overhead.
-- **PII Protection**: Raw user IDs and emails are never exported to trace backends. User identifiers are hashed using a salted SHA-256 digest (`hash(user_id + TELEMETRY_USER_SALT)`).
-- **Langfuse Configuration**:
-  ```env
-  TRACE_EXPORT_ENABLED=true
-  TELEMETRY_USER_SALT=your-secure-salt-value
-  LANGFUSE_PUBLIC_KEY=pk-lf-...
-  LANGFUSE_SECRET_KEY=sk-lf-...
-  LANGFUSE_HOST=https://cloud.langfuse.com
-  ```
-
----
-
-## Legacy Compatibility Adapter
-
-The legacy endpoint `POST /api/v1/analyze` is retained as a backward-compatible adapter:
-- Accepts existing request payloads.
-- Translates requests to research run executions internally.
-- Maps the result to the legacy analysis schema so older clients continue to function without interruption.
-
----
-
-## Testing & Verification
-
-Run the comprehensive test suite:
-
-```bash
-# Run unit, integration, and contract tests with 85%+ coverage requirement
-uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=85
-
-# Lint and formatting check
 uv run ruff check app tests migrations
-
-# Static type checking
 uv run mypy app/domain app/services app/providers app/repositories app/telemetry
+uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=85
 ```

@@ -36,7 +36,9 @@ def test_symbol_is_normalized_and_restricted() -> None:
 
 def test_interpretation_rejects_nonfinite_and_out_of_range_score() -> None:
     with pytest.raises(ValidationError):
-        AIInterpretation(sentiment_label="positive", sentiment_score=float("nan"), summary="x")
+        AIInterpretation(
+            sentiment_label="positive", sentiment_score=float("nan"), summary="x"
+        )
     with pytest.raises(ValidationError):
         AIInterpretation(sentiment_label="positive", sentiment_score=1.01, summary="x")
 
@@ -55,7 +57,11 @@ def test_research_status_values_are_stable() -> None:
 
 
 def test_quality_enums_are_stable() -> None:
-    assert [item.value for item in OverallQuality] == ["sufficient", "degraded", "insufficient"]
+    assert [item.value for item in OverallQuality] == [
+        "sufficient",
+        "degraded",
+        "insufficient",
+    ]
     assert [item.value for item in ComponentQuality] == [
         "fresh",
         "partial",
@@ -130,7 +136,9 @@ def test_safe_error_and_vantage_error() -> None:
     assert err.code == "INVALID_SYMBOL"
     assert not err.retryable
 
-    exc = VantageError(code="TEST_ERR", safe_message="Safe error text", retryable=True, run_id="123")
+    exc = VantageError(
+        code="TEST_ERR", safe_message="Safe error text", retryable=True, run_id="123"
+    )
     assert str(exc) == "Safe error text"
     assert exc.code == "TEST_ERR"
     assert exc.retryable

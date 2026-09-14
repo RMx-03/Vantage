@@ -1,25 +1,6 @@
 {
   "components": {
     "schemas": {
-      "AnalyzeRequest": {
-        "description": "Deprecated request body for POST /api/v1/analyze.",
-        "examples": [
-          {
-            "ticker": "AAPL"
-          }
-        ],
-        "properties": {
-          "ticker": {
-            "title": "Ticker",
-            "type": "string"
-          }
-        },
-        "required": [
-          "ticker"
-        ],
-        "title": "AnalyzeRequest",
-        "type": "object"
-      },
       "ComponentQuality": {
         "enum": [
           "fresh",
@@ -169,7 +150,6 @@
             "type": "string"
           },
           "prompt_version": {
-            "const": "research-interpretation-v1",
             "title": "Prompt Version",
             "type": "string"
           },
@@ -235,7 +215,6 @@
             "type": "array"
           },
           "policy_version": {
-            "const": "research-policy-v1",
             "default": "research-policy-v1",
             "title": "Policy Version",
             "type": "string"
@@ -279,7 +258,6 @@
             "type": "string"
           },
           "calculation_version": {
-            "const": "eod-metrics-v1",
             "title": "Calculation Version",
             "type": "string"
           },
@@ -606,22 +584,18 @@
             "type": "string"
           },
           "metrics": {
-            "const": "eod-metrics-v1",
             "title": "Metrics",
             "type": "string"
           },
           "policy": {
-            "const": "research-policy-v1",
             "title": "Policy",
             "type": "string"
           },
           "response_schema": {
-            "const": "research-run-response-v1",
             "title": "Response Schema",
             "type": "string"
           },
           "workflow": {
-            "const": "eod-research-v1",
             "title": "Workflow",
             "type": "string"
           }

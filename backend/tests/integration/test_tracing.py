@@ -9,7 +9,12 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
+from opentelemetry.trace import Status, StatusCode
+from opentelemetry.sdk.trace.export import (
+    SimpleSpanProcessor,
+    SpanExporter,
+    SpanExportResult,
+)
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from app.api.deps import AuthenticatedUser, get_current_user, get_research_repository
@@ -88,8 +93,10 @@ def mock_market(sample_bars: list[DailyBar]):
     market = MagicMock()
     market.name = "mock_market"
 
-    def fetch(symbol: str, start: date, end: date) -> MarketSnapshot:
-        now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
+    def fetch(
+        symbol: str, start: date, end: date, retrieved_at: datetime
+    ) -> MarketSnapshot:
+        now = retrieved_at
         return MarketSnapshot(
             symbol=symbol,
             bars=sample_bars,
@@ -142,7 +149,9 @@ def mock_llm():
     llm.name = "gemini"
     llm.model = "gemini-2.5-flash"
 
-    def interpret(*, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot) -> AIInterpretation:
+    def interpret(
+        *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+    ) -> AIInterpretation:
         return AIInterpretation(
             sentiment_label="positive",
             sentiment_score=0.75,
@@ -173,7 +182,9 @@ def memory_exporter():
 
 
 @pytest.fixture
-def traced_client(memory_exporter, service, test_user_id: UUID, secret_token: str, user_email: str):
+def traced_client(
+    memory_exporter, service, test_user_id: UUID, secret_token: str, user_email: str
+):
     trace._TRACER_PROVIDER = None
     trace._TRACER_PROVIDER_SET_ONCE._done = False
     provider = TracerProvider()
@@ -235,12 +246,14 @@ def test_redaction_helpers(test_user_id: UUID) -> None:
     assert h1 != h3
     assert len(h1) == 64
 
-    filtered = safe_attributes({
-        "vantage.run_id": "123",
-        "user.email": "leak@example.com",
-        "authorization": "Bearer token",
-        "vantage.workflow_status": "succeeded",
-    })
+    filtered = safe_attributes(
+        {
+            "vantage.run_id": "123",
+            "user.email": "leak@example.com",
+            "authorization": "Bearer token",
+            "vantage.workflow_status": "succeeded",
+        }
+    )
     assert "vantage.run_id" in filtered
     assert "vantage.workflow_status" in filtered
     assert "user.email" not in filtered
@@ -277,6 +290,14 @@ def test_trace_has_stable_tree_and_run_correlation(
         if s.name != "authenticate_request":
             assert s.attributes.get("vantage.run_id") == run_id
 
+    research_span = next(span for span in spans if span.name == "research_run")
+    for span in spans:
+        if span.name in expected_spans - {"research_run"}:
+            assert span.context.trace_id == research_span.context.trace_id
+    auth_span = next(span for span in spans if span.name == "authenticate_request")
+    assert auth_span.parent is not None
+    assert auth_span.parent.span_id == research_span.context.span_id
+
 
 def test_secrets_and_identity_are_never_exported(
     traced_client: TestClient,
@@ -308,3 +329,56 @@ def test_export_failure_does_not_change_run_result(
     )
     assert response.status_code == 201
     assert response.json()["workflow_status"] == "succeeded"
+
+
+def test_redaction_removes_exception_event_and_status_details() -> None:
+    trace._TRACER_PROVIDER = None
+    trace._TRACER_PROVIDER_SET_ONCE._done = False
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(RedactingSpanProcessor())
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+
+    tracer = get_tracer()
+    with tracer.start_as_current_span(
+        "redaction-test", record_exception=False, set_status_on_exception=False
+    ) as span:
+        span.set_attribute("authorization", "Bearer secret-value")
+        span.add_event(
+            "exception",
+            {
+                "exception.type": "RuntimeError",
+                "exception.message": "database-password-secret",
+                "exception.stacktrace": "stack database-password-secret",
+            },
+        )
+        span.set_status(Status(StatusCode.ERROR, "database-password-secret"))
+
+    exported = exporter.get_finished_spans()[0]
+    assert "secret" not in repr(exported.events)
+    assert all(not event.attributes for event in exported.events)
+    assert exported.status.description == "Operation failed."
+    assert "authorization" not in exported.attributes
+
+
+def test_configure_telemetry_registers_langfuse_with_shared_provider(
+    monkeypatch,
+) -> None:
+    from app.telemetry import tracing
+
+    captured: dict[str, Any] = {}
+
+    class FakeLangfuse:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr("langfuse.Langfuse", FakeLangfuse)
+    monkeypatch.setattr(settings, "TRACE_EXPORT_ENABLED", True)
+    monkeypatch.setattr(settings, "LANGFUSE_PUBLIC_KEY", "pk-test")
+    monkeypatch.setattr(settings, "LANGFUSE_SECRET_KEY", "sk-test")
+    provider = tracing.configure_telemetry()
+    assert captured["tracer_provider"] is provider
+    assert captured["public_key"] == "pk-test"
+    assert captured["secret_key"] == "sk-test"
+    assert callable(captured["should_export_span"])

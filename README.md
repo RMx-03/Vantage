@@ -1,53 +1,31 @@
 # Vantage
 
-Vantage is an AI-powered quantitative analysis terminal.
+Vantage is a transparent, traceable research assistant for end-of-day US-listed equity analysis. Phase 1 produces deterministic metrics and provenance-backed quality/reason records, with optional bounded model interpretation. It does not execute trades or provide investment advice.
 
-## Running with Docker
+## Run the local stack
 
-You can easily spin up the entire application stack: the React frontend, the FastAPI backend, and the local Ollama LLM provider.
+Prerequisites: Docker 24+ with Compose v2. Copy the backend/frontend example environment files or export real Supabase and model-provider values before authenticating users.
 
-### Prerequisites
-- Docker ≥ 24
-- Docker Compose v2
-- (Optional) NVIDIA Container Toolkit if you plan to use GPU acceleration for Ollama.
-
-### Step-by-Step Startup
-
-1. **Build and start the cluster in the background:**
-   ```bash
-   docker-compose up --build -d
-   ```
-
-2. **Preload the local LLM model:**
-   Since the Ollama container expects the model to be downloaded, run the preload script:
-   ```bash
-   ./backend/scripts/preload_model.sh vantage-fin
-   ```
-   *(Note: you can substitute `vantage-fin` with any other model name you have configured. Due to connection setup, this may require a few minutes to download the model layers).*
-
-3. **Verify Health:**
-   ```bash
-   curl http://localhost:8000/health
-   ```
-   If everything responds with status ok, the system is fully up.
-   The frontend is available at `http://localhost:5173`.
-
-### Teardown
-
-To bring the stack down and stop all containers without losing downloaded models:
 ```bash
-docker-compose down
+docker compose up --build
 ```
 
-To bring the stack down **and completely wipe the datastore (Ollama models)**:
+Compose starts PostgreSQL 17, creates separate migration-owner and runtime roles, applies Alembic migrations, starts FastAPI at `http://localhost:8000`, and serves the frontend at `http://localhost:5173`. The root backend health check is `http://localhost:8000/`.
+
+The default Supabase values are non-secret placeholders that allow containers to start; authentication requires real `SUPABASE_URL` and `SUPABASE_KEY` values. The default local runtime database password is development-only and must be replaced by an externally managed secret in deployed environments.
+
+Ollama is optional and profile-gated:
+
 ```bash
-docker-compose down -v
+docker compose --profile local up --build
 ```
 
-### Environment Variables
+Stop services without deleting data:
 
-| Variable | Description | Default |
-| -------- | ----------- | ------- |
-| `OLLAMA_BASE_URL` | Base URL used by the backend to hit Ollama. | `http://ollama:11434` (in Compose) |
-| `VANTAGE_AI_DIR` | Used for local gguf models (if not using remote registry) | `./vantage_ai` |
+```bash
+docker compose down
+```
 
+Deleting volumes also deletes the local PostgreSQL research history and Ollama models; only use `docker compose down -v` when that data is intentionally disposable.
+
+See `backend/README.md` and `frontend/README.md` for contracts, configuration, and verification commands.

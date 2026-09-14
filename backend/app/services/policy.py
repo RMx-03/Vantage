@@ -63,7 +63,10 @@ def collect_registered_reasons(
     reasons: list[Reason] = []
 
     # 1. Market blocking reasons
-    if market.quality == ComponentQuality.FAILED or market.error_code == "MARKET_DATA_PROVIDER_FAILED":
+    if market.error_code == "MARKET_DATA_PROVIDER_FAILED" or (
+        market.quality == ComponentQuality.FAILED
+        and market.error_code != "INVALID_PRICE_SERIES"
+    ):
         reasons.append(
             Reason(
                 code="MARKET_DATA_PROVIDER_FAILED",
@@ -86,7 +89,7 @@ def collect_registered_reasons(
         )
 
     if market.quality == ComponentQuality.STALE or (
-        market.bars and market.bars[-1].session_date < market.latest_completed_session
+        market.bars and market.bars[-1].session_date != market.latest_completed_session
     ):
         reasons.append(
             Reason(
@@ -98,7 +101,7 @@ def collect_registered_reasons(
             )
         )
 
-    if len(market.bars) < 21:
+    if market.error_code is None and len(market.bars) < 21:
         reasons.append(
             Reason(
                 code="INSUFFICIENT_PRICE_HISTORY",
@@ -111,7 +114,10 @@ def collect_registered_reasons(
         )
 
     # 2. News warning reasons
-    if news.quality == ComponentQuality.FAILED or news.error_code == "NEWS_PROVIDER_FAILED":
+    if (
+        news.quality == ComponentQuality.FAILED
+        or news.error_code == "NEWS_PROVIDER_FAILED"
+    ):
         reasons.append(
             Reason(
                 code="NEWS_PROVIDER_FAILED",
@@ -144,7 +150,9 @@ def collect_registered_reasons(
         )
 
     # 3. Model warning reasons
-    if interpretation.abstained or interpretation.sentiment_label == "unavailable":
+    if interpretation.abstention_reason != "MODEL_NOT_RUN" and (
+        interpretation.abstained or interpretation.sentiment_label == "unavailable"
+    ):
         if interpretation.abstention_reason == "MODEL_UNAVAILABLE":
             reasons.append(
                 Reason(
@@ -183,9 +191,14 @@ def collect_registered_reasons(
                 )
 
     if interpretation.sentiment_label == "negative" or (
-        interpretation.sentiment_score is not None and interpretation.sentiment_score < 0.0
+        interpretation.sentiment_score is not None
+        and interpretation.sentiment_score < 0.0
     ):
-        score_repr = f" (score: {interpretation.sentiment_score:.2f})" if interpretation.sentiment_score is not None else ""
+        score_repr = (
+            f" (score: {interpretation.sentiment_score:.2f})"
+            if interpretation.sentiment_score is not None
+            else ""
+        )
         reasons.append(
             Reason(
                 code="NEGATIVE_NEWS_SENTIMENT",
@@ -206,12 +219,18 @@ def deterministic_summary(
 ) -> str:
     if status == ResearchStatus.INSUFFICIENT_DATA:
         blocking = [r.label for r in reasons if r.severity == "blocking"]
-        block_text = "; ".join(blocking) if blocking else "required inputs are unavailable"
+        block_text = (
+            "; ".join(blocking) if blocking else "required inputs are unavailable"
+        )
         return f"Research run insufficient data: {block_text}."
 
     if status == ResearchStatus.REVIEW:
         warnings = [r.label for r in reasons if r.severity == "warning"]
-        warn_text = "; ".join(warnings) if warnings else "input quality or model interpretation degraded"
+        warn_text = (
+            "; ".join(warnings)
+            if warnings
+            else "input quality or model interpretation degraded"
+        )
         return f"Research run requires review: {warn_text}."
 
     return "Research run completed successfully with sufficient quality and no active warnings."
@@ -228,13 +247,17 @@ def apply_policy(
 
     if quality.overall == OverallQuality.INSUFFICIENT:
         status = ResearchStatus.INSUFFICIENT_DATA
-    elif quality.overall == OverallQuality.DEGRADED or any(r.severity == "warning" for r in reasons):
+    elif quality.overall == OverallQuality.DEGRADED or any(
+        r.severity == "warning" for r in reasons
+    ):
         status = ResearchStatus.REVIEW
     else:
         status = ResearchStatus.INFORMATIONAL
 
     ordered = order_reasons(reasons)
-    warnings = [r.description for r in ordered if r.severity == "warning"] + list(interpretation.warnings)
+    warnings = [r.description for r in ordered if r.severity == "warning"] + list(
+        interpretation.warnings
+    )
     summary = deterministic_summary(status, ordered, metrics)
 
     return PolicyResult(

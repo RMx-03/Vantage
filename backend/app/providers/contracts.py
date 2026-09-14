@@ -13,7 +13,11 @@ class MarketDataProvider(Protocol):
     name: str
 
     def fetch_daily_snapshot(
-        self, symbol: str, start_session: date, end_session: date
+        self,
+        symbol: str,
+        start_session: date,
+        end_session: date,
+        retrieved_at: datetime,
     ) -> MarketSnapshot: ...
 
 

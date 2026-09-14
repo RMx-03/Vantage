@@ -58,8 +58,12 @@ class ResearchRunRow(Base):
     symbol: Mapped[str] = mapped_column(Text, nullable=False)
     workflow_status: Mapped[str] = mapped_column(Text, nullable=False)
     research_status: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -94,6 +98,7 @@ class ResearchRunRow(Base):
     response_schema_version: Mapped[str] = mapped_column(Text, nullable=False)
     workflow_version: Mapped[str] = mapped_column(Text, nullable=False)
     metrics_version: Mapped[str] = mapped_column(Text, nullable=False)
+    policy_version: Mapped[str] = mapped_column(Text, nullable=False)
     code_version: Mapped[str] = mapped_column(Text, nullable=False)
     trace_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -134,11 +139,30 @@ class ResearchSnapshotRow(Base):
     user_id: Mapped[UUID] = mapped_column(postgresql.UUID(as_uuid=True), nullable=False)
     symbol: Mapped[str] = mapped_column(Text, nullable=False)
     market_provider: Mapped[str] = mapped_column(Text, nullable=False)
-    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    window_end: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    retrieved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    market_content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    news_provider: Mapped[str] = mapped_column(Text, nullable=False)
+    news_retrieved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    news_coverage_start: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    news_coverage_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    news_quality: Mapped[str] = mapped_column(Text, nullable=False)
+    news_error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     price_bars: Mapped[list[Any]] = mapped_column(postgresql.JSONB, nullable=False)
     quality: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB, nullable=False)
 
@@ -171,11 +195,15 @@ class ResearchSourceRow(Base):
     evidence_id: Mapped[str] = mapped_column(Text, nullable=False)
     source_type: Mapped[str] = mapped_column(Text, nullable=False)
     provider: Mapped[str] = mapped_column(Text, nullable=False)
-    publisher: Mapped[str] = mapped_column(Text, nullable=False)
+    publisher: Mapped[str | None] = mapped_column(Text, nullable=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
-    url: Mapped[str] = mapped_column(Text, nullable=False)
-    event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    event_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    retrieved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    content_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     snapshot: Mapped["ResearchSnapshotRow"] = relationship(back_populates="sources")

@@ -4,7 +4,12 @@ import math
 from statistics import stdev
 from typing import Literal
 
-from app.domain.research import ComponentQuality, MarketSnapshot, ResearchMetric
+from app.domain.research import (
+    ComponentQuality,
+    MarketSnapshot,
+    NewsSnapshot,
+    ResearchMetric,
+)
 
 METRICS_VERSION: Literal["eod-metrics-v1"] = "eod-metrics-v1"
 
@@ -18,6 +23,8 @@ METRIC_DEFINITIONS: dict[
     "max_drawdown_20": ("20-session maximum drawdown", "ratio", 20),
     "average_dollar_volume_20": ("20-session average dollar volume", "usd", 20),
     "price_observation_count": ("Accepted price observations", "count", None),
+    "price_missing_value_count": ("Rejected missing price values", "count", None),
+    "price_duplicate_session_count": ("Duplicate price sessions", "count", None),
     "news_item_count": ("Accepted news items", "count", None),
     "news_publisher_count": ("Distinct news publishers", "count", None),
 }
@@ -45,13 +52,14 @@ def build_metric_registry(
     ]
 
 
-def calculate_metrics(snapshot: MarketSnapshot) -> list[ResearchMetric]:
-    bars = snapshot.bars
+def calculate_metrics(
+    snapshot: MarketSnapshot, news: NewsSnapshot
+) -> list[ResearchMetric]:
+    bars = sorted(snapshot.bars, key=lambda bar: bar.session_date)
     if len({bar.session_date for bar in bars}) != len(bars):
         raise ValueError("INVALID_PRICE_SERIES: duplicate session")
     if any(
-        bar.adjusted_close <= 0 or not math.isfinite(bar.adjusted_close)
-        for bar in bars
+        bar.adjusted_close <= 0 or not math.isfinite(bar.adjusted_close) for bar in bars
     ):
         raise ValueError("INVALID_PRICE_SERIES: close")
 
@@ -102,5 +110,15 @@ def calculate_metrics(snapshot: MarketSnapshot) -> list[ResearchMetric]:
             "max_drawdown_20": max_dd,
             "average_dollar_volume_20": avg_dollar_vol,
             "price_observation_count": len(bars),
+            "price_missing_value_count": snapshot.missing_value_count,
+            "price_duplicate_session_count": snapshot.duplicate_session_count,
+            "news_item_count": len(news.items),
+            "news_publisher_count": len(
+                {
+                    item.publisher.strip().casefold()
+                    for item in news.items
+                    if item.publisher
+                }
+            ),
         },
     )

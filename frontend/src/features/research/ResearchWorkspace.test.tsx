@@ -147,6 +147,28 @@ describe('ResearchWorkspace', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/auth');
   });
 
+  it('does not show an older result after a newer run fails', async () => {
+    vi.mocked(api.createResearchRun)
+      .mockResolvedValueOnce(informationalRun)
+      .mockRejectedValueOnce(
+        new api.ApiError(503, {
+          code: 'MARKET_DATA_PROVIDER_FAILED',
+          message: 'Market data could not be retrieved.',
+          retryable: true,
+        })
+      );
+
+    renderWorkspace();
+    await userEvent.type(screen.getByLabelText(/US equity symbol/i), 'AAPL');
+    const runButton = screen.getByRole('button', { name: /Run research/i });
+    await userEvent.click(runButton);
+    expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
+
+    await userEvent.click(runButton);
+    expect(await screen.findByText(/Market data could not be retrieved/i)).toBeVisible();
+    expect(screen.queryByText(informationalRun.summary!)).not.toBeInTheDocument();
+  });
+
   it('does not display fabricated latency or node counts', async () => {
     renderWorkspace();
     expect(screen.queryByText(/latency:\s*\d+ms/i)).not.toBeInTheDocument();

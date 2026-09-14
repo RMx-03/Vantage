@@ -1,9 +1,10 @@
 from uuid import UUID
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 
 from app.core.database import supabase_client
+from app.domain.errors import VantageError
 from app.repositories.research_runs import ResearchRunRepository
 from app.services.research_run import (
     ResearchRunService,
@@ -29,9 +30,9 @@ async def get_current_user(
     tracer = get_tracer()
     with tracer.start_as_current_span("authenticate_request"):
         if credentials is None or not credentials.credentials:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing or invalid authorization credentials.",
+            raise VantageError(
+                code="AUTH_REQUIRED",
+                safe_message="Authentication is required.",
             )
 
         token = credentials.credentials
@@ -42,15 +43,12 @@ async def get_current_user(
             if user is None or not hasattr(user, "id"):
                 raise ValueError("No user returned from authentication service")
             return AuthenticatedUser(id=UUID(str(user.id)))
-        except HTTPException:
-            raise
         except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Unauthorized",
+            raise VantageError(
+                code="AUTH_INVALID",
+                safe_message="Authentication credentials are invalid or expired.",
             )
 
 
 def get_research_repository() -> ResearchRunRepository:
     return ResearchRunRepository()
-

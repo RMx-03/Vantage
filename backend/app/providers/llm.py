@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 from pydantic import ValidationError
 
@@ -33,6 +34,12 @@ def validate_interpretation(
             code="MODEL_OUTPUT_INVALID",
             safe_message="AI interpretation referenced unsupported evidence.",
         )
+    authored_text = " ".join([result.summary, *result.warnings])
+    if re.search(r"\d", authored_text):
+        raise VantageError(
+            code="MODEL_OUTPUT_INVALID",
+            safe_message="AI interpretation contained unsupported numeric claims.",
+        )
     return result
 
 
@@ -53,6 +60,7 @@ class GeminiInterpretationProvider(InterpretationProvider):
         if self._client is not None:
             return self._client
         from google import genai
+
         return genai.Client(api_key=self.api_key)
 
     def interpret(
@@ -91,7 +99,7 @@ class GeminiInterpretationProvider(InterpretationProvider):
                 code = "MODEL_UNAVAILABLE" if is_timeout else "MODEL_UNAVAILABLE"
                 raise VantageError(
                     code=code,
-                    safe_message=f"Gemini call failed: {e}",
+                    safe_message="AI interpretation provider was unavailable.",
                 ) from e
 
             # Check refusal
@@ -152,6 +160,7 @@ class GroqInterpretationProvider(InterpretationProvider):
         if self._client is not None:
             return self._client
         import groq
+
         return groq.Groq(api_key=self.api_key)
 
     def interpret(
@@ -198,7 +207,7 @@ class GroqInterpretationProvider(InterpretationProvider):
                 code = "MODEL_UNAVAILABLE" if is_timeout else "MODEL_UNAVAILABLE"
                 raise VantageError(
                     code=code,
-                    safe_message=f"Groq provider call failed: {e}",
+                    safe_message="AI interpretation provider was unavailable.",
                 ) from e
 
             choices = getattr(completion, "choices", None)
@@ -216,7 +225,7 @@ class GroqInterpretationProvider(InterpretationProvider):
             if refusal:
                 raise VantageError(
                     code="MODEL_OUTPUT_INVALID",
-                    safe_message=f"Groq refused request: {refusal}",
+                    safe_message="AI interpretation provider refused the request.",
                 )
 
             raw_content = getattr(message, "content", "") or ""
@@ -252,6 +261,7 @@ class OllamaInterpretationProvider(InterpretationProvider):
         if self._client is not None:
             return self._client
         import httpx
+
         return httpx.Client(timeout=float(self.timeout_seconds))
 
     def interpret(
@@ -289,7 +299,7 @@ class OllamaInterpretationProvider(InterpretationProvider):
                     continue
                 raise VantageError(
                     code="MODEL_UNAVAILABLE",
-                    safe_message=f"Ollama call failed: {e}",
+                    safe_message="AI interpretation provider was unavailable.",
                 ) from e
 
             status_code = getattr(resp, "status_code", 200)
@@ -303,7 +313,7 @@ class OllamaInterpretationProvider(InterpretationProvider):
                     continue
                 raise VantageError(
                     code="MODEL_UNAVAILABLE",
-                    safe_message=f"Ollama returned HTTP error {status_code}.",
+                    safe_message="AI interpretation provider returned an error.",
                 )
 
             try:
@@ -352,5 +362,5 @@ def build_interpretation_provider(settings: Settings) -> InterpretationProvider:
         )
     raise VantageError(
         code="CONFIG_ERROR",
-        safe_message=f"Unsupported LLM provider: {settings.LLM_PROVIDER}",
+        safe_message="The configured AI interpretation provider is unsupported.",
     )

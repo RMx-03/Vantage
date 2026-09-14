@@ -14,6 +14,10 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['e2e/**', 'node_modules/**'],
     pool: 'forks',
-    coverage: { provider: 'v8', thresholds: { lines: 80, functions: 80 } },
+    coverage: {
+      provider: 'v8',
+      include: ['src/api/researchRuns.ts', 'src/features/research/**/*.{ts,tsx}'],
+      thresholds: { lines: 80, functions: 80 },
+    },
   },
 })

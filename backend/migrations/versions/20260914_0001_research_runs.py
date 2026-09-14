@@ -5,6 +5,9 @@ Revises: None
 Create Date: 2026-09-14 00:00:00.000000+00:00
 
 """
+
+import os
+import re
 from typing import Sequence, Union
 
 from alembic import op
@@ -20,12 +23,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.execute("CREATE SCHEMA IF NOT EXISTS vantage_app")
-    op.execute("GRANT USAGE ON SCHEMA vantage_app TO PUBLIC")
+    op.execute("REVOKE ALL ON SCHEMA vantage_app FROM PUBLIC")
 
     op.create_table(
         "research_runs",
         sa.Column("id", sa.BigInteger(), sa.Identity(), primary_key=True),
-        sa.Column("public_id", postgresql.UUID(as_uuid=True), nullable=False, unique=True),
+        sa.Column(
+            "public_id", postgresql.UUID(as_uuid=True), nullable=False, unique=True
+        ),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("symbol", sa.Text(), nullable=False),
         sa.Column("workflow_status", sa.Text(), nullable=False),
@@ -34,10 +39,25 @@ def upgrade() -> None:
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("as_of", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("reasons", postgresql.JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
-        sa.Column("metrics", postgresql.JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+        sa.Column(
+            "reasons",
+            postgresql.JSONB(),
+            nullable=False,
+            server_default=sa.text("'[]'::jsonb"),
+        ),
+        sa.Column(
+            "metrics",
+            postgresql.JSONB(),
+            nullable=False,
+            server_default=sa.text("'[]'::jsonb"),
+        ),
         sa.Column("data_quality", postgresql.JSONB(), nullable=True),
-        sa.Column("warnings", postgresql.JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+        sa.Column(
+            "warnings",
+            postgresql.JSONB(),
+            nullable=False,
+            server_default=sa.text("'[]'::jsonb"),
+        ),
         sa.Column("summary", sa.Text(), nullable=True),
         sa.Column("model_provider", sa.Text(), nullable=True),
         sa.Column("model_name", sa.Text(), nullable=True),
@@ -45,6 +65,7 @@ def upgrade() -> None:
         sa.Column("response_schema_version", sa.Text(), nullable=False),
         sa.Column("workflow_version", sa.Text(), nullable=False),
         sa.Column("metrics_version", sa.Text(), nullable=False),
+        sa.Column("policy_version", sa.Text(), nullable=False),
         sa.Column("code_version", sa.Text(), nullable=False),
         sa.Column("trace_id", sa.Text(), nullable=True),
         sa.Column("error_code", sa.Text(), nullable=True),
@@ -79,7 +100,9 @@ def upgrade() -> None:
     op.create_table(
         "research_snapshots",
         sa.Column("id", sa.BigInteger(), sa.Identity(), primary_key=True),
-        sa.Column("public_id", postgresql.UUID(as_uuid=True), nullable=False, unique=True),
+        sa.Column(
+            "public_id", postgresql.UUID(as_uuid=True), nullable=False, unique=True
+        ),
         sa.Column(
             "run_id",
             sa.BigInteger(),
@@ -95,6 +118,13 @@ def upgrade() -> None:
         sa.Column("as_of", sa.DateTime(timezone=True), nullable=False),
         sa.Column("retrieved_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("content_hash", sa.Text(), nullable=False),
+        sa.Column("market_content_hash", sa.Text(), nullable=False),
+        sa.Column("news_provider", sa.Text(), nullable=False),
+        sa.Column("news_retrieved_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("news_coverage_start", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("news_coverage_end", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("news_quality", sa.Text(), nullable=False),
+        sa.Column("news_error_code", sa.Text(), nullable=True),
         sa.Column("price_bars", postgresql.JSONB(), nullable=False),
         sa.Column("quality", postgresql.JSONB(), nullable=False),
         sa.CheckConstraint(
@@ -128,12 +158,12 @@ def upgrade() -> None:
         sa.Column("evidence_id", sa.Text(), nullable=False),
         sa.Column("source_type", sa.Text(), nullable=False),
         sa.Column("provider", sa.Text(), nullable=False),
-        sa.Column("publisher", sa.Text(), nullable=False),
+        sa.Column("publisher", sa.Text(), nullable=True),
         sa.Column("title", sa.Text(), nullable=False),
-        sa.Column("url", sa.Text(), nullable=False),
-        sa.Column("event_time", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("url", sa.Text(), nullable=True),
+        sa.Column("event_time", sa.DateTime(timezone=True), nullable=True),
         sa.Column("retrieved_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("content_hash", sa.Text(), nullable=False),
+        sa.Column("content_hash", sa.Text(), nullable=True),
         sa.UniqueConstraint(
             "snapshot_id",
             "evidence_id",
@@ -148,12 +178,28 @@ def upgrade() -> None:
         schema="vantage_app",
     )
 
-    op.execute("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA vantage_app TO PUBLIC")
-    op.execute("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA vantage_app TO PUBLIC")
+    op.execute("REVOKE ALL ON ALL TABLES IN SCHEMA vantage_app FROM PUBLIC")
+    op.execute("REVOKE ALL ON ALL SEQUENCES IN SCHEMA vantage_app FROM PUBLIC")
+    runtime_role = os.environ.get("VANTAGE_RUNTIME_DB_ROLE", "").strip()
+    if runtime_role:
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", runtime_role) is None:
+            raise RuntimeError(
+                "VANTAGE_RUNTIME_DB_ROLE is not a valid PostgreSQL role name"
+            )
+        quoted_role = f'"{runtime_role}"'
+        op.execute(f"GRANT USAGE ON SCHEMA vantage_app TO {quoted_role}")
+        op.execute(
+            "GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA vantage_app "
+            f"TO {quoted_role}"
+        )
+        op.execute(
+            "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA vantage_app "
+            f"TO {quoted_role}"
+        )
 
 
 def downgrade() -> None:
-    op.drop_table("research_sources", schema="vantage_app")
-    op.drop_table("research_snapshots", schema="vantage_app")
-    op.drop_table("research_runs", schema="vantage_app")
-    op.execute("DROP SCHEMA IF EXISTS vantage_app CASCADE")
+    raise RuntimeError(
+        "Downgrade is disabled because research-run history is immutable; "
+        "deploy the prior application version without removing these tables."
+    )

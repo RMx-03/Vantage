@@ -45,6 +45,7 @@ def mock_ticker(history_df: pd.DataFrame, news_raw: list[dict]):
     ticker.history.return_value = history_df
     ticker.get_news.return_value = news_raw
     ticker.fast_info = {"currency": "USD"}
+    ticker.info = {"quoteType": "EQUITY", "exchange": "NMS"}
     return ticker
 
 
@@ -56,12 +57,33 @@ def provider(mock_ticker: MagicMock) -> YFinanceSnapshotProvider:
 def test_provider_fetches_history_and_news_once(
     mock_ticker: MagicMock, provider: YFinanceSnapshotProvider, fixed_now: datetime
 ) -> None:
-    market = provider.fetch_daily_snapshot("AAPL", date(2026, 8, 14), date(2026, 9, 11))
+    market = provider.fetch_daily_snapshot(
+        "AAPL", date(2026, 8, 14), date(2026, 9, 11), fixed_now
+    )
     news = provider.fetch_company_news("AAPL", fixed_now, 10)
     assert mock_ticker.history.call_count == 1
     assert mock_ticker.get_news.call_count == 1
     assert market.as_of.date() == date(2026, 9, 11)
+    assert market.retrieved_at == fixed_now
+    assert all(bar.retrieved_at == fixed_now for bar in market.bars)
+    assert all(
+        bar.adjustment_state == "split_and_dividend_adjusted" for bar in market.bars
+    )
     assert len(news.items) == len({item.evidence_id for item in news.items})
+
+
+def test_provider_normalizes_price_bars_to_session_order(
+    mock_ticker: MagicMock, history_df: pd.DataFrame, fixed_now: datetime
+) -> None:
+    mock_ticker.history.return_value = history_df.sort_index(ascending=False)
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    market = provider.fetch_daily_snapshot(
+        "AAPL", date(2026, 8, 14), date(2026, 9, 11), fixed_now
+    )
+
+    sessions = [bar.session_date for bar in market.bars]
+    assert sessions == sorted(sessions)
 
 
 @pytest.mark.parametrize(
@@ -83,11 +105,17 @@ def test_news_handles_both_legacy_and_content_schemas(
 ) -> None:
     news = provider.fetch_company_news("AAPL", fixed_now, 10)
     # Legacy story
-    legacy = next(item for item in news.items if item.evidence_id == "43924729-1b5c-3f92-959c-851532152865")
+    legacy = next(
+        item
+        for item in news.items
+        if item.evidence_id == "43924729-1b5c-3f92-959c-851532152865"
+    )
     assert legacy.publisher == "Reuters"
     assert "apple-stock-rises" in (legacy.url or "")
     # New format story
-    new_fmt = next(item for item in news.items if item.evidence_id == "new-format-item-01")
+    new_fmt = next(
+        item for item in news.items if item.evidence_id == "new-format-item-01"
+    )
     assert new_fmt.publisher == "Wall Street Journal"
     assert new_fmt.title == "Tech Sector Leads Rally"
 
@@ -109,7 +137,9 @@ def test_news_missing_publisher_and_time_retained(
     provider: YFinanceSnapshotProvider, fixed_now: datetime
 ) -> None:
     news = provider.fetch_company_news("AAPL", fixed_now, 10)
-    item = next(item for item in news.items if item.evidence_id == "missing-publisher-01")
+    item = next(
+        item for item in news.items if item.evidence_id == "missing-publisher-01"
+    )
     assert item.publisher is None
     assert item.event_time is None
     assert item.title == "Unattributed Apple Filing"
@@ -119,19 +149,33 @@ def test_empty_prices_raises_vantage_error(mock_ticker: MagicMock) -> None:
     mock_ticker.history.return_value = pd.DataFrame()
     p = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
     with pytest.raises(VantageError) as exc_info:
-        p.fetch_daily_snapshot("AAPL", date(2026, 8, 14), date(2026, 9, 11))
+        p.fetch_daily_snapshot(
+            "AAPL",
+            date(2026, 8, 14),
+            date(2026, 9, 11),
+            datetime(2026, 9, 14, 21, 0, tzinfo=UTC),
+        )
     assert exc_info.value.code == "MARKET_DATA_PROVIDER_FAILED"
 
 
-def test_provider_history_exception_raises_market_failed(mock_ticker: MagicMock) -> None:
+def test_provider_history_exception_raises_market_failed(
+    mock_ticker: MagicMock,
+) -> None:
     mock_ticker.history.side_effect = RuntimeError("Connection timeout")
     p = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
     with pytest.raises(VantageError) as exc_info:
-        p.fetch_daily_snapshot("AAPL", date(2026, 8, 14), date(2026, 9, 11))
+        p.fetch_daily_snapshot(
+            "AAPL",
+            date(2026, 8, 14),
+            date(2026, 9, 11),
+            datetime(2026, 9, 14, 21, 0, tzinfo=UTC),
+        )
     assert exc_info.value.code == "MARKET_DATA_PROVIDER_FAILED"
 
 
-def test_provider_news_exception_raises_news_failed(mock_ticker: MagicMock, fixed_now: datetime) -> None:
+def test_provider_news_exception_raises_news_failed(
+    mock_ticker: MagicMock, fixed_now: datetime
+) -> None:
     mock_ticker.get_news.side_effect = RuntimeError("Yahoo API down")
     p = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
     with pytest.raises(VantageError) as exc_info:
@@ -143,18 +187,76 @@ def test_wrong_currency_raises_market_failed(mock_ticker: MagicMock) -> None:
     mock_ticker.fast_info = {"currency": "EUR"}
     p = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
     with pytest.raises(VantageError) as exc_info:
-        p.fetch_daily_snapshot("AAPL", date(2026, 8, 14), date(2026, 9, 11))
-    assert exc_info.value.code in {"MARKET_DATA_PROVIDER_FAILED", "INVALID_PRICE_SERIES"}
+        p.fetch_daily_snapshot(
+            "AAPL",
+            date(2026, 8, 14),
+            date(2026, 9, 11),
+            datetime(2026, 9, 14, 21, 0, tzinfo=UTC),
+        )
+    assert exc_info.value.code == "UNSUPPORTED_INSTRUMENT"
 
 
-def test_duplicate_session_date_raises_error(mock_ticker: MagicMock, history_df: pd.DataFrame) -> None:
+@pytest.mark.parametrize(
+    "info",
+    [
+        {"quoteType": "ETF", "exchange": "NMS"},
+        {"quoteType": "EQUITY", "exchange": "LSE"},
+    ],
+)
+def test_rejects_non_us_equity_instruments(
+    mock_ticker: MagicMock, fixed_now: datetime, info: dict[str, str]
+) -> None:
+    mock_ticker.info = info
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+    with pytest.raises(VantageError) as exc_info:
+        provider.fetch_daily_snapshot(
+            "AAPL", date(2026, 8, 14), date(2026, 9, 11), fixed_now
+        )
+    assert exc_info.value.code == "UNSUPPORTED_INSTRUMENT"
+    assert "LSE" not in exc_info.value.safe_message
+
+
+def test_news_excludes_items_after_as_of(
+    mock_ticker: MagicMock, fixed_now: datetime
+) -> None:
+    mock_ticker.get_news.return_value = [
+        {
+            "uuid": "future-news",
+            "title": "Future item",
+            "publisher": "Reuters",
+            "providerPublishTime": int(fixed_now.timestamp()) + 60,
+        },
+        {
+            "uuid": "current-news",
+            "title": "Current item",
+            "publisher": "Reuters",
+            "providerPublishTime": int(fixed_now.timestamp()),
+            "link": "https://example.com/current-news",
+        },
+    ]
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+    result = provider.fetch_company_news("AAPL", fixed_now, 10)
+    assert [item.evidence_id for item in result.items] == ["current-news"]
+    assert result.retrieved_at == fixed_now
+    assert result.quality == ComponentQuality.FRESH
+
+
+def test_duplicate_session_date_raises_error(
+    mock_ticker: MagicMock, history_df: pd.DataFrame
+) -> None:
     # Duplicate first row
     duplicated_df = pd.concat([history_df.iloc[[0]], history_df])
     mock_ticker.history.return_value = duplicated_df
     p = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
     with pytest.raises(VantageError) as exc_info:
-        p.fetch_daily_snapshot("AAPL", date(2026, 8, 14), date(2026, 9, 11))
-    assert exc_info.value.code in {"MARKET_DATA_PROVIDER_FAILED", "INVALID_PRICE_SERIES"}
+        p.fetch_daily_snapshot(
+            "AAPL",
+            date(2026, 8, 14),
+            date(2026, 9, 11),
+            datetime(2026, 9, 14, 21, 0, tzinfo=UTC),
+        )
+    assert exc_info.value.code == "INVALID_PRICE_SERIES"
+    assert exc_info.value.duplicate_session_count == 1
 
 
 def test_snapshot_hash_reproducible_under_reordered_input(fixed_now: datetime) -> None:
@@ -193,7 +295,9 @@ def test_snapshot_hash_reproducible_under_reordered_input(fixed_now: datetime) -
 
 
 def test_normalize_url_removes_utm_and_fragments() -> None:
-    url1 = "https://example.com/news/article-1?utm_source=twitter&utm_medium=social#header"
+    url1 = (
+        "https://example.com/news/article-1?utm_source=twitter&utm_medium=social#header"
+    )
     url2 = "https://example.com/news/article-1/"
     assert normalize_url(url1) == "https://example.com/news/article-1"
     assert normalize_url(url2) == "https://example.com/news/article-1"

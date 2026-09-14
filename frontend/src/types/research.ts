@@ -14,7 +14,7 @@ export interface ResearchMetric {
   unit: MetricUnit;
   window_sessions: number | null;
   as_of: string;
-  calculation_version: 'eod-metrics-v1';
+  calculation_version: string;
   quality: ComponentQuality;
 }
 
@@ -25,7 +25,7 @@ export interface Reason {
   description: string;
   metric_keys: string[];
   evidence_ids: string[];
-  policy_version: 'research-policy-v1';
+  policy_version: string;
   threshold?: number | null;
 }
 
@@ -51,15 +51,15 @@ export interface EvidenceSource {
 export interface ModelInfo {
   provider: string;
   model: string;
-  prompt_version: 'research-interpretation-v1';
+  prompt_version: string;
   failure_code?: string | null;
 }
 
 export interface VersionInfo {
-  response_schema: 'research-run-response-v1';
-  workflow: 'eod-research-v1';
-  metrics: 'eod-metrics-v1';
-  policy: 'research-policy-v1';
+  response_schema: string;
+  workflow: string;
+  metrics: string;
+  policy: string;
   code: string;
 }
 

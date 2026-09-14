@@ -19,9 +19,13 @@ class VantageError(Exception):
         safe_message: str,
         retryable: bool = False,
         run_id: str | None = None,
+        missing_value_count: int = 0,
+        duplicate_session_count: int = 0,
     ) -> None:
         super().__init__(safe_message)
         self.code = code
         self.safe_message = safe_message
         self.retryable = retryable
         self.run_id = run_id
+        self.missing_value_count = missing_value_count
+        self.duplicate_session_count = duplicate_session_count

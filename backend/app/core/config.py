@@ -49,13 +49,13 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             if v.startswith("[") and v.endswith("]"):
                 import json
+
                 try:
                     return json.loads(v)
                 except Exception:
                     pass
             return [i.strip() for i in v.split(",") if i.strip()]
         return v
-
 
     # ------------------------------------------------------------------
     # Ollama — local LLM server (used from Phase 3 onwards)
@@ -81,12 +81,6 @@ class Settings(BaseSettings):
     ]
 
     # ------------------------------------------------------------------
-    # Risk thresholds (used from Phase 2 onwards)
-    # ------------------------------------------------------------------
-    VOLATILITY_THRESHOLD: float = 0.40  # annualised vol ceiling
-    SENTIMENT_REJECTION_THRESHOLD: float = 0.2  # sentiment floor
-
-    # ------------------------------------------------------------------
     # Supabase Authentication
     # ------------------------------------------------------------------
     SUPABASE_URL: str = ""
@@ -95,8 +89,10 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Database (PostgreSQL)
     # ------------------------------------------------------------------
-    DATABASE_URL: str = "postgresql+psycopg://vantage_test:vantage_test@localhost:5433/vantage_test"
-    MIGRATION_DATABASE_URL: str = "postgresql+psycopg://vantage_owner:vantage_owner@localhost:5433/vantage_test"
+    DATABASE_URL: str = "postgresql+psycopg://vantage_runtime:vantage_runtime@localhost:5433/vantage_test"
+    MIGRATION_DATABASE_URL: str = (
+        "postgresql+psycopg://vantage_owner:vantage_owner@localhost:5433/vantage_test"
+    )
 
     # ------------------------------------------------------------------
     # Telemetry and Observability (Phase 1 Task 8)

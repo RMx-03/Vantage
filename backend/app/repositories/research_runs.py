@@ -18,6 +18,7 @@ from app.domain.research import (
     MarketSnapshot,
     ModelInfo,
     ModelQuality,
+    NewsSnapshot,
     OverallQuality,
     Reason,
     ResearchMetric,
@@ -27,6 +28,7 @@ from app.domain.research import (
     VersionInfo,
     WorkflowStatus,
 )
+from app.services.snapshots import combined_snapshot_hash
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,7 @@ class ResearchRunRepository:
                     response_schema_version=versions.response_schema,
                     workflow_version=versions.workflow,
                     metrics_version=versions.metrics,
+                    policy_version=versions.policy,
                     code_version=versions.code,
                     trace_id=trace_id,
                 )
@@ -92,13 +95,18 @@ class ResearchRunRepository:
     def save_snapshot(
         self,
         internal_id: int,
+        user_id: UUID,
         snapshot: MarketSnapshot,
+        news: NewsSnapshot,
         sources: list[EvidenceSource],
-    ) -> None:
+    ) -> str:
         with SessionFactory() as session:
             with session.begin():
                 run = session.scalars(
-                    select(ResearchRunRow).where(ResearchRunRow.id == internal_id)
+                    select(ResearchRunRow).where(
+                        ResearchRunRow.id == internal_id,
+                        ResearchRunRow.user_id == user_id,
+                    )
                 ).first()
                 if run is None:
                     raise VantageError(
@@ -125,12 +133,10 @@ class ResearchRunRepository:
                     window_end = window_start
 
                 quality_dict: dict[str, Any] = {
-                    "overall": (
-                        snapshot.quality.value
-                        if hasattr(snapshot.quality, "value")
-                        else str(snapshot.quality)
-                    )
+                    "prices": snapshot.quality.value,
+                    "news": news.quality.value,
                 }
+                content_hash = combined_snapshot_hash(snapshot, news)
 
                 snapshot_row = ResearchSnapshotRow(
                     public_id=uuid4(),
@@ -142,7 +148,14 @@ class ResearchRunRepository:
                     window_end=window_end,
                     as_of=snapshot.as_of,
                     retrieved_at=snapshot.retrieved_at,
-                    content_hash=snapshot.content_hash,
+                    content_hash=content_hash,
+                    market_content_hash=snapshot.content_hash,
+                    news_provider=news.provider,
+                    news_retrieved_at=news.retrieved_at,
+                    news_coverage_start=news.coverage_start,
+                    news_coverage_end=news.coverage_end,
+                    news_quality=news.quality.value,
+                    news_error_code=news.error_code,
                     price_bars=[bar.model_dump(mode="json") for bar in snapshot.bars],
                     quality=quality_dict,
                 )
@@ -155,14 +168,15 @@ class ResearchRunRepository:
                         evidence_id=s.evidence_id,
                         source_type=getattr(s, "source_type", "news"),
                         provider=s.provider,
-                        publisher=s.publisher or "",
+                        publisher=s.publisher,
                         title=s.title,
-                        url=s.url or "",
-                        event_time=s.event_time or s.retrieved_at,
+                        url=s.url,
+                        event_time=s.event_time,
                         retrieved_at=s.retrieved_at,
-                        content_hash=s.content_hash or "",
+                        content_hash=s.content_hash,
                     )
                     session.add(source_row)
+                return content_hash
 
     def finalize_success(
         self,
@@ -315,12 +329,10 @@ class ResearchRunRepository:
             )
             if cursor_filter is not None:
                 stmt = stmt.where(cursor_filter)
-            stmt = (
-                stmt.order_by(
-                    ResearchRunRow.created_at.desc(),
-                    ResearchRunRow.id.desc(),
-                ).limit(capped_limit + 1)
-            )
+            stmt = stmt.order_by(
+                ResearchRunRow.created_at.desc(),
+                ResearchRunRow.id.desc(),
+            ).limit(capped_limit + 1)
             rows = list(session.scalars(stmt).all())
 
         has_more = len(rows) > capped_limit
@@ -364,14 +376,16 @@ class ResearchRunRepository:
         if row.model_provider and row.model_name and row.prompt_version:
             failure_code: str | None = None
             for r in row.reasons or []:
-                code = r.get("code") if isinstance(r, dict) else getattr(r, "code", None)
+                code = (
+                    r.get("code") if isinstance(r, dict) else getattr(r, "code", None)
+                )
                 if code in ("MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"):
                     failure_code = code
                     break
             model_info = ModelInfo(
                 provider=row.model_provider,
                 model=row.model_name,
-                prompt_version="research-interpretation-v1",
+                prompt_version=row.prompt_version,
                 failure_code=failure_code,
             )
 
@@ -397,10 +411,10 @@ class ResearchRunRepository:
             warnings=list(row.warnings or []),
             model_info=model_info,
             versions=VersionInfo(
-                response_schema="research-run-response-v1",
-                workflow="eod-research-v1",
-                metrics="eod-metrics-v1",
-                policy="research-policy-v1",
+                response_schema=row.response_schema_version,
+                workflow=row.workflow_version,
+                metrics=row.metrics_version,
+                policy=row.policy_version,
                 code=row.code_version,
             ),
             error_code=row.error_code,

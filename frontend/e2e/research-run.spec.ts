@@ -2,7 +2,9 @@ import { test, expect, type Page } from '@playwright/test';
 import { informationalRun, reviewRun } from '../src/test/fixtures';
 
 async function installAuthAndApiMocks(page: Page) {
-  // Inject authenticated Supabase session in localStorage
+  // Return an authenticated session for the Supabase storage key selected by
+  // the build-time project URL. This keeps the journey portable across CI,
+  // local Vite, and the production container image.
   await page.addInitScript(() => {
     const mockSession = {
       access_token: 'mock-access-token-123',
@@ -17,10 +19,14 @@ async function installAuthAndApiMocks(page: Page) {
         aud: 'authenticated',
       },
     };
-    window.localStorage.setItem(
-      'sb-keusiyiyupmnskmlztmb-auth-token',
-      JSON.stringify(mockSession)
-    );
+    const storedSession = JSON.stringify(mockSession);
+    const originalGetItem = Storage.prototype.getItem;
+    Storage.prototype.getItem = function (key: string) {
+      if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+        return storedSession;
+      }
+      return originalGetItem.call(this, key);
+    };
   });
 
   // Mock Supabase Auth API

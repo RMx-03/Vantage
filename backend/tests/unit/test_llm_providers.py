@@ -21,6 +21,19 @@ from app.providers.llm import (
 )
 
 
+def test_interpretation_rejects_model_authored_numeric_claims() -> None:
+    payload = {
+        "sentiment_label": "positive",
+        "sentiment_score": 0.2,
+        "summary": "The company will gain 25 percent next year.",
+        "evidence_ids": [],
+        "warnings": [],
+    }
+    with pytest.raises(VantageError) as exc_info:
+        validate_interpretation(payload, set())
+    assert exc_info.value.code == "MODEL_OUTPUT_INVALID"
+
+
 def valid_interpretation_json() -> dict[str, Any]:
     return {
         "sentiment_label": "mixed",
@@ -76,10 +89,14 @@ def news(fixed_now: datetime) -> NewsSnapshot:
     )
 
 
-def gemini_factory(*, response: dict | None = None, failure: str | None = None) -> GeminiInterpretationProvider:
+def gemini_factory(
+    *, response: dict | None = None, failure: str | None = None
+) -> GeminiInterpretationProvider:
     mock_client = MagicMock()
     if failure == "timeout":
-        mock_client.models.generate_content.side_effect = TimeoutError("Gemini call timed out")
+        mock_client.models.generate_content.side_effect = TimeoutError(
+            "Gemini call timed out"
+        )
     elif failure == "refusal":
         mock_resp = MagicMock()
         mock_resp.text = ""
@@ -98,41 +115,63 @@ def gemini_factory(*, response: dict | None = None, failure: str | None = None) 
     else:
         mock_resp = MagicMock()
         import json
+
         mock_resp.text = json.dumps(response or valid_interpretation_json())
         mock_resp.candidates = [MagicMock(finish_reason="STOP")]
         mock_client.models.generate_content.return_value = mock_resp
-    return GeminiInterpretationProvider(api_key="test-key", model="gemini-2.5-flash", client=mock_client)
+    return GeminiInterpretationProvider(
+        api_key="test-key", model="gemini-2.5-flash", client=mock_client
+    )
 
 
-def groq_factory(*, response: dict | None = None, failure: str | None = None) -> GroqInterpretationProvider:
+def groq_factory(
+    *, response: dict | None = None, failure: str | None = None
+) -> GroqInterpretationProvider:
     mock_client = MagicMock()
     if failure == "timeout":
-        mock_client.chat.completions.create.side_effect = TimeoutError("Groq call timed out")
+        mock_client.chat.completions.create.side_effect = TimeoutError(
+            "Groq call timed out"
+        )
     elif failure == "refusal":
         mock_choice = MagicMock()
         mock_choice.message.content = ""
         mock_choice.message.refusal = "Content blocked by safety policy"
-        mock_client.chat.completions.create.return_value = MagicMock(choices=[mock_choice])
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[mock_choice]
+        )
     elif failure == "malformed":
         mock_choice = MagicMock()
         mock_choice.message.content = "{bad json"
         mock_choice.message.refusal = None
-        mock_client.chat.completions.create.return_value = MagicMock(choices=[mock_choice])
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[mock_choice]
+        )
     elif failure == "schema":
         mock_choice = MagicMock()
         mock_choice.message.content = '{"sentiment_label": "bad", "summary": ""}'
         mock_choice.message.refusal = None
-        mock_client.chat.completions.create.return_value = MagicMock(choices=[mock_choice])
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[mock_choice]
+        )
     else:
         import json
+
         mock_choice = MagicMock()
-        mock_choice.message.content = json.dumps(response or valid_interpretation_json())
+        mock_choice.message.content = json.dumps(
+            response or valid_interpretation_json()
+        )
         mock_choice.message.refusal = None
-        mock_client.chat.completions.create.return_value = MagicMock(choices=[mock_choice])
-    return GroqInterpretationProvider(api_key="test-key", model="llama-3.3-70b-versatile", client=mock_client)
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[mock_choice]
+        )
+    return GroqInterpretationProvider(
+        api_key="test-key", model="llama-3.3-70b-versatile", client=mock_client
+    )
 
 
-def ollama_factory(*, response: dict | None = None, failure: str | None = None) -> OllamaInterpretationProvider:
+def ollama_factory(
+    *, response: dict | None = None, failure: str | None = None
+) -> OllamaInterpretationProvider:
     mock_client = MagicMock()
     if failure == "timeout":
         mock_client.post.side_effect = TimeoutError("Ollama call timed out")
@@ -149,19 +188,28 @@ def ollama_factory(*, response: dict | None = None, failure: str | None = None) 
     elif failure == "schema":
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"message": {"content": '{"sentiment_label": "bad"}'}}
+        mock_resp.json.return_value = {
+            "message": {"content": '{"sentiment_label": "bad"}'}
+        }
         mock_client.post.return_value = mock_resp
     else:
         import json
+
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"message": {"content": json.dumps(response or valid_interpretation_json())}}
+        mock_resp.json.return_value = {
+            "message": {"content": json.dumps(response or valid_interpretation_json())}
+        }
         mock_client.post.return_value = mock_resp
-    return OllamaInterpretationProvider(base_url="http://localhost:11434", model="vantage-fin", client=mock_client)
+    return OllamaInterpretationProvider(
+        base_url="http://localhost:11434", model="vantage-fin", client=mock_client
+    )
 
 
 @pytest.mark.parametrize("factory", [gemini_factory, groq_factory, ollama_factory])
-def test_valid_output_round_trips(factory, metrics: list[ResearchMetric], news: NewsSnapshot) -> None:
+def test_valid_output_round_trips(
+    factory, metrics: list[ResearchMetric], news: NewsSnapshot
+) -> None:
     provider = factory(response=valid_interpretation_json())
     result = provider.interpret(symbol="AAPL", metrics=metrics, news=news)
     assert result.sentiment_label == "mixed"
@@ -170,23 +218,32 @@ def test_valid_output_round_trips(factory, metrics: list[ResearchMetric], news: 
 
 
 @pytest.mark.parametrize("failure", ["timeout", "refusal", "malformed", "schema"])
-def test_failure_never_becomes_neutral(failure: str, metrics: list[ResearchMetric], news: NewsSnapshot) -> None:
+def test_failure_never_becomes_neutral(
+    failure: str, metrics: list[ResearchMetric], news: NewsSnapshot
+) -> None:
     provider = gemini_factory(failure=failure)
     with pytest.raises(VantageError) as caught:
         provider.interpret(symbol="AAPL", metrics=metrics, news=news)
     assert caught.value.code in {"MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"}
 
 
-def test_unknown_evidence_id_is_rejected(metrics: list[ResearchMetric], news: NewsSnapshot) -> None:
-    provider = gemini_factory(response={**valid_interpretation_json(), "evidence_ids": ["invented"]})
+def test_unknown_evidence_id_is_rejected(
+    metrics: list[ResearchMetric], news: NewsSnapshot
+) -> None:
+    provider = gemini_factory(
+        response={**valid_interpretation_json(), "evidence_ids": ["invented"]}
+    )
     with pytest.raises(VantageError) as caught:
         provider.interpret(symbol="AAPL", metrics=metrics, news=news)
     assert caught.value.code == "MODEL_OUTPUT_INVALID"
 
 
-def test_retry_succeeds_after_transient_failure(metrics: list[ResearchMetric], news: NewsSnapshot) -> None:
+def test_retry_succeeds_after_transient_failure(
+    metrics: list[ResearchMetric], news: NewsSnapshot
+) -> None:
     mock_client = MagicMock()
     import json
+
     mock_resp = MagicMock()
     mock_resp.text = json.dumps(valid_interpretation_json())
     mock_resp.candidates = [MagicMock(finish_reason="STOP")]
@@ -195,33 +252,43 @@ def test_retry_succeeds_after_transient_failure(metrics: list[ResearchMetric], n
         TimeoutError("Connection dropped"),
         mock_resp,
     ]
-    provider = GeminiInterpretationProvider(api_key="test-key", model="gemini-2.5-flash", client=mock_client)
+    provider = GeminiInterpretationProvider(
+        api_key="test-key", model="gemini-2.5-flash", client=mock_client
+    )
     result = provider.interpret(symbol="AAPL", metrics=metrics, news=news)
     assert result.sentiment_label == "mixed"
     assert mock_client.models.generate_content.call_count == 2
 
 
-def test_retry_exhaustion_raises_error(metrics: list[ResearchMetric], news: NewsSnapshot) -> None:
+def test_retry_exhaustion_raises_error(
+    metrics: list[ResearchMetric], news: NewsSnapshot
+) -> None:
     mock_client = MagicMock()
     # Both attempts time out
     mock_client.models.generate_content.side_effect = [
         TimeoutError("Attempt 1 timeout"),
         TimeoutError("Attempt 2 timeout"),
     ]
-    provider = GeminiInterpretationProvider(api_key="test-key", model="gemini-2.5-flash", client=mock_client)
+    provider = GeminiInterpretationProvider(
+        api_key="test-key", model="gemini-2.5-flash", client=mock_client
+    )
     with pytest.raises(VantageError) as caught:
         provider.interpret(symbol="AAPL", metrics=metrics, news=news)
     assert caught.value.code == "MODEL_UNAVAILABLE"
     assert mock_client.models.generate_content.call_count == 2
 
 
-def test_refusal_is_never_retried(metrics: list[ResearchMetric], news: NewsSnapshot) -> None:
+def test_refusal_is_never_retried(
+    metrics: list[ResearchMetric], news: NewsSnapshot
+) -> None:
     mock_client = MagicMock()
     mock_resp = MagicMock()
     mock_resp.text = ""
     mock_resp.candidates = [MagicMock(finish_reason="SAFETY")]
     mock_client.models.generate_content.return_value = mock_resp
-    provider = GeminiInterpretationProvider(api_key="test-key", model="gemini-2.5-flash", client=mock_client)
+    provider = GeminiInterpretationProvider(
+        api_key="test-key", model="gemini-2.5-flash", client=mock_client
+    )
     with pytest.raises(VantageError) as caught:
         provider.interpret(symbol="AAPL", metrics=metrics, news=news)
     assert caught.value.code in {"MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"}
