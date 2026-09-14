@@ -70,10 +70,15 @@ class Settings(BaseSettings):
     # Multi-Provider Cloud LLMs (Phase 3 Architecture Shift)
     # ------------------------------------------------------------------
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3-flash-preview"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama3-8b-8192"
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_JSON_SCHEMA_MODELS: list[str] = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-70b-versatile",
+        "llama-3.1-8b-instant",
+    ]
 
     # ------------------------------------------------------------------
     # Risk thresholds (used from Phase 2 onwards)
