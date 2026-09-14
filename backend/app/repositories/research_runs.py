@@ -360,10 +360,17 @@ class ResearchRunRepository:
 
         model_info: ModelInfo | None = None
         if row.model_provider and row.model_name and row.prompt_version:
+            failure_code: str | None = None
+            for r in row.reasons or []:
+                code = r.get("code") if isinstance(r, dict) else getattr(r, "code", None)
+                if code in ("MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"):
+                    failure_code = code
+                    break
             model_info = ModelInfo(
                 provider=row.model_provider,
                 model=row.model_name,
                 prompt_version="research-interpretation-v1",
+                failure_code=failure_code,
             )
 
         data_quality: DataQuality | None = None

@@ -38,10 +38,7 @@ def assess_quality(
 
     # 3. Model Quality
     if interpretation.abstained or interpretation.sentiment_label == "unavailable":
-        if interpretation.abstention_reason == "MODEL_UNAVAILABLE":
-            model_quality = ModelQuality.DEGRADED
-        else:
-            model_quality = ModelQuality.FAILED
+        model_quality = ModelQuality.FAILED
     elif interpretation.warnings:
         model_quality = ModelQuality.DEGRADED
     else:

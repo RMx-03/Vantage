@@ -1,17 +1,10 @@
-from typing import List
-
 from pydantic import BaseModel, field_validator
 
-# AgentState now lives in app.models.state — re-exported here for backward compat
-from app.models.state import AgentState as AgentState  # noqa: F401
-
-# ---------------------------------------------------------------------------
-# FastAPI Request / Response Schemas
-# ---------------------------------------------------------------------------
+from app.domain.research import ResearchRun, ResearchRunPage, ResearchRunRequest
 
 
 class AnalyzeRequest(BaseModel):
-    """Request body for POST /api/v1/analyze."""
+    """Deprecated request body for POST /api/v1/analyze."""
 
     ticker: str
 
@@ -28,24 +21,9 @@ class AnalyzeRequest(BaseModel):
     model_config = {"json_schema_extra": {"examples": [{"ticker": "AAPL"}]}}
 
 
-class AnalyzeResponse(BaseModel):
-    """Response body for POST /api/v1/analyze."""
-
-    ticker: str
-    memo: str
-    approved: bool
-
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {
-                    "ticker": "AAPL",
-                    "memo": (
-                        "[APPROVED] AAPL: Sentiment 0.75, Volatility 18.32%. "
-                        "Conditions are favorable for further analysis."
-                    ),
-                    "approved": True,
-                }
-            ]
-        }
-    }
+__all__ = [
+    "AnalyzeRequest",
+    "ResearchRun",
+    "ResearchRunPage",
+    "ResearchRunRequest",
+]
