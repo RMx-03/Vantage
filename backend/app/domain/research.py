@@ -205,6 +205,10 @@ class ResearchRun(StrictModel):
     error_code: str | None = None
     error_message_safe: str | None = None
 
+    @property
+    def public_id(self) -> UUID:
+        return self.run_id
+
 
 class ResearchRunPage(StrictModel):
     items: list[ResearchRun]

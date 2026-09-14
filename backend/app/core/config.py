@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str = ""
 
     # ------------------------------------------------------------------
+    # Database (PostgreSQL)
+    # ------------------------------------------------------------------
+    DATABASE_URL: str = "postgresql+psycopg://vantage_test:vantage_test@localhost:5433/vantage_test"
+    MIGRATION_DATABASE_URL: str = "postgresql+psycopg://vantage_owner:vantage_owner@localhost:5433/vantage_test"
+
+    # ------------------------------------------------------------------
     # Logging
     # ------------------------------------------------------------------
     LOG_LEVEL: str = "INFO"
