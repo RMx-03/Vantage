@@ -1,0 +1,362 @@
+from datetime import UTC, date, datetime, timedelta
+import hashlib
+import json
+from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+import exchange_calendars
+import pandas as pd
+import yfinance as yf
+
+from app.domain.errors import VantageError
+from app.domain.research import (
+    ComponentQuality,
+    DailyBar,
+    MarketSnapshot,
+    NewsItem,
+    NewsSnapshot,
+)
+from app.providers.contracts import MarketDataProvider, NewsProvider
+
+XNYS = exchange_calendars.get_calendar("XNYS")
+
+
+def latest_completed_xnys_session(now: datetime) -> date:
+    now_utc = now.astimezone(UTC)
+    candidate = XNYS.date_to_session(now_utc.date(), direction="previous")
+    if XNYS.session_close(candidate).to_pydatetime() > now_utc:
+        candidate = XNYS.previous_session(candidate)
+    return candidate.date()
+
+
+def normalize_url(url: str | None) -> str | None:
+    if not url or not url.strip():
+        return None
+    try:
+        parsed = urlparse(url.strip())
+        clean_netloc = parsed.netloc.lower()
+        clean_scheme = parsed.scheme.lower()
+        clean_path = parsed.path.rstrip("/")
+        # Filter out tracking query params like utm_*
+        query_pairs = [
+            (k, v)
+            for k, v in parse_qsl(parsed.query, keep_blank_values=False)
+            if not k.lower().startswith("utm_")
+        ]
+        clean_query = urlencode(sorted(query_pairs))
+        return urlunparse(
+            (clean_scheme, clean_netloc, clean_path, "", clean_query, "")
+        )
+    except Exception:
+        return url.strip()
+
+
+def snapshot_hash(symbol: str, bars: list[DailyBar]) -> str:
+    sorted_bars = sorted(bars, key=lambda b: b.session_date)
+    canonical_bars = [
+        {
+            "session_date": bar.session_date.isoformat(),
+            "open": round(bar.open, 6),
+            "high": round(bar.high, 6),
+            "low": round(bar.low, 6),
+            "close": round(bar.close, 6),
+            "adjusted_close": round(bar.adjusted_close, 6),
+            "volume": bar.volume,
+            "currency": bar.currency,
+            "adjustment_state": bar.adjustment_state,
+        }
+        for bar in sorted_bars
+    ]
+    payload = {
+        "symbol": symbol.strip().upper(),
+        "bars": canonical_bars,
+    }
+    canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
+class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
+    name: str = "yfinance"
+
+    def __init__(self, ticker_factory: Any = None) -> None:
+        self._ticker_factory = ticker_factory or yf.Ticker
+
+    def fetch_daily_snapshot(
+        self, symbol: str, start_session: date, end_session: date
+    ) -> MarketSnapshot:
+        normalized_symbol = symbol.strip().upper()
+        now = datetime.now(UTC)
+
+        try:
+            ticker = self._ticker_factory(normalized_symbol)
+        except Exception as e:
+            raise VantageError(
+                code="MARKET_DATA_PROVIDER_FAILED",
+                safe_message=f"Failed to instantiate provider for {normalized_symbol}.",
+            ) from e
+
+        # Validate currency if fast_info is present
+        fast_info = getattr(ticker, "fast_info", None)
+        if fast_info:
+            currency = (
+                fast_info.get("currency")
+                if isinstance(fast_info, dict)
+                else getattr(fast_info, "currency", "USD")
+            )
+            if currency and currency.upper() != "USD":
+                raise VantageError(
+                    code="MARKET_DATA_PROVIDER_FAILED",
+                    safe_message=f"Unsupported currency: {currency}. Vantage requires USD.",
+                )
+
+        # End date in yfinance history is exclusive, so add 1 day
+        query_start = start_session.isoformat()
+        query_end = (end_session + timedelta(days=1)).isoformat()
+
+        try:
+            df: pd.DataFrame = ticker.history(
+                start=query_start,
+                end=query_end,
+                auto_adjust=False,
+            )
+        except Exception as e:
+            raise VantageError(
+                code="MARKET_DATA_PROVIDER_FAILED",
+                safe_message=f"Error retrieving market prices: {e}",
+            ) from e
+
+        if df is None or df.empty:
+            raise VantageError(
+                code="MARKET_DATA_PROVIDER_FAILED",
+                safe_message=f"No price data available for symbol {normalized_symbol}.",
+            )
+
+        # Verify duplicate session dates
+        session_dates = [ts.date() for ts in df.index]
+        if len(session_dates) != len(set(session_dates)):
+            raise VantageError(
+                code="MARKET_DATA_PROVIDER_FAILED",
+                safe_message="Duplicate session date in price data.",
+            )
+
+        bars: list[DailyBar] = []
+        for ts, row in df.iterrows():
+            session_d = ts.date() if hasattr(ts, "date") else ts
+            if not (start_session <= session_d <= end_session):
+                continue
+
+            open_val = float(row.get("Open", 0.0))
+            high_val = float(row.get("High", 0.0))
+            low_val = float(row.get("Low", 0.0))
+            close_val = float(row.get("Close", 0.0))
+            adj_close_val = float(row.get("Adj Close", close_val))
+            volume_val = int(row.get("Volume", 0))
+
+            if (
+                open_val <= 0
+                or high_val <= 0
+                or low_val <= 0
+                or close_val <= 0
+                or adj_close_val <= 0
+            ):
+                raise VantageError(
+                    code="INVALID_PRICE_SERIES",
+                    safe_message="Price values must be positive and finite.",
+                )
+
+            bars.append(
+                DailyBar(
+                    symbol=normalized_symbol,
+                    session_date=session_d,
+                    open=open_val,
+                    high=high_val,
+                    low=low_val,
+                    close=close_val,
+                    adjusted_close=adj_close_val,
+                    volume=volume_val,
+                    currency="USD",
+                    provider=self.name,
+                    retrieved_at=now,
+                    adjustment_state="split_adjusted",
+                )
+            )
+
+        if not bars:
+            raise VantageError(
+                code="MARKET_DATA_PROVIDER_FAILED",
+                safe_message="No daily bars in requested session range.",
+            )
+
+        c_hash = snapshot_hash(normalized_symbol, bars)
+        latest_bar_session = bars[-1].session_date
+        as_of = datetime.combine(
+            latest_bar_session, datetime.min.time(), tzinfo=UTC
+        ) + timedelta(hours=20)
+        latest_completed = latest_completed_xnys_session(now)
+
+        quality = (
+            ComponentQuality.FRESH
+            if latest_bar_session == latest_completed
+            else ComponentQuality.STALE
+        )
+
+        return MarketSnapshot(
+            symbol=normalized_symbol,
+            bars=bars,
+            provider=self.name,
+            retrieved_at=now,
+            as_of=as_of,
+            latest_completed_session=latest_completed,
+            content_hash=c_hash,
+            quality=quality,
+        )
+
+    def fetch_company_news(
+        self, symbol: str, as_of: datetime, limit: int = 10
+    ) -> NewsSnapshot:
+        normalized_symbol = symbol.strip().upper()
+        now = datetime.now(UTC)
+
+        try:
+            ticker = self._ticker_factory(normalized_symbol)
+            raw_news = ticker.get_news()
+        except Exception as e:
+            raise VantageError(
+                code="NEWS_PROVIDER_FAILED",
+                safe_message=f"Error retrieving company news: {e}",
+            ) from e
+
+        if not raw_news:
+            return NewsSnapshot(
+                symbol=normalized_symbol,
+                items=[],
+                provider=self.name,
+                retrieved_at=now,
+                quality=ComponentQuality.MISSING,
+            )
+
+        seen_ids: set[str] = set()
+        seen_urls: set[str] = set()
+        seen_hashes: set[str] = set()
+        items: list[NewsItem] = []
+
+        for raw in raw_news:
+            if not isinstance(raw, dict):
+                continue
+
+            raw_id: str | None = None
+            title: str | None = None
+            publisher: str | None = None
+            url: str | None = None
+            event_time: datetime | None = None
+
+            if "content" in raw and isinstance(raw["content"], dict):
+                content = raw["content"]
+                raw_id = raw.get("id") or content.get("id")
+                title = content.get("title")
+                prov = content.get("provider")
+                if isinstance(prov, dict):
+                    publisher = prov.get("displayName")
+                canonical = content.get("canonicalUrl")
+                if isinstance(canonical, dict):
+                    url = canonical.get("url")
+                if not url:
+                    click = content.get("clickThroughUrl")
+                    if isinstance(click, dict):
+                        url = click.get("url")
+                pub_date = content.get("pubDate")
+                if pub_date:
+                    try:
+                        event_time = datetime.fromisoformat(
+                            str(pub_date).replace("Z", "+00:00")
+                        )
+                    except Exception:
+                        event_time = None
+            else:
+                raw_id = raw.get("uuid") or raw.get("id")
+                title = raw.get("title")
+                publisher = raw.get("publisher")
+                url = raw.get("link")
+                pub_time = raw.get("providerPublishTime")
+                if pub_time and isinstance(pub_time, (int, float)):
+                    try:
+                        event_time = datetime.fromtimestamp(pub_time, tz=UTC)
+                    except Exception:
+                        event_time = None
+
+            if not title or not str(title).strip():
+                continue
+
+            clean_title = str(title).strip()
+            norm_url = normalize_url(url)
+            clean_pub = str(publisher).strip() if publisher and str(publisher).strip() else None
+
+            # Calculate deterministic content hash
+            time_str = event_time.isoformat() if event_time else ""
+            pub_key = (clean_pub or "").lower()
+            norm_hash = hashlib.sha256(
+                f"{pub_key}|{clean_title.lower()}|{time_str}".encode("utf-8")
+            ).hexdigest()
+
+            ev_id = str(raw_id).strip() if raw_id and str(raw_id).strip() else f"news-{norm_hash[:16]}"
+
+            # Deduplication rules:
+            # 1. Provider ID
+            if ev_id in seen_ids:
+                continue
+            # 2. Normalized URL
+            if norm_url and norm_url in seen_urls:
+                continue
+            # 3. Content hash
+            if norm_hash in seen_hashes:
+                continue
+
+            seen_ids.add(ev_id)
+            if norm_url:
+                seen_urls.add(norm_url)
+            seen_hashes.add(norm_hash)
+
+            items.append(
+                NewsItem(
+                    evidence_id=ev_id,
+                    provider=self.name,
+                    publisher=clean_pub,
+                    title=clean_title,
+                    url=norm_url or url,
+                    event_time=event_time,
+                    retrieved_at=now,
+                    content_hash=norm_hash,
+                )
+            )
+
+        # Sort items by event_time descending (None at end)
+        items.sort(
+            key=lambda x: (
+                x.event_time is not None,
+                x.event_time or datetime.min.replace(tzinfo=UTC),
+            ),
+            reverse=True,
+        )
+
+        capped_items = items[:limit] if limit > 0 else items
+
+        if not capped_items:
+            quality = ComponentQuality.MISSING
+        elif len(capped_items) < limit:
+            quality = ComponentQuality.PARTIAL
+        else:
+            quality = ComponentQuality.FRESH
+
+        valid_times = [i.event_time for i in capped_items if i.event_time is not None]
+        coverage_start = min(valid_times) if valid_times else None
+        coverage_end = max(valid_times) if valid_times else None
+
+        return NewsSnapshot(
+            symbol=normalized_symbol,
+            items=capped_items,
+            provider=self.name,
+            retrieved_at=now,
+            coverage_start=coverage_start,
+            coverage_end=coverage_end,
+            quality=quality,
+        )
