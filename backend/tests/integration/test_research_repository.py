@@ -1,13 +1,18 @@
 import base64
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 import json
 import os
+from threading import Barrier, current_thread, main_thread
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.db.models import ResearchRunRow
 from app.db.session import SessionFactory
 from app.domain.errors import VantageError
 from app.domain.research import (
@@ -23,10 +28,12 @@ from app.domain.research import (
     OverallQuality,
     Reason,
     ResearchMetric,
+    ResearchRun,
     ResearchStatus,
     VersionInfo,
     WorkflowStatus,
 )
+import app.repositories.research_runs as research_runs_module
 from app.repositories.research_runs import ResearchRunRepository
 
 
@@ -382,3 +389,108 @@ def test_terminal_run_cannot_be_finalized_successfully_twice(
             summary="Replacement result",
         )
     assert exc.value.code == "RUN_ALREADY_FINALIZED"
+
+
+def test_competing_finalizers_allow_exactly_one_terminal_transition(
+    repo: ResearchRunRepository,
+    running_run,
+    user_id: UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before_select = Barrier(2)
+    after_unlocked_select = Barrier(2)
+
+    class CoordinatedSession(Session):
+        def scalars(self, statement, *args: Any, **kwargs: Any):
+            is_finalizer_select = (
+                current_thread() is not main_thread()
+                and ResearchRunRow.__table__ in statement.get_final_froms()
+            )
+            if not is_finalizer_select:
+                return super().scalars(statement, *args, **kwargs)
+
+            has_row_lock = getattr(statement, "_for_update_arg", None) is not None
+            before_select.wait(timeout=10)
+            result = super().scalars(statement, *args, **kwargs)
+            if not has_row_lock:
+                after_unlocked_select.wait(timeout=10)
+            return result
+
+    coordinated_sessions = sessionmaker(
+        bind=SessionFactory.kw["bind"],
+        expire_on_commit=False,
+        autoflush=False,
+        class_=CoordinatedSession,
+    )
+    monkeypatch.setattr(
+        research_runs_module,
+        "SessionFactory",
+        coordinated_sessions,
+    )
+
+    quality = DataQuality(
+        overall=OverallQuality.SUFFICIENT,
+        prices=ComponentQuality.FRESH,
+        news=ComponentQuality.FRESH,
+        model=ModelQuality.HEALTHY,
+    )
+
+    def finalize_success() -> tuple[str, object]:
+        try:
+            result = repo.finalize_success(
+                internal_id=running_run.id,
+                user_id=user_id,
+                research_status=ResearchStatus.INFORMATIONAL,
+                as_of=datetime.now(UTC),
+                reasons=[],
+                metrics=[],
+                data_quality=quality,
+                warnings=[],
+                summary="Concurrent success",
+            )
+            return "completed", result
+        except VantageError as exc:
+            return "error", exc
+
+    def finalize_failure() -> tuple[str, object]:
+        try:
+            result = repo.finalize_failure(
+                internal_id=running_run.id,
+                user_id=user_id,
+                error_code="INTERNAL_ERROR",
+                error_message_safe="Concurrent failure.",
+            )
+            return "completed", result
+        except VantageError as exc:
+            return "error", exc
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = [
+            future.result(timeout=15)
+            for future in (
+                executor.submit(finalize_success),
+                executor.submit(finalize_failure),
+            )
+        ]
+
+    completed = [value for kind, value in outcomes if kind == "completed"]
+    errors = [value for kind, value in outcomes if kind == "error"]
+    assert len(completed) == 1
+    assert len(errors) == 1
+    assert isinstance(errors[0], VantageError)
+    assert errors[0].code == "RUN_ALREADY_FINALIZED"
+    assert isinstance(completed[0], ResearchRun)
+    winning_run = completed[0]
+
+    stored = repo.get_owned(user_id=user_id, public_id=running_run.public_id)
+    assert stored is not None
+    assert stored.workflow_status == winning_run.workflow_status
+    if stored.workflow_status == WorkflowStatus.SUCCEEDED:
+        assert stored.summary == "Concurrent success"
+        assert stored.error_code is None
+        assert stored.error_message_safe is None
+    else:
+        assert stored.workflow_status == WorkflowStatus.FAILED
+        assert stored.summary is None
+        assert stored.error_code == "INTERNAL_ERROR"
+        assert stored.error_message_safe == "Concurrent failure."
