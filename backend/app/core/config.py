@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     # API
     # ------------------------------------------------------------------
     API_V1_PREFIX: str = "/api/v1"
+    NEWS_LOOKBACK_DAYS: int = 7
 
     # ------------------------------------------------------------------
     # CORS — origins allowed to call the API

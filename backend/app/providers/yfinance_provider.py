@@ -25,12 +25,26 @@ US_EQUITY_EXCHANGES = frozenset(
 )
 
 
-def latest_completed_xnys_session(now: datetime) -> date:
+def latest_completed_xnys_close(now: datetime) -> datetime:
     now_utc = now.astimezone(UTC)
     candidate = XNYS.date_to_session(now_utc.date(), direction="previous")
-    if XNYS.session_close(candidate).to_pydatetime() > now_utc:
+    close = XNYS.session_close(candidate).to_pydatetime()
+    if close > now_utc:
         candidate = XNYS.previous_session(candidate)
-    return candidate.date()
+        close = XNYS.session_close(candidate).to_pydatetime()
+    return close.astimezone(UTC)
+
+
+def latest_completed_xnys_session(now: datetime) -> date:
+    return latest_completed_xnys_close(now).date()
+
+
+def trailing_xnys_sessions(end_session: date, count: int = 21) -> tuple[date, ...]:
+    if count < 1:
+        raise ValueError("count must be positive")
+    end = XNYS.date_to_session(end_session, direction="previous")
+    sessions = XNYS.sessions_window(end, -count)
+    return tuple(session.date() for session in sessions)
 
 
 def normalize_url(url: str | None) -> str | None:
@@ -217,10 +231,8 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
         bars.sort(key=lambda bar: bar.session_date)
         c_hash = snapshot_hash(normalized_symbol, bars)
         latest_bar_session = bars[-1].session_date
-        as_of = datetime.combine(
-            latest_bar_session, datetime.min.time(), tzinfo=UTC
-        ) + timedelta(hours=20)
-        latest_completed = latest_completed_xnys_session(now)
+        as_of = XNYS.session_close(end_session).to_pydatetime().astimezone(UTC)
+        latest_completed = end_session
 
         quality = (
             ComponentQuality.FRESH
@@ -240,10 +252,15 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
         )
 
     def fetch_company_news(
-        self, symbol: str, as_of: datetime, limit: int = 10
+        self,
+        symbol: str,
+        cutoff: datetime,
+        lookback_days: int,
+        limit: int = 10,
     ) -> NewsSnapshot:
         normalized_symbol = symbol.strip().upper()
-        now = as_of.astimezone(UTC)
+        cutoff_utc = cutoff.astimezone(UTC)
+        window_start = cutoff_utc - timedelta(days=lookback_days)
 
         try:
             ticker = self._ticker_factory(normalized_symbol)
@@ -259,7 +276,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                 symbol=normalized_symbol,
                 items=[],
                 provider=self.name,
-                retrieved_at=now,
+                retrieved_at=cutoff_utc,
                 quality=ComponentQuality.MISSING,
             )
 
@@ -358,7 +375,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                     title=clean_title,
                     url=norm_url or url,
                     event_time=event_time,
-                    retrieved_at=now,
+                    retrieved_at=cutoff_utc,
                     content_hash=norm_hash,
                 )
             )
@@ -367,7 +384,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
         items = [
             item
             for item in items
-            if item.event_time is None or item.event_time <= as_of
+            if item.event_time is None or window_start < item.event_time <= cutoff_utc
         ]
         items.sort(
             key=lambda x: (
@@ -397,7 +414,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
             symbol=normalized_symbol,
             items=capped_items,
             provider=self.name,
-            retrieved_at=now,
+            retrieved_at=cutoff_utc,
             coverage_start=coverage_start,
             coverage_end=coverage_end,
             quality=quality,

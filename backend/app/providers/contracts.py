@@ -25,7 +25,7 @@ class NewsProvider(Protocol):
     name: str
 
     def fetch_company_news(
-        self, symbol: str, as_of: datetime, limit: int
+        self, symbol: str, cutoff: datetime, lookback_days: int, limit: int
     ) -> NewsSnapshot: ...
 
 

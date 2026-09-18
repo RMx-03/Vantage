@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
@@ -94,13 +95,18 @@ def mock_market(sample_bars: list[DailyBar]):
     ) -> MarketSnapshot:
         market.calls += 1
         now = retrieved_at
+        session_shift = end - sample_bars[-1].session_date
+        bars = [
+            bar.model_copy(update={"session_date": bar.session_date + session_shift})
+            for bar in sample_bars
+        ]
         return MarketSnapshot(
             symbol=symbol,
-            bars=sample_bars,
+            bars=bars,
             provider="mock_market",
             retrieved_at=now,
             as_of=now,
-            latest_completed_session=sample_bars[-1].session_date,
+            latest_completed_session=end,
             content_hash="a" * 64,
             quality=ComponentQuality.FRESH,
         )
@@ -115,8 +121,12 @@ def mock_news():
     news.name = "mock_news"
     news.calls = 0
 
-    def fetch(symbol: str, as_of: datetime, limit: int) -> NewsSnapshot:
+    def fetch(
+        symbol: str, cutoff: datetime, lookback_days: int, limit: int
+    ) -> NewsSnapshot:
         news.calls += 1
+        news.cutoff = cutoff
+        news.lookback_days = lookback_days
         now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
         item = NewsItem(
             evidence_id="news-1",
@@ -140,6 +150,72 @@ def mock_news():
 
     news.fetch_company_news.side_effect = fetch
     return news
+
+
+def test_service_shares_exchange_cutoff_across_market_news_and_persistence(
+    test_user_id: UUID,
+    mock_llm,
+) -> None:
+    request_time = datetime(2025, 11, 28, 19, 0, tzinfo=UTC)
+    cutoff = datetime(2025, 11, 28, 18, 0, tzinfo=UTC)
+    repo = MagicMock()
+    repo.create_running.return_value = RunningResearchRun(
+        id=1,
+        public_id=uuid4(),
+        user_id=test_user_id,
+        symbol="AAPL",
+        workflow_status="running",
+        created_at=request_time,
+        started_at=request_time,
+    )
+    repo.save_snapshot.return_value = "c" * 64
+    repo.finalize_success.side_effect = lambda **kwargs: SimpleNamespace(
+        as_of=kwargs["as_of"]
+    )
+
+    market = MagicMock()
+    market.name = "mock_market"
+    market.fetch_daily_snapshot.return_value = MarketSnapshot(
+        symbol="AAPL",
+        bars=[],
+        provider=market.name,
+        retrieved_at=request_time,
+        as_of=request_time,
+        latest_completed_session=date(2025, 11, 28),
+        content_hash="a" * 64,
+        quality=ComponentQuality.FRESH,
+    )
+
+    news = MagicMock()
+    news.name = "mock_news"
+    news.fetch_company_news.return_value = NewsSnapshot(
+        symbol="AAPL",
+        items=[],
+        provider=news.name,
+        retrieved_at=request_time,
+        quality=ComponentQuality.MISSING,
+    )
+
+    service = ResearchRunService(
+        repo=repo,
+        market_provider=market,
+        news_provider=news,
+        interpretation_provider=mock_llm,
+    )
+    service.workflow = MagicMock()
+    service.workflow.invoke.return_value = {"policy": MagicMock()}
+
+    run = service.create(user_id=test_user_id, symbol="AAPL", now=request_time)
+
+    assert market.fetch_daily_snapshot.call_args.args[2:] == (
+        date(2025, 11, 28),
+        request_time,
+    )
+    assert news.fetch_company_news.call_args.args == ("AAPL", cutoff, 7, 10)
+    saved_market = repo.save_snapshot.call_args.args[2]
+    assert saved_market.as_of == cutoff
+    assert repo.finalize_success.call_args.kwargs["as_of"] == cutoff
+    assert run.as_of == cutoff
 
 
 @pytest.fixture

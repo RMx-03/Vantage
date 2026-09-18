@@ -98,13 +98,18 @@ def mock_market(sample_bars: list[DailyBar]):
         symbol: str, start: date, end: date, retrieved_at: datetime
     ) -> MarketSnapshot:
         now = retrieved_at
+        session_shift = end - sample_bars[-1].session_date
+        bars = [
+            bar.model_copy(update={"session_date": bar.session_date + session_shift})
+            for bar in sample_bars
+        ]
         return MarketSnapshot(
             symbol=symbol,
-            bars=sample_bars,
+            bars=bars,
             provider="mock_market",
             retrieved_at=now,
             as_of=now,
-            latest_completed_session=sample_bars[-1].session_date,
+            latest_completed_session=end,
             content_hash="a" * 64,
             quality=ComponentQuality.FRESH,
         )
@@ -118,7 +123,9 @@ def mock_news():
     news = MagicMock()
     news.name = "mock_news"
 
-    def fetch(symbol: str, as_of: datetime, limit: int) -> NewsSnapshot:
+    def fetch(
+        symbol: str, cutoff: datetime, lookback_days: int, limit: int
+    ) -> NewsSnapshot:
         now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
         item = NewsItem(
             evidence_id="news-1",

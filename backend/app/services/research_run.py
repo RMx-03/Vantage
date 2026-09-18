@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import datetime
 import logging
 from typing import Any, Literal
 from uuid import UUID
@@ -24,8 +24,9 @@ from app.providers.contracts import (
 from app.providers.llm import build_interpretation_provider
 from app.providers.yfinance_provider import (
     YFinanceSnapshotProvider,
-    latest_completed_xnys_session,
+    latest_completed_xnys_close,
     snapshot_hash as market_snapshot_hash,
+    trailing_xnys_sessions,
 )
 from app.repositories.research_runs import ResearchRunRepository
 from app.services.metrics import METRICS_VERSION
@@ -63,10 +64,6 @@ class ResearchRunService:
             code=CODE_VERSION,
         )
         self.workflow = create_research_graph(self.llm)
-
-    @staticmethod
-    def start_for(completed: date) -> date:
-        return completed - timedelta(days=45)
 
     def create(
         self,
@@ -115,8 +112,10 @@ class ResearchRunService:
             root_span.set_attribute("vantage.run_id", str(row.public_id))
 
         try:
-            completed = latest_completed_xnys_session(now)
-            start_date = self.start_for(completed)
+            analysis_cutoff = latest_completed_xnys_close(now)
+            sessions = trailing_xnys_sessions(analysis_cutoff.date())
+            start_date = sessions[0]
+            completed = sessions[-1]
 
             with tracer.start_as_current_span("fetch_market_snapshot") as m_span:
                 m_span.set_attribute("vantage.run_id", str(row.public_id))
@@ -134,7 +133,7 @@ class ResearchRunService:
                             bars=[],
                             provider=self.market.name,
                             retrieved_at=now,
-                            as_of=now,
+                            as_of=analysis_cutoff,
                             latest_completed_session=completed,
                             content_hash=market_snapshot_hash(norm_symbol, []),
                             quality=ComponentQuality.FAILED,
@@ -142,6 +141,12 @@ class ResearchRunService:
                             missing_value_count=exc.missing_value_count,
                             duplicate_session_count=exc.duplicate_session_count,
                         )
+                    market = market.model_copy(
+                        update={
+                            "as_of": analysis_cutoff,
+                            "latest_completed_session": completed,
+                        }
+                    )
                 with tracer.start_as_current_span("validate_price_quality") as v_span:
                     v_span.set_attribute("vantage.run_id", str(row.public_id))
 
@@ -150,7 +155,12 @@ class ResearchRunService:
                 with tracer.start_as_current_span("provider_request") as p_span:
                     p_span.set_attribute("vantage.run_id", str(row.public_id))
                     try:
-                        news = self.news.fetch_company_news(norm_symbol, now, 10)
+                        news = self.news.fetch_company_news(
+                            norm_symbol,
+                            analysis_cutoff,
+                            settings.NEWS_LOOKBACK_DAYS,
+                            10,
+                        )
                     except VantageError as exc:
                         news = NewsSnapshot(
                             symbol=norm_symbol,
@@ -210,7 +220,7 @@ class ResearchRunService:
                     internal_id=row.id,
                     user_id=user_id,
                     research_status=policy.research_status,
-                    as_of=market.as_of,
+                    as_of=analysis_cutoff,
                     reasons=policy.reasons,
                     metrics=policy.metrics,
                     data_quality=policy.data_quality,
