@@ -140,7 +140,7 @@ def completed_run(
         model="gemini-2.5-flash",
         prompt_version="research-interpretation-v1",
     )
-    return repo.finalize_success(
+    repo.finalize_success(
         internal_id=run.id,
         user_id=user_id,
         research_status=ResearchStatus.INFORMATIONAL,
@@ -152,6 +152,7 @@ def completed_run(
         summary="All good",
         model_info=model_info,
     )
+    return run
 
 
 @pytest.fixture
@@ -340,3 +341,44 @@ def test_finalize_failure(
     assert finalized.workflow_status == WorkflowStatus.FAILED
     assert finalized.error_code == "MARKET_DATA_PROVIDER_FAILED"
     assert finalized.error_message_safe == "Failed to retrieve market prices."
+
+
+def test_terminal_run_cannot_be_overwritten(
+    repo: ResearchRunRepository, completed_run, user_id: UUID
+) -> None:
+    with pytest.raises(VantageError) as exc:
+        repo.finalize_failure(
+            internal_id=completed_run.id,
+            user_id=user_id,
+            error_code="INTERNAL_ERROR",
+            error_message_safe="Safe failure.",
+        )
+    assert exc.value.code == "RUN_ALREADY_FINALIZED"
+
+
+def test_terminal_run_cannot_be_finalized_successfully_twice(
+    repo: ResearchRunRepository,
+    completed_run,
+    user_id: UUID,
+) -> None:
+    now = datetime.now(UTC)
+    quality = DataQuality(
+        overall=OverallQuality.SUFFICIENT,
+        prices=ComponentQuality.FRESH,
+        news=ComponentQuality.FRESH,
+        model=ModelQuality.HEALTHY,
+    )
+
+    with pytest.raises(VantageError) as exc:
+        repo.finalize_success(
+            internal_id=completed_run.id,
+            user_id=user_id,
+            research_status=ResearchStatus.INFORMATIONAL,
+            as_of=now,
+            reasons=[],
+            metrics=[],
+            data_quality=quality,
+            warnings=[],
+            summary="Replacement result",
+        )
+    assert exc.value.code == "RUN_ALREADY_FINALIZED"

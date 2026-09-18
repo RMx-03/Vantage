@@ -6,7 +6,7 @@ from opentelemetry import trace
 
 from app.agents.research_graph import create_research_graph
 from app.core.config import settings
-from app.domain.errors import VantageError
+from app.domain.errors import RUN_ALREADY_FINALIZED, VantageError
 from app.domain.research import (
     ComponentQuality,
     EvidenceSource,
@@ -239,14 +239,31 @@ class ResearchRunService:
             return res
 
         except VantageError as exc:
+            if exc.code == RUN_ALREADY_FINALIZED:
+                raise VantageError(
+                    code=exc.code,
+                    safe_message=exc.safe_message,
+                    retryable=exc.retryable,
+                    run_id=str(row.public_id),
+                ) from exc
             with tracer.start_as_current_span("persist_result") as p_span:
                 p_span.set_attribute("vantage.run_id", str(row.public_id))
-                self.repo.finalize_failure(
-                    internal_id=row.id,
-                    user_id=user_id,
-                    error_code=exc.code,
-                    error_message_safe=exc.safe_message,
-                )
+                try:
+                    self.repo.finalize_failure(
+                        internal_id=row.id,
+                        user_id=user_id,
+                        error_code=exc.code,
+                        error_message_safe=exc.safe_message,
+                    )
+                except VantageError as finalization_exc:
+                    if finalization_exc.code == RUN_ALREADY_FINALIZED:
+                        raise VantageError(
+                            code=finalization_exc.code,
+                            safe_message=finalization_exc.safe_message,
+                            retryable=finalization_exc.retryable,
+                            run_id=str(row.public_id),
+                        ) from finalization_exc
+                    raise
             if root_span is not None:
                 root_span.set_attribute("vantage.workflow_status", "failed")
                 root_span.set_attribute("vantage.research_status", "failed")
@@ -263,12 +280,22 @@ class ResearchRunService:
             safe_message = "An internal error occurred while processing research run."
             with tracer.start_as_current_span("persist_result") as p_span:
                 p_span.set_attribute("vantage.run_id", str(row.public_id))
-                self.repo.finalize_failure(
-                    internal_id=row.id,
-                    user_id=user_id,
-                    error_code=code,
-                    error_message_safe=safe_message,
-                )
+                try:
+                    self.repo.finalize_failure(
+                        internal_id=row.id,
+                        user_id=user_id,
+                        error_code=code,
+                        error_message_safe=safe_message,
+                    )
+                except VantageError as finalization_exc:
+                    if finalization_exc.code == RUN_ALREADY_FINALIZED:
+                        raise VantageError(
+                            code=finalization_exc.code,
+                            safe_message=finalization_exc.safe_message,
+                            retryable=finalization_exc.retryable,
+                            run_id=str(row.public_id),
+                        ) from finalization_exc
+                    raise
             if root_span is not None:
                 root_span.set_attribute("vantage.workflow_status", "failed")
                 root_span.set_attribute("vantage.research_status", "failed")

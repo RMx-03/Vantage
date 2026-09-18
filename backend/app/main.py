@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.routes import router as v1_router
 from app.core.config import settings
-from app.domain.errors import SafeError, VantageError
+from app.domain.errors import RUN_ALREADY_FINALIZED, SafeError, VantageError
 from app.telemetry.tracing import configure_telemetry, get_tracer
 
 # ---------------------------------------------------------------------------
@@ -68,6 +68,8 @@ async def vantage_error_handler(request: Request, exc: VantageError) -> JSONResp
         status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     elif exc.code in {"RUN_NOT_FOUND", "NOT_FOUND"}:
         status_code = status.HTTP_404_NOT_FOUND
+    elif exc.code == RUN_ALREADY_FINALIZED:
+        status_code = status.HTTP_409_CONFLICT
     elif exc.code in {
         "INVALID_SYMBOL",
         "INVALID_PRICE_SERIES",

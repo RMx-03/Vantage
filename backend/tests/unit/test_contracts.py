@@ -34,6 +34,12 @@ def test_symbol_is_normalized_and_restricted() -> None:
         ResearchRunRequest(symbol="BTC-USD")
 
 
+@pytest.mark.parametrize("value", [None, 123, True, {"ticker": "AAPL"}])
+def test_rejects_non_string_symbols(value: object) -> None:
+    with pytest.raises(ValidationError):
+        ResearchRunRequest.model_validate({"symbol": value})
+
+
 def test_interpretation_rejects_nonfinite_and_out_of_range_score() -> None:
     with pytest.raises(ValidationError):
         AIInterpretation(

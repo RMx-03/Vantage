@@ -69,7 +69,9 @@ class ResearchRunRequest(StrictModel):
     @field_validator("symbol", mode="before")
     @classmethod
     def normalize_symbol(cls, value: object) -> str:
-        return str(value).strip().upper()
+        if not isinstance(value, str):
+            raise ValueError("symbol must be a string")
+        return value.strip().upper()
 
 
 class ResearchMetric(StrictModel):

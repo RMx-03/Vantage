@@ -10,7 +10,11 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import ResearchRunRow, ResearchSnapshotRow, ResearchSourceRow
 from app.db.session import SessionFactory
-from app.domain.errors import VantageError
+from app.domain.errors import (
+    RUN_ALREADY_FINALIZED,
+    RUN_ALREADY_FINALIZED_MESSAGE,
+    VantageError,
+)
 from app.domain.research import (
     ComponentQuality,
     DataQuality,
@@ -205,12 +209,18 @@ class ResearchRunRepository:
                         ResearchRunRow.id == internal_id,
                         ResearchRunRow.user_id == user_id,
                     )
+                    .with_for_update()
                 )
                 row = session.scalars(stmt).first()
                 if row is None:
                     raise VantageError(
                         code="RUN_NOT_FOUND",
                         safe_message="Research run not found.",
+                    )
+                if row.workflow_status != WorkflowStatus.RUNNING.value:
+                    raise VantageError(
+                        code=RUN_ALREADY_FINALIZED,
+                        safe_message=RUN_ALREADY_FINALIZED_MESSAGE,
                     )
 
                 row.workflow_status = WorkflowStatus.SUCCEEDED.value
@@ -250,12 +260,18 @@ class ResearchRunRepository:
                         ResearchRunRow.id == internal_id,
                         ResearchRunRow.user_id == user_id,
                     )
+                    .with_for_update()
                 )
                 row = session.scalars(stmt).first()
                 if row is None:
                     raise VantageError(
                         code="RUN_NOT_FOUND",
                         safe_message="Research run not found.",
+                    )
+                if row.workflow_status != WorkflowStatus.RUNNING.value:
+                    raise VantageError(
+                        code=RUN_ALREADY_FINALIZED,
+                        safe_message=RUN_ALREADY_FINALIZED_MESSAGE,
                     )
 
                 row.workflow_status = WorkflowStatus.FAILED.value

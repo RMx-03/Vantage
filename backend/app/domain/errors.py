@@ -1,5 +1,8 @@
 from pydantic import BaseModel, ConfigDict
 
+RUN_ALREADY_FINALIZED = "RUN_ALREADY_FINALIZED"
+RUN_ALREADY_FINALIZED_MESSAGE = "Research run has already been finalized."
+
 
 class SafeError(BaseModel):
     model_config = ConfigDict(extra="forbid")

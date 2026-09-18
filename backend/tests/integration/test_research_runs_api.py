@@ -17,20 +17,25 @@ from app.domain.research import (
     AIInterpretation,
     ComponentQuality,
     DailyBar,
+    DataQuality,
     EvidenceSource,
     MarketSnapshot,
     ModelInfo,
+    ModelQuality,
     NewsItem,
     NewsSnapshot,
+    OverallQuality,
     ResearchMetric,
+    ResearchStatus,
     VersionInfo,
 )
 from app.main import app
-from app.repositories.research_runs import ResearchRunRepository
+from app.repositories.research_runs import ResearchRunRepository, RunningResearchRun
 from app.services.research_run import (
     ResearchRunService,
     get_research_service,
 )
+from app.services.policy import PolicyResult
 
 
 @pytest.fixture
@@ -432,3 +437,113 @@ def test_invalid_cursor_is_bad_request(client: TestClient, auth_headers: dict) -
     )
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "INVALID_CURSOR"
+
+
+def test_finalization_conflict_is_propagated_without_opposite_finalization(
+    test_user_id: UUID,
+    mock_market,
+    mock_news,
+    mock_llm,
+) -> None:
+    public_id = uuid4()
+
+    class FinalizationConflictRepository:
+        def create_running(self, **kwargs: Any) -> RunningResearchRun:
+            now = datetime.now(UTC)
+            return RunningResearchRun(
+                id=1,
+                public_id=public_id,
+                user_id=test_user_id,
+                symbol="AAPL",
+                workflow_status="running",
+                created_at=now,
+                started_at=now,
+            )
+
+        def save_snapshot(self, *args: Any, **kwargs: Any) -> str:
+            return "c" * 64
+
+        def finalize_success(self, **kwargs: Any) -> None:
+            raise VantageError(
+                code="RUN_ALREADY_FINALIZED",
+                safe_message="Research run has already been finalized.",
+            )
+
+        def finalize_failure(self, **kwargs: Any) -> None:
+            raise AssertionError("must not attempt failure finalization after conflict")
+
+    service = ResearchRunService(
+        repo=FinalizationConflictRepository(),  # type: ignore[arg-type]
+        market_provider=mock_market,
+        news_provider=mock_news,
+        interpretation_provider=mock_llm,
+    )
+    service.workflow = MagicMock()
+    service.workflow.invoke.return_value = {
+        "policy": PolicyResult(
+            research_status=ResearchStatus.INFORMATIONAL,
+            summary="All good",
+            reasons=[],
+            metrics=[],
+            data_quality=DataQuality(
+                overall=OverallQuality.SUFFICIENT,
+                prices=ComponentQuality.FRESH,
+                news=ComponentQuality.FRESH,
+                model=ModelQuality.HEALTHY,
+            ),
+            warnings=[],
+            interpretation=AIInterpretation(
+                sentiment_label="positive",
+                sentiment_score=0.75,
+                summary="All good",
+            ),
+        )
+    }
+
+    with pytest.raises(VantageError) as exc:
+        service.create(
+            user_id=test_user_id,
+            symbol="AAPL",
+            now=datetime(2026, 9, 14, 21, 0, tzinfo=UTC),
+        )
+
+    assert exc.value.code == "RUN_ALREADY_FINALIZED"
+    assert exc.value.run_id == str(public_id)
+
+
+def test_run_already_finalized_maps_to_conflict(
+    test_user_id: UUID,
+    auth_headers: dict,
+) -> None:
+    public_id = uuid4()
+
+    class ConflictService:
+        def create(self, **kwargs: Any) -> None:
+            raise VantageError(
+                code="RUN_ALREADY_FINALIZED",
+                safe_message="Research run has already been finalized.",
+                run_id=str(public_id),
+            )
+
+    app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
+        id=test_user_id
+    )
+    app.dependency_overrides[get_research_service] = lambda: ConflictService()
+    try:
+        with TestClient(app) as test_client:
+            response = test_client.post(
+                "/api/v1/research-runs",
+                json={"symbol": "AAPL"},
+                headers=auth_headers,
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "RUN_ALREADY_FINALIZED",
+        "message": "Research run has already been finalized.",
+        "run_id": str(public_id),
+        "request_id": None,
+        "retryable": False,
+    }
