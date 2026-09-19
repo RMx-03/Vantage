@@ -15,30 +15,36 @@ export default function UserSettingsPanel() {
   return (
     <div className="w-full flex flex-col gap-8 pb-16">
       {/* Section Header with Tabs */}
-      <div className="space-y-6 border-b border-slate-800 pb-4">
+      <div className="space-y-6 border-b border-outline-variant/30 pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">System Configurations</h1>
-          <p className="text-slate-400 text-sm mt-1">Manage user session and audit past research runs.</p>
+          <h1 className="text-3xl font-headline tracking-tight text-on-surface">
+            System Configurations
+          </h1>
+          <p className="text-on-surface-variant font-body text-sm mt-1">
+            Manage user session and audit past research runs.
+          </p>
         </div>
 
         {/* Internal Tabs */}
-        <div className="flex gap-6 border-b border-slate-800">
+        <div className="flex gap-6 border-b border-outline-variant/30">
           <button
+            type="button"
             onClick={() => setActiveTab('profile')}
-            className={`text-xs uppercase font-mono tracking-wider pb-3 transition-colors border-b-2 ${
+            className={`font-label text-[11px] uppercase tracking-widest pb-2 transition-colors ${
               activeTab === 'profile'
-                ? 'text-indigo-400 border-indigo-400 font-bold'
-                : 'text-slate-400 hover:text-slate-200 border-transparent'
+                ? 'text-primary border-b border-primary'
+                : 'text-outline-variant hover:text-primary'
             }`}
           >
             User Profile
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('history')}
-            className={`text-xs uppercase font-mono tracking-wider pb-3 transition-colors border-b-2 ${
+            className={`font-label text-[11px] uppercase tracking-widest pb-2 transition-colors ${
               activeTab === 'history'
-                ? 'text-indigo-400 border-indigo-400 font-bold'
-                : 'text-slate-400 hover:text-slate-200 border-transparent'
+                ? 'text-primary border-b border-primary'
+                : 'text-outline-variant hover:text-primary'
             }`}
           >
             Research Run Log
@@ -48,20 +54,24 @@ export default function UserSettingsPanel() {
 
       {activeTab === 'profile' && (
         <div className="space-y-8">
-          <section className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 space-y-6 backdrop-blur-sm">
-            <h2 className="text-xs uppercase font-mono tracking-widest text-slate-400 border-b border-slate-800 pb-2">
+          <section className="bg-surface-container border border-outline-variant p-8 space-y-6">
+            <h2 className="text-xs uppercase font-label tracking-widest text-outline border-b border-outline-variant/30 pb-2">
               Authenticated Operator
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400">User Email</label>
-                <div className="w-full bg-slate-950/80 border border-slate-800 text-slate-200 font-mono text-sm py-2.5 px-3 rounded-lg select-all">
+                <label className="text-xs font-label text-outline uppercase tracking-widest">
+                  User Email
+                </label>
+                <div className="w-full bg-surface-container-low border-b border-outline-variant/30 text-on-surface font-label text-sm py-2.5 px-3 select-all">
                   {user?.email || 'Anonymous Operator'}
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400">User Identifier</label>
-                <div className="w-full bg-slate-950/80 border border-slate-800 text-slate-400 font-mono text-xs py-3 px-3 rounded-lg select-all truncate">
+                <label className="text-xs font-label text-outline uppercase tracking-widest">
+                  User Identifier
+                </label>
+                <div className="w-full bg-surface-container-low border-b border-outline-variant/30 text-outline font-label text-xs py-3 px-3 select-all truncate">
                   {user?.id || 'Unidentified'}
                 </div>
               </div>
@@ -71,18 +81,22 @@ export default function UserSettingsPanel() {
           {/* Session Control Block */}
           <section className="flex justify-end">
             <button
+              type="button"
               onClick={handleLogout}
-              className="bg-rose-950/20 border border-rose-500/30 text-rose-300 hover:bg-rose-950/40 hover:text-rose-200 transition-colors py-2.5 px-6 text-xs font-semibold rounded-lg uppercase tracking-wider"
+              className="bg-transparent border border-error-container text-error hover:bg-error-container/20 transition-colors py-3 px-8 font-label text-sm tracking-widest uppercase flex items-center gap-3"
             >
-              Sign Out Session
+              <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
+                power_settings_new
+              </span>
+              Terminate Session
             </button>
           </section>
         </div>
       )}
 
       {activeTab === 'history' && (
-        <section className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 backdrop-blur-sm">
-          <h2 className="text-xs uppercase font-mono tracking-widest text-slate-400 border-b border-slate-800 pb-3 mb-6">
+        <section className="bg-surface-container border border-outline-variant p-8">
+          <h2 className="text-xs uppercase font-label tracking-widest text-outline border-b border-outline-variant/30 pb-3 mb-6">
             Durable Research Runs
           </h2>
           <ResearchHistory />
