@@ -173,6 +173,11 @@ jobs:
       - name: Start PostgreSQL on a fresh volume
         run: docker compose up -d postgres
 
+      # Migrations also run as a dependency of the app containers below
+      # (`depends_on: migrate: service_completed_successfully`). Running them
+      # here as well is deliberate and harmless — Alembic is idempotent — and it
+      # is what makes a migration failure a separately-named failing step
+      # instead of an opaque container-startup error. Do not delete this step.
       - name: Apply Alembic migrations in a container
         run: docker compose run --rm migrate
 
@@ -188,19 +193,31 @@ jobs:
             psql -U vantage_runtime -d vantage -v ON_ERROR_STOP=1 -tAc \
             "SELECT count(*) FROM vantage_app.research_runs"
 
-          if docker compose exec -T -e PGPASSWORD="$POSTGRES_RUNTIME_PASSWORD" postgres \
-            psql -U vantage_runtime -d vantage -v ON_ERROR_STOP=1 -c \
-            "CREATE TABLE vantage_app.ci_privilege_probe (id int)"; then
-            echo "runtime role created a table; schema privileges are not restricted" >&2
-            exit 1
-          fi
+          # A failed statement is not enough: it must fail *because the runtime
+          # role lacks the privilege*, not because a schema, table, or container
+          # went missing.
+          assert_ddl_rejected() {
+            local description="$1"
+            local statement="$2"
+            local out
+            if out="$(docker compose exec -T -e PGPASSWORD="$POSTGRES_RUNTIME_PASSWORD" postgres \
+              psql -U vantage_runtime -d vantage -v ON_ERROR_STOP=1 -c "$statement" 2>&1)"; then
+              echo "runtime role was allowed to $description; schema privileges are not restricted" >&2
+              echo "$out" >&2
+              exit 1
+            fi
+            if ! printf '%s' "$out" | grep -qE 'permission denied|must be owner'; then
+              echo "$description failed, but not with a privilege rejection:" >&2
+              echo "$out" >&2
+              exit 1
+            fi
+            echo "$description correctly rejected: $(printf '%s' "$out" | grep -m1 -E 'permission denied|must be owner')"
+          }
 
-          if docker compose exec -T -e PGPASSWORD="$POSTGRES_RUNTIME_PASSWORD" postgres \
-            psql -U vantage_runtime -d vantage -v ON_ERROR_STOP=1 -c \
-            "ALTER TABLE vantage_app.research_runs ADD COLUMN ci_privilege_probe int"; then
-            echo "runtime role altered a table; schema privileges are not restricted" >&2
-            exit 1
-          fi
+          assert_ddl_rejected "create a table" \
+            "CREATE TABLE vantage_app.ci_privilege_probe (id int)"
+          assert_ddl_rejected "alter a table" \
+            "ALTER TABLE vantage_app.research_runs ADD COLUMN ci_privilege_probe int"
 
       - name: Start backend and frontend containers
         run: docker compose up -d backend frontend
@@ -220,17 +237,35 @@ jobs:
           docker compose ps
           exit 1
 
-      - name: Verify frontend container serves the /app SPA route
+      - name: Verify frontend container serves / and the /app SPA route
         run: |
-          rm -f /tmp/app.html
-          for attempt in $(seq 1 30); do
-            if curl --silent --fail --max-time 5 http://localhost:5173/app -o /tmp/app.html; then
-              break
-            fi
-            echo "attempt $attempt: frontend not ready yet"
-            sleep 2
-          done
-          grep -q '<div id="root">' /tmp/app.html
+          check_route() {
+            local route="$1"
+            local out="/tmp/frontend-$2.html"
+            rm -f "$out"
+            for attempt in $(seq 1 30); do
+              if curl --silent --fail --max-time 5 "http://localhost:5173${route}" -o "$out"; then
+                if grep -q '<div id="root">' "$out"; then
+                  echo "frontend served ${route} with the SPA document"
+                  return 0
+                fi
+                echo "frontend served ${route} but the response is not the SPA document" >&2
+                head -c 500 "$out" >&2
+                exit 1
+              fi
+              echo "attempt $attempt: frontend did not serve ${route} yet"
+              sleep 2
+            done
+            echo "frontend never served ${route}" >&2
+            docker compose ps
+            exit 1
+          }
+
+          # "/" is a direct file match against the Nginx root and index
+          # directives; "/app" has no matching file and exercises the try_files
+          # SPA fallback. The two fail in different ways, so check both.
+          check_route "/" root
+          check_route "/app" app
 
       - name: Install frontend dependencies (ci)
         working-directory: frontend
