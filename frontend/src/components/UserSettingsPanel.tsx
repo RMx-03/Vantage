@@ -1,7 +1,6 @@
 import { NavLink, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ResearchHistory from '../features/research/ResearchHistory';
-import { Panel, PanelHeader } from './ui';
 
 const TABS = [
   { slug: 'profile', label: 'User Profile' },
@@ -21,9 +20,9 @@ export default function UserSettingsPanel() {
   };
 
   return (
-    <div className="w-full flex flex-col gap-8 pb-16">
+    <div className="w-full max-w-4xl mx-auto px-6 flex flex-col gap-12 pb-24">
       {/* Section Header with Tabs */}
-      <div className="space-y-6 border-b border-outline-variant/30 pb-4">
+      <div className="space-y-8 border-b border-outline-variant/30 pb-6">
         <div>
           <h1 className="text-3xl font-headline tracking-tight text-on-surface">
             System Configurations
@@ -34,7 +33,7 @@ export default function UserSettingsPanel() {
         </div>
 
         {/* Internal Tabs */}
-        <div className="flex gap-6 border-b border-outline-variant/30">
+        <div className="flex gap-8">
           {TABS.map((t) => (
             <NavLink
               key={t.slug}
@@ -55,8 +54,10 @@ export default function UserSettingsPanel() {
 
       {tab === 'profile' && (
         <div className="space-y-8">
-          <Panel className="space-y-6">
-            <PanelHeader>Authenticated Operator</PanelHeader>
+          <section className="bg-surface-container border border-outline-variant/30 p-8 space-y-6">
+            <h2 className="text-xs uppercase font-label tracking-widest text-outline border-b border-outline-variant/30 pb-2">
+              Authenticated Operator
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1.5">
                 <label className="text-xs font-label text-outline uppercase tracking-widest">
@@ -75,7 +76,7 @@ export default function UserSettingsPanel() {
                 </div>
               </div>
             </div>
-          </Panel>
+          </section>
 
           {/* Session Control Block */}
           <section className="flex justify-end">
@@ -94,12 +95,12 @@ export default function UserSettingsPanel() {
       )}
 
       {tab === 'runs' && (
-        <Panel>
-          <div className="mb-6">
-            <PanelHeader>Durable Research Runs</PanelHeader>
-          </div>
+        <section className="bg-surface-container border border-outline-variant/30 p-8">
+          <h2 className="text-xs uppercase font-label tracking-widest text-outline border-b border-outline-variant/30 pb-3 mb-6">
+            Durable Research Runs
+          </h2>
           <ResearchHistory />
-        </Panel>
+        </section>
       )}
     </div>
   );
