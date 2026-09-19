@@ -1658,5 +1658,255 @@
       "abstained": false,
       "abstention_reason": null
     }
+  },
+  {
+    "case_id": "reject-change-verb-gained",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Revenue gained by half.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-gains",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Revenue gains by a quarter.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-climbed",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Margins climbed by a third.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-slid",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Shipments slid by a quarter.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-slipped",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Bookings slipped by half.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-surged",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Traffic surged by a third.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-plunged",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Backlog plunged by half.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-jumped",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Headcount jumped by a quarter.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-halved",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Guidance halved by half.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-doubled",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Capacity doubled by a third.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-warning-gained",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Revenue gained by half."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-change-verb-no-fraction",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Shares climbed during the reported session.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-change-verb-qualitative",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Bookings slipped amid softer demand.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
   }
 ]

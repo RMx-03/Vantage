@@ -48,11 +48,19 @@ def trailing_xnys_sessions(end_session: date, count: int = 21) -> tuple[date, ..
     return tuple(session.date() for session in sessions)
 
 
+# A normalized URL is rendered as an href by clients, so only web schemes may
+# survive. A provider payload carrying javascript:, data:, or a scheme-relative
+# reference is dropped rather than passed through as a link target.
+ALLOWED_URL_SCHEMES = frozenset({"http", "https"})
+
+
 def normalize_url(url: str | None) -> str | None:
     if not url or not url.strip():
         return None
     try:
         parsed = urlparse(url.strip())
+        if parsed.scheme.lower() not in ALLOWED_URL_SCHEMES or not parsed.netloc:
+            return None
         clean_netloc = parsed.netloc.lower()
         clean_scheme = parsed.scheme.lower()
         clean_path = parsed.path.rstrip("/")
@@ -65,7 +73,7 @@ def normalize_url(url: str | None) -> str | None:
         clean_query = urlencode(sorted(query_pairs))
         return urlunparse((clean_scheme, clean_netloc, clean_path, "", clean_query, ""))
     except Exception:
-        return url.strip()
+        return None
 
 
 def snapshot_hash(symbol: str, bars: list[DailyBar]) -> str:
@@ -440,7 +448,9 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                     provider=self.name,
                     publisher=clean_pub,
                     title=clean_title,
-                    url=norm_url or url,
+                    # Never fall back to the raw provider value: that would
+                    # re-admit exactly the schemes normalization rejected.
+                    url=norm_url,
                     event_time=event_time,
                     retrieved_at=retrieved_at_utc,
                     content_hash=norm_hash,

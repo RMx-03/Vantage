@@ -164,6 +164,29 @@ describe('ResearchResult', () => {
     expect(screen.getByText('None')).toBeInTheDocument();
   });
 
+  it('never renders a stored non-http source url as a link', () => {
+    // Older rows were persisted before the provider allowlisted schemes, so the
+    // renderer must not turn a hostile stored value into an href.
+    const hostileRun = {
+      ...informationalRun,
+      sources: [
+        {
+          ...informationalRun.sources[0],
+          url: 'javascript:alert(1)',
+          title: 'Source with a hostile url',
+        },
+      ],
+    };
+
+    render(<ResearchResult run={hostileRun} historical />);
+
+    expect(screen.getByText('Source with a hostile url')).toBeVisible();
+    expect(
+      screen.queryByRole('link', { name: /Source with a hostile url/i })
+    ).not.toBeInTheDocument();
+    expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
+  });
+
   it('renders the market session date in UTC wherever it appears', () => {
     // 00:30 UTC falls on the previous calendar day for every viewer west of
     // UTC; the market session date must not move with the viewer.

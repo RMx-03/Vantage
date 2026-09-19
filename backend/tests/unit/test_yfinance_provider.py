@@ -520,3 +520,38 @@ def test_normalize_url_removes_utm_and_fragments() -> None:
     url2 = "https://example.com/news/article-1/"
     assert normalize_url(url1) == "https://example.com/news/article-1"
     assert normalize_url(url2) == "https://example.com/news/article-1"
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    [
+        "javascript:alert(1)",
+        "JavaScript:alert(document.cookie)",
+        "  javascript:alert(1)  ",
+        "java	script:alert(1)",
+        "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "vbscript:msgbox(1)",
+        "file:///etc/passwd",
+        "//example.com/news/article-1",
+        "example.com/news/article-1",
+    ],
+)
+def test_normalize_url_drops_non_http_schemes(hostile: str) -> None:
+    """A provider payload must never become a non-http(s) href in the UI."""
+    assert normalize_url(hostile) is None
+
+
+def test_provider_news_item_drops_hostile_url(fixed_now: datetime) -> None:
+    ticker = MagicMock()
+    ticker.get_news.return_value = [
+        {
+            "id": "news-1",
+            "title": "Apple quarterly progress",
+            "publisher": "Reuters",
+            "link": "javascript:alert(1)",
+            "providerPublishTime": int(fixed_now.timestamp()),
+        }
+    ]
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: ticker)
+    snapshot = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
+    assert [item.url for item in snapshot.items] == [None]

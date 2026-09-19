@@ -1,5 +1,38 @@
 import type { EvidenceSource } from '../../types/research';
 
+/**
+ * Only absolute web URLs may become an href. The provider now drops every other
+ * scheme at ingestion, but rows persisted before that guard existed are replayed
+ * here, so the renderer refuses a hostile stored value instead of trusting it.
+ */
+const ALLOWED_URL_SCHEMES = ['http:', 'https:'];
+
+function safeHref(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return ALLOWED_URL_SCHEMES.includes(new URL(url).protocol) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function SourceTitle({ source }: { source: EvidenceSource }) {
+  const href = safeHref(source.url);
+  return href ? (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="text-indigo-400 hover:text-indigo-300 hover:underline inline-flex items-center gap-1"
+    >
+      {source.title}
+      <span className="text-xs">↗</span>
+    </a>
+  ) : (
+    <span>{source.title}</span>
+  );
+}
+
 interface SourcesPanelProps {
   sources: EvidenceSource[];
 }
@@ -20,19 +53,7 @@ export default function SourcesPanel({ sources }: SourcesPanelProps) {
             >
               <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 mb-1">
                 <div className="font-medium text-slate-200">
-                  {source.url ? (
-                    <a
-                      href={source.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-indigo-400 hover:text-indigo-300 hover:underline inline-flex items-center gap-1"
-                    >
-                      {source.title}
-                      <span className="text-xs">↗</span>
-                    </a>
-                  ) : (
-                    <span>{source.title}</span>
-                  )}
+                  <SourceTitle source={source} />
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-400 shrink-0">
                   {source.publisher && <span>{source.publisher}</span>}

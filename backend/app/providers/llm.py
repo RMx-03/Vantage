@@ -34,7 +34,8 @@ _NUMERIC_CLAIM = re.compile(
     # Fraction words need a quantitative change or an explicit fraction-of
     # construction; fiscal quarters and third-party attribution are not claims.
     r"|\b(?:increased?|decreased?|grew|grown|rose|risen|fell|fallen|"
-    r"declined?|dropped?|reduced?|expanded?|contracted?|up|down)\s+by\s+"
+    r"declined?|dropped?|reduced?|expanded?|contracted?|gained|gains|climbed|"
+    r"slid|slipped|surged|plunged|jumped|halved|doubled|up|down)\s+by\s+"
     r"(?:a\s+)?(?:half|quarter|third|fourth)\b(?!-)"
     r"|\b(?:half|quarter|third|fourth)\s+of\b",
     re.IGNORECASE,
