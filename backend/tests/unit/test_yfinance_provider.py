@@ -254,6 +254,49 @@ def test_missing_currency_is_unsupported(mock_ticker: MagicMock) -> None:
     assert exc_info.value.code == "UNSUPPORTED_INSTRUMENT"
 
 
+def test_currency_accessor_failure_is_market_provider_failure(
+    mock_ticker: MagicMock,
+) -> None:
+    class RaisingCurrency:
+        @property
+        def currency(self) -> str:
+            raise RuntimeError("currency metadata unavailable")
+
+    mock_ticker.fast_info = RaisingCurrency()
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    with pytest.raises(VantageError) as exc_info:
+        provider.fetch_daily_snapshot("AAPL", START, END, NOW)
+
+    assert exc_info.value.code == "MARKET_DATA_PROVIDER_FAILED"
+
+
+def test_non_date_history_index_is_rejected(mock_ticker: MagicMock) -> None:
+    mock_ticker.history.return_value = mock_ticker.history.return_value.reset_index(
+        drop=True
+    )
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    with pytest.raises(VantageError) as exc_info:
+        provider.fetch_daily_snapshot("AAPL", START, END, NOW)
+
+    assert exc_info.value.code == "INVALID_PRICE_SERIES"
+
+
+def test_extreme_real_ohlcv_value_is_rejected(mock_ticker: MagicMock) -> None:
+    frame = mock_ticker.history.return_value.copy()
+    frame["Open"] = frame["Open"].astype(object)
+    frame.loc[frame.index[-1], "Open"] = 10**1000
+    mock_ticker.history.return_value = frame
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    with pytest.raises(VantageError) as exc_info:
+        provider.fetch_daily_snapshot("AAPL", START, END, NOW)
+
+    assert exc_info.value.code == "INVALID_PRICE_SERIES"
+    assert exc_info.value.missing_value_count == 1
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [("Open", "bad"), ("Volume", None), ("High", float("nan"))],

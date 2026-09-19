@@ -132,12 +132,20 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
             )
 
         # Fail closed unless the provider positively identifies USD.
-        fast_info = getattr(ticker, "fast_info", None)
-        currency = (
-            fast_info.get("currency")
-            if isinstance(fast_info, dict)
-            else getattr(fast_info, "currency", None)
-        )
+        try:
+            fast_info = getattr(ticker, "fast_info", None)
+            currency = (
+                fast_info.get("currency")
+                if isinstance(fast_info, dict)
+                else getattr(fast_info, "currency", None)
+            )
+        except VantageError:
+            raise
+        except Exception as e:
+            raise VantageError(
+                code="MARKET_DATA_PROVIDER_FAILED",
+                safe_message="Market instrument metadata could not be verified.",
+            ) from e
         if not isinstance(currency, str) or currency.strip().upper() != "USD":
             raise VantageError(
                 code="UNSUPPORTED_INSTRUMENT",
@@ -166,8 +174,20 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                 safe_message="No market prices were available for the requested symbol.",
             )
 
+        # Normalize only date-like provider indexes; do not coerce malformed labels.
+        session_dates: list[date] = []
+        for index_value in df.index:
+            if isinstance(index_value, datetime):
+                session_dates.append(index_value.date())
+            elif isinstance(index_value, date):
+                session_dates.append(index_value)
+            else:
+                raise VantageError(
+                    code="INVALID_PRICE_SERIES",
+                    safe_message="Market price series contains an invalid session index.",
+                )
+
         # Verify duplicate session dates
-        session_dates = [ts.date() for ts in df.index]
         if len(session_dates) != len(set(session_dates)):
             raise VantageError(
                 code="INVALID_PRICE_SERIES",
@@ -187,29 +207,25 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
 
         bars: list[DailyBar] = []
         has_zero_volume = False
-        for ts, row in df.iterrows():
-            session_d = ts.date() if hasattr(ts, "date") else ts
-            raw_prices = (
-                row.get("Open"),
-                row.get("High"),
-                row.get("Low"),
-                row.get("Close"),
-                row.get("Adj Close"),
+        price_columns = tuple(
+            df.get(field) for field in ("Open", "High", "Low", "Close", "Adj Close")
+        )
+        volume_column = df.get("Volume")
+        for position, session_d in enumerate(session_dates):
+            raw_prices = tuple(
+                column.iloc[position] if column is not None else None
+                for column in price_columns
             )
-            raw_volume = row.get("Volume")
+            raw_volume = (
+                volume_column.iloc[position] if volume_column is not None else None
+            )
             if (
                 any(
-                    not isinstance(value, Real)
-                    or isinstance(value, bool)
-                    or not math.isfinite(value)
-                    or value <= 0
+                    not isinstance(value, Real) or isinstance(value, bool)
                     for value in raw_prices
                 )
                 or not isinstance(raw_volume, Real)
                 or isinstance(raw_volume, bool)
-                or not math.isfinite(raw_volume)
-                or raw_volume < 0
-                or not float(raw_volume).is_integer()
             ):
                 raise VantageError(
                     code="INVALID_PRICE_SERIES",
@@ -217,9 +233,29 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                     missing_value_count=1,
                 )
 
-            open_val, high_val, low_val, close_val, adj_close_val = (
-                float(value) for value in raw_prices
-            )
+            try:
+                price_values = tuple(float(cast(Any, value)) for value in raw_prices)
+                volume_float = float(raw_volume)
+            except (OverflowError, TypeError, ValueError) as e:
+                raise VantageError(
+                    code="INVALID_PRICE_SERIES",
+                    safe_message="OHLCV values must be valid and complete.",
+                    missing_value_count=1,
+                ) from e
+
+            if (
+                any(not math.isfinite(value) or value <= 0 for value in price_values)
+                or not math.isfinite(volume_float)
+                or volume_float < 0
+                or not volume_float.is_integer()
+            ):
+                raise VantageError(
+                    code="INVALID_PRICE_SERIES",
+                    safe_message="OHLCV values must be valid and complete.",
+                    missing_value_count=1,
+                )
+
+            open_val, high_val, low_val, close_val, adj_close_val = price_values
             volume_val = int(cast(Any, raw_volume))
             if high_val < max(open_val, close_val, low_val) or low_val > min(
                 open_val, close_val, high_val
