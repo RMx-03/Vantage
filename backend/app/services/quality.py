@@ -8,33 +8,46 @@ from app.domain.research import (
     OverallQuality,
 )
 
+COMPONENT_QUALITY_SEVERITY: dict[ComponentQuality, int] = {
+    ComponentQuality.FRESH: 0,
+    ComponentQuality.PARTIAL: 1,
+    ComponentQuality.STALE: 2,
+    ComponentQuality.MISSING: 3,
+    ComponentQuality.FAILED: 4,
+}
+
+
+def worse_component_quality(
+    first: ComponentQuality, *others: ComponentQuality
+) -> ComponentQuality:
+    return max(
+        (first, *others),
+        key=lambda quality: COMPONENT_QUALITY_SEVERITY[quality],
+    )
+
 
 def assess_quality(
     market: MarketSnapshot, news: NewsSnapshot, interpretation: AIInterpretation
 ) -> DataQuality:
     # 1. Price Quality
-    if market.quality == ComponentQuality.FAILED or market.error_code is not None:
-        prices_quality = ComponentQuality.FAILED
-    elif len(market.bars) < 21:
-        prices_quality = ComponentQuality.PARTIAL
-    elif market.quality == ComponentQuality.STALE or (
-        market.bars and market.bars[-1].session_date != market.latest_completed_session
-    ):
-        prices_quality = ComponentQuality.STALE
-    else:
-        prices_quality = ComponentQuality.FRESH
+    prices_quality = market.quality
+    if market.error_code is not None:
+        prices_quality = worse_component_quality(
+            prices_quality, ComponentQuality.FAILED
+        )
+    if len(market.bars) < 21:
+        prices_quality = worse_component_quality(
+            prices_quality, ComponentQuality.PARTIAL
+        )
+    if market.bars and market.bars[-1].session_date != market.latest_completed_session:
+        prices_quality = worse_component_quality(prices_quality, ComponentQuality.STALE)
 
     # 2. News Quality
-    if news.quality == ComponentQuality.FAILED or news.error_code is not None:
-        news_quality = ComponentQuality.FAILED
-    elif news.quality == ComponentQuality.MISSING or len(news.items) == 0:
-        news_quality = ComponentQuality.MISSING
-    elif news.quality == ComponentQuality.PARTIAL:
-        news_quality = ComponentQuality.PARTIAL
-    elif news.quality == ComponentQuality.STALE:
-        news_quality = ComponentQuality.STALE
-    else:
-        news_quality = ComponentQuality.FRESH
+    news_quality = news.quality
+    if news.error_code is not None:
+        news_quality = worse_component_quality(news_quality, ComponentQuality.FAILED)
+    if not news.items:
+        news_quality = worse_component_quality(news_quality, ComponentQuality.MISSING)
 
     # 3. Model Quality
     if interpretation.abstention_reason == "MODEL_NOT_RUN":

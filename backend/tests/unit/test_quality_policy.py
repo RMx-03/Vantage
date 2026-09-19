@@ -315,6 +315,33 @@ def test_healthy_run_is_informational(
     assert result.data_quality.model == ModelQuality.HEALTHY
 
 
+@pytest.mark.parametrize(
+    "provider_quality",
+    [
+        ComponentQuality.PARTIAL,
+        ComponentQuality.STALE,
+        ComponentQuality.MISSING,
+        ComponentQuality.FAILED,
+    ],
+)
+def test_market_provider_quality_is_never_upgraded(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+    provider_quality: ComponentQuality,
+) -> None:
+    market = valid_market.model_copy(update={"quality": provider_quality})
+
+    quality = assess_quality(market, healthy_news, healthy_model)
+
+    assert quality.prices == provider_quality
+    assert quality.overall == (
+        OverallQuality.DEGRADED
+        if provider_quality == ComponentQuality.PARTIAL
+        else OverallQuality.INSUFFICIENT
+    )
+
+
 def test_elevated_volatility_triggers_review(
     valid_market: MarketSnapshot,
     healthy_news: NewsSnapshot,

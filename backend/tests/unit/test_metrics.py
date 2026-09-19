@@ -87,6 +87,16 @@ def news_snapshot() -> NewsSnapshot:
     )
 
 
+def missing_news_snapshot() -> NewsSnapshot:
+    return NewsSnapshot(
+        symbol="AAPL",
+        items=[],
+        provider="fixture",
+        retrieved_at=datetime(2026, 9, 14, tzinfo=UTC),
+        quality=ComponentQuality.MISSING,
+    )
+
+
 def test_returns_drawdown_and_liquidity_are_golden() -> None:
     values = {
         m.key: m.value
@@ -206,3 +216,140 @@ def test_valid_market_snapshot_fixture_loads_and_calculates() -> None:
     values = {m.key: m.value for m in metrics}
     assert values["price_observation_count"] == 21
     assert values["return_20_sessions"] is not None
+
+
+@pytest.mark.parametrize(
+    "quality",
+    [
+        ComponentQuality.PARTIAL,
+        ComponentQuality.STALE,
+        ComponentQuality.MISSING,
+        ComponentQuality.FAILED,
+    ],
+)
+def test_price_metrics_inherit_market_quality(quality: ComponentQuality) -> None:
+    market = snapshot([100.0] * 21).model_copy(update={"quality": quality})
+
+    metrics = {
+        metric.key: metric for metric in calculate_metrics(market, news_snapshot())
+    }
+
+    for key in (
+        "return_1_session",
+        "return_5_sessions",
+        "return_20_sessions",
+        "annualized_volatility_20",
+        "max_drawdown_20",
+        "price_observation_count",
+        "price_missing_value_count",
+        "price_duplicate_session_count",
+    ):
+        assert metrics[key].quality == quality
+
+
+def test_incomplete_price_window_degrades_metric_quality() -> None:
+    metrics = {
+        metric.key: metric
+        for metric in calculate_metrics(snapshot([100.0] * 20), news_snapshot())
+    }
+
+    assert metrics["return_20_sessions"].value is None
+    assert metrics["return_20_sessions"].quality == ComponentQuality.PARTIAL
+    assert metrics["price_observation_count"].quality == ComponentQuality.FRESH
+
+
+@pytest.mark.parametrize(
+    ("market_quality", "volume_quality", "expected"),
+    [
+        (
+            ComponentQuality.FRESH,
+            ComponentQuality.PARTIAL,
+            ComponentQuality.PARTIAL,
+        ),
+        (
+            ComponentQuality.PARTIAL,
+            ComponentQuality.STALE,
+            ComponentQuality.STALE,
+        ),
+        (
+            ComponentQuality.STALE,
+            ComponentQuality.MISSING,
+            ComponentQuality.MISSING,
+        ),
+        (
+            ComponentQuality.MISSING,
+            ComponentQuality.FAILED,
+            ComponentQuality.FAILED,
+        ),
+        (
+            ComponentQuality.PARTIAL,
+            ComponentQuality.FRESH,
+            ComponentQuality.PARTIAL,
+        ),
+        (
+            ComponentQuality.STALE,
+            ComponentQuality.PARTIAL,
+            ComponentQuality.STALE,
+        ),
+        (
+            ComponentQuality.MISSING,
+            ComponentQuality.STALE,
+            ComponentQuality.MISSING,
+        ),
+        (
+            ComponentQuality.FAILED,
+            ComponentQuality.MISSING,
+            ComponentQuality.FAILED,
+        ),
+    ],
+)
+def test_average_dollar_volume_uses_worse_source_quality(
+    market_quality: ComponentQuality,
+    volume_quality: ComponentQuality,
+    expected: ComponentQuality,
+) -> None:
+    market = snapshot([100.0] * 21).model_copy(
+        update={"quality": market_quality, "volume_quality": volume_quality}
+    )
+
+    metrics = {
+        metric.key: metric for metric in calculate_metrics(market, news_snapshot())
+    }
+
+    assert metrics["average_dollar_volume_20"].quality == expected
+
+
+def test_news_counts_inherit_missing_quality_even_when_zero() -> None:
+    metrics = {
+        metric.key: metric
+        for metric in calculate_metrics(snapshot([100.0] * 21), missing_news_snapshot())
+    }
+
+    assert metrics["news_item_count"].value == 0
+    assert metrics["news_item_count"].quality == ComponentQuality.MISSING
+    assert metrics["news_publisher_count"].value == 0
+    assert metrics["news_publisher_count"].quality == ComponentQuality.MISSING
+
+
+def test_metric_order_is_stable() -> None:
+    metrics = calculate_metrics(snapshot([100.0] * 21), news_snapshot())
+
+    assert [metric.key for metric in metrics] == [
+        "return_1_session",
+        "return_5_sessions",
+        "return_20_sessions",
+        "annualized_volatility_20",
+        "max_drawdown_20",
+        "average_dollar_volume_20",
+        "price_observation_count",
+        "price_missing_value_count",
+        "price_duplicate_session_count",
+        "news_item_count",
+        "news_publisher_count",
+    ]
+
+
+def test_metrics_use_v2_calculation_contract() -> None:
+    metrics = calculate_metrics(snapshot([100.0] * 21), news_snapshot())
+
+    assert {metric.calculation_version for metric in metrics} == {"eod-metrics-v2"}
