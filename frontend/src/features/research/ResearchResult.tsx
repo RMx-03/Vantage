@@ -1,5 +1,6 @@
 import type { ResearchRun } from '../../types/research';
 import { formatUtcDate } from './dateFormatters';
+import { StatusChip } from '../../components/ui';
 import ReasonsPanel from './ReasonsPanel';
 import ResearchMetrics from './ResearchMetrics';
 import DataQualityPanel from './DataQualityPanel';
@@ -13,45 +14,14 @@ interface ResearchResultProps {
   historical?: boolean;
 }
 
-function getResearchStatusBadge(status: ResearchRun['research_status']) {
-  switch (status) {
-    case 'informational':
-      return {
-        label: 'informational',
-        containerClass: 'border-slate-600 bg-slate-800/80 text-slate-200',
-      };
-    case 'review':
-      return {
-        label: 'review',
-        containerClass: 'border-amber-500/40 bg-amber-500/20 text-amber-200',
-      };
-    case 'insufficient_data':
-      return {
-        label: 'insufficient data',
-        containerClass: 'border-rose-500/40 bg-rose-500/20 text-rose-200',
-      };
-    case 'failed':
-      return {
-        label: 'failed',
-        containerClass: 'border-rose-600/50 bg-rose-950/40 text-rose-300',
-      };
-    default:
-      return {
-        label: 'unknown',
-        containerClass: 'border-slate-700 bg-slate-800 text-slate-400',
-      };
-  }
-}
-
 export default function ResearchResult({ run, historical = false }: ResearchResultProps) {
-  const statusBadge = getResearchStatusBadge(run.research_status);
   const isWorkflowFailed = run.workflow_status === 'failed';
 
   return (
     <div className="space-y-6 w-full max-w-5xl mx-auto">
       {/* Historical Marker */}
       {historical && (
-        <div className="flex items-center justify-between rounded-lg border border-indigo-500/30 bg-indigo-950/30 px-4 py-2 text-xs text-indigo-300">
+        <div className="flex items-center justify-between border border-primary/30 bg-primary/5 px-4 py-2 font-label text-[10px] uppercase tracking-widest text-primary">
           <span className="font-semibold uppercase tracking-wider">Historical run result</span>
           <span>
             Original as of:{' '}
@@ -61,59 +31,55 @@ export default function ResearchResult({ run, historical = false }: ResearchResu
       )}
 
       {/* Level 1: Symbol, Research Status & Summary */}
-      <header className="rounded-xl border border-slate-800 bg-slate-900/80 p-6 backdrop-blur-sm">
+      <header className="border border-outline-variant bg-surface-container-low p-6">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
           <div className="flex items-baseline gap-3">
-            <h1 className="text-3xl font-extrabold tracking-tight text-white font-mono">
+            <h1 className="text-4xl font-label font-bold tracking-tight text-on-surface">
               {run.symbol}
             </h1>
-            <span className="text-xs font-mono text-slate-400">
+            <span className="text-xs font-label text-outline">
               EOD Research Analysis
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <span
-              className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wider border ${statusBadge.containerClass}`}
-            >
-              {statusBadge.label}
-            </span>
+            <StatusChip status={run.research_status} />
           </div>
         </div>
 
         {isWorkflowFailed ? (
-          <div className="mt-4 rounded-lg border border-rose-500/40 bg-rose-950/30 p-4 text-rose-200">
-            <div className="font-semibold text-rose-100 mb-1">
+          <div className="mt-4 border border-error-container bg-error-container/30 p-4 text-error">
+            <div className="font-semibold text-error mb-1">
               Research run execution failed
             </div>
             <p className="text-sm">
               {run.error_message_safe || 'An unexpected error occurred during execution.'}
             </p>
             {run.error_code && (
-              <div className="mt-2 text-xs font-mono text-rose-300">
+              <div className="mt-2 text-xs font-label text-error">
                 Code: {run.error_code}
               </div>
             )}
-            <div className="mt-1 text-xs font-mono text-slate-400">
-              Run ID: <span className="text-slate-200">{run.run_id}</span>
+            <div className="mt-1 text-xs font-label text-outline">
+              Run ID: <span className="text-on-surface-variant">{run.run_id}</span>
             </div>
           </div>
         ) : (
-          <p className="text-base text-slate-300 leading-relaxed max-w-3xl">
+          <p className="text-base text-on-surface-variant leading-relaxed max-w-3xl">
             {run.summary || 'Summary unavailable for this run.'}
           </p>
         )}
 
-        <div className="mt-4 pt-3 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+        <div className="mt-4 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-between gap-2 text-xs text-outline">
           <span>
             Market As-Of:{' '}
-            <strong className="text-slate-200 font-mono">
+            <strong className="text-on-surface-variant font-label">
               {run.as_of ? formatUtcDate(run.as_of) : 'Unavailable'}
             </strong>
           </span>
           <span>
             Workflow status:{' '}
-            <strong className="capitalize text-slate-200 font-mono">
+            <strong className="capitalize text-on-surface-variant font-label">
               {run.workflow_status}
             </strong>
           </span>
