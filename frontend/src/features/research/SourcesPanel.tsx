@@ -7,7 +7,7 @@ import type { EvidenceSource } from '../../types/research';
  */
 const ALLOWED_URL_SCHEMES = ['http:', 'https:'];
 
-function safeHref(url: string | null): string | null {
+function safeHref(url: string | null | undefined): string | null {
   if (!url) return null;
   try {
     return ALLOWED_URL_SCHEMES.includes(new URL(url).protocol) ? url : null;
