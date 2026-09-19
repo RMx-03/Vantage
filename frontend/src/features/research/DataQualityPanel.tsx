@@ -1,4 +1,5 @@
 import type { DataQuality, ModelInfo } from '../../types/research';
+import { Panel, PanelHeader } from '../../components/ui';
 
 interface DataQualityPanelProps {
   dataQuality: DataQuality | null;
@@ -10,37 +11,39 @@ function getQualityBadgeClass(status: string) {
     case 'sufficient':
     case 'fresh':
     case 'healthy':
-      return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300';
+      return 'border-outline-variant bg-surface-container-highest text-on-surface';
     case 'degraded':
     case 'partial':
     case 'stale':
-      return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+      return 'border-outline bg-surface-container-highest text-on-surface-variant font-bold';
     case 'insufficient':
     case 'missing':
     case 'failed':
-      return 'border-rose-500/30 bg-rose-500/10 text-rose-300';
+      return 'border-error-container bg-error-container/30 text-error';
     case 'not_run':
     default:
-      return 'border-slate-700 bg-slate-800 text-slate-400';
+      return 'border-outline-variant/30 bg-surface-container text-outline';
   }
 }
 
 export default function DataQualityPanel({ dataQuality, modelInfo }: DataQualityPanelProps) {
   return (
-    <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-sm">
-      <h2 className="text-xl font-semibold text-slate-100 mb-4">Data quality</h2>
+    <Panel>
+      <div className="mb-4">
+        <PanelHeader icon="verified">Data quality</PanelHeader>
+      </div>
 
       {!dataQuality ? (
-        <p className="text-sm text-slate-400">Data quality metrics unavailable for this run.</p>
+        <p className="text-sm text-outline">Data quality metrics unavailable for this run.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+          <div className="border border-outline-variant/30 bg-surface-container-low p-4">
+            <div className="text-xs font-medium text-outline uppercase tracking-wider mb-2 font-label">
               Overall Quality
             </div>
             <div className="flex items-center gap-2">
               <span
-                className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm font-semibold capitalize border ${getQualityBadgeClass(
+                className={`inline-flex items-center px-2.5 py-1 text-sm font-semibold capitalize border font-label ${getQualityBadgeClass(
                   dataQuality.overall
                 )}`}
               >
@@ -49,13 +52,13 @@ export default function DataQualityPanel({ dataQuality, modelInfo }: DataQuality
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+          <div className="border border-outline-variant/30 bg-surface-container-low p-4">
+            <div className="text-xs font-medium text-outline uppercase tracking-wider mb-2 font-label">
               Prices Component
             </div>
             <div className="flex items-center gap-2">
               <span
-                className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm font-semibold capitalize border ${getQualityBadgeClass(
+                className={`inline-flex items-center px-2.5 py-1 text-sm font-semibold capitalize border font-label ${getQualityBadgeClass(
                   dataQuality.prices
                 )}`}
               >
@@ -64,13 +67,13 @@ export default function DataQualityPanel({ dataQuality, modelInfo }: DataQuality
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+          <div className="border border-outline-variant/30 bg-surface-container-low p-4">
+            <div className="text-xs font-medium text-outline uppercase tracking-wider mb-2 font-label">
               News Component
             </div>
             <div className="flex items-center gap-2">
               <span
-                className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm font-semibold capitalize border ${getQualityBadgeClass(
+                className={`inline-flex items-center px-2.5 py-1 text-sm font-semibold capitalize border font-label ${getQualityBadgeClass(
                   dataQuality.news
                 )}`}
               >
@@ -79,20 +82,20 @@ export default function DataQualityPanel({ dataQuality, modelInfo }: DataQuality
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+          <div className="border border-outline-variant/30 bg-surface-container-low p-4">
+            <div className="text-xs font-medium text-outline uppercase tracking-wider mb-2 font-label">
               Model Quality
             </div>
             <div className="flex flex-col gap-1">
               <span
-                className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm font-semibold capitalize border w-fit ${getQualityBadgeClass(
+                className={`inline-flex items-center px-2.5 py-1 text-sm font-semibold capitalize border w-fit font-label ${getQualityBadgeClass(
                   dataQuality.model
                 )}`}
               >
                 {dataQuality.model.replace('_', ' ')}
               </span>
               {modelInfo?.failure_code && (
-                <span className="text-[11px] font-mono text-rose-400 mt-1">
+                <span className="text-[11px] font-label text-error mt-1">
                   Code: {modelInfo.failure_code}
                 </span>
               )}
@@ -100,6 +103,6 @@ export default function DataQualityPanel({ dataQuality, modelInfo }: DataQuality
           </div>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }
