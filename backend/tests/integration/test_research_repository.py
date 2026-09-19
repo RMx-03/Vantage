@@ -336,9 +336,13 @@ def test_history_cursor_is_stable(
     assert len(second.items) == 1
 
     all_ids = [r.run_id for r in first.items + second.items]
-    # Ordering is desc by created_at, id
-    expected_ids = [r.public_id for r in reversed(three_runs)]
-    assert all_ids == expected_ids
+    # Ordering is desc by (created_at, public_id); walking the pages must
+    # reproduce the unpaged ordering exactly, whatever the tiebreaker resolves
+    # to for rows created within one clock tick.
+    unpaged = repo.list_owned(user_id=user_id, limit=10, before=None)
+    assert unpaged.next_cursor is None
+    assert all_ids == [r.run_id for r in unpaged.items]
+    assert set(all_ids) == {r.public_id for r in three_runs}
 
 
 def test_invalid_cursor_raises_vantage_error(
@@ -660,3 +664,57 @@ def test_compose_has_no_embedded_runtime_password(project_root: Path) -> None:
     assert "PASSWORD 'vantage_runtime'" not in init
     assert "POSTGRES_RUNTIME_PASSWORD" in compose
     assert "LLM_PROVIDER: ${LLM_PROVIDER:-disabled}" in compose
+
+
+def test_history_cursor_does_not_expose_internal_row_id(
+    repo: ResearchRunRepository, user_id: UUID, three_runs
+) -> None:
+    """Base64 is encoding, not opacity: a decoded cursor must hold no row counter."""
+    page = repo.list_owned(user_id=user_id, limit=2, before=None)
+    assert page.next_cursor is not None
+
+    payload = json.loads(
+        base64.urlsafe_b64decode(page.next_cursor.encode("utf-8")).decode("utf-8")
+    )
+    internal_ids = {r.id for r in three_runs}
+
+    assert "id" not in payload
+    assert not any(
+        isinstance(value, int) and value in internal_ids for value in payload.values()
+    )
+    assert UUID(str(payload["public_id"])) == page.items[-1].run_id
+
+
+def test_history_pagination_visits_tied_rows_exactly_once(
+    repo: ResearchRunRepository, user_id: UUID, versions: VersionInfo
+) -> None:
+    """Keyset pagination over rows sharing created_at must not skip or repeat."""
+    created = [
+        repo.create_running(user_id=user_id, symbol=f"SYM{i}", versions=versions)
+        for i in range(7)
+    ]
+    with SessionFactory() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE vantage_app.research_runs SET created_at = :created_at "
+                "WHERE user_id = :user_id"
+            ),
+            {
+                "created_at": datetime(2026, 9, 19, 12, 0, tzinfo=UTC),
+                "user_id": user_id,
+            },
+        )
+
+    seen: list[UUID] = []
+    cursor: str | None = None
+    for _ in range(len(created) + 1):
+        page = repo.list_owned(user_id=user_id, limit=2, before=cursor)
+        seen.extend(item.run_id for item in page.items)
+        cursor = page.next_cursor
+        if cursor is None:
+            break
+
+    assert cursor is None
+    assert len(seen) == len(created)
+    assert set(seen) == {r.public_id for r in created}
+    assert seen == sorted(seen, key=lambda run_id: run_id.bytes, reverse=True)

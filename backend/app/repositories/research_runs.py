@@ -333,18 +333,22 @@ class ResearchRunRepository:
                 decoded_bytes = base64.urlsafe_b64decode(before.encode("utf-8"))
                 payload = json.loads(decoded_bytes.decode("utf-8"))
                 cursor_created_at = datetime.fromisoformat(payload["created_at"])
-                cursor_id = int(payload["id"])
+                cursor_public_id = UUID(str(payload["public_id"]))
             except Exception as e:
                 raise VantageError(
                     code="INVALID_CURSOR",
                     safe_message="The history cursor is invalid.",
                 ) from e
 
+            # The tiebreaker is the public UUID, never the internal row id: a
+            # cursor is base64-encoded, not opaque, and base64 is not privacy.
+            # The comparison below and the ORDER BY must use the same column so
+            # a page boundary neither skips nor repeats rows sharing created_at.
             cursor_filter = or_(
                 ResearchRunRow.created_at < cursor_created_at,
                 and_(
                     ResearchRunRow.created_at == cursor_created_at,
-                    ResearchRunRow.id < cursor_id,
+                    ResearchRunRow.public_id < cursor_public_id,
                 ),
             )
 
@@ -362,7 +366,7 @@ class ResearchRunRepository:
                 stmt = stmt.where(cursor_filter)
             stmt = stmt.order_by(
                 ResearchRunRow.created_at.desc(),
-                ResearchRunRow.id.desc(),
+                ResearchRunRow.public_id.desc(),
             ).limit(capped_limit + 1)
             rows = list(session.scalars(stmt).all())
 
@@ -375,7 +379,7 @@ class ResearchRunRepository:
             cursor_payload = json.dumps(
                 {
                     "created_at": last_row.created_at.isoformat(),
-                    "id": last_row.id,
+                    "public_id": str(last_row.public_id),
                 }
             )
             next_cursor = base64.urlsafe_b64encode(
