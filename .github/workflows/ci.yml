@@ -113,6 +113,9 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
+      - name: Design system drift gate
+        run: npm run check:design
+
       - name: Run Production Build
         run: npm run build
 

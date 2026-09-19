@@ -43,3 +43,13 @@ Coverage is measured over the Phase 1 research feature and its API client with a
 The UI shows one current result or one selected historical result. Starting a request shows a bounded loading state; a failed newer request suppresses any older result so stale output cannot be mistaken for the latest run. Authentication failures offer “Sign in again”; retryable provider/server failures offer “Retry research.”
 
 Results use only the backend contract states: `informational`, `review`, `insufficient_data`, and `failed`, with model quality `healthy`, `degraded`, `failed`, or `not_run`. The Phase 1 UI does not claim real-time progress, latency, node counts, valuation metrics, SMA/RSI indicators, forecasts, confidence scores, or trade approval.
+
+## Design system
+
+All UI uses the `@theme` tokens defined in `src/index.css` — never stock
+Tailwind palette classes (`slate-*`, `indigo-*`, `rose-*`, …), never a border
+radius, never a shadow or blur, and `font-label` (Space Grotesk) rather than
+`font-mono`.
+
+`npm run check:design` enforces this and runs in CI. See
+`.planning/specs/2026-09-20-frontend-design-system-restoration-design.md`.
