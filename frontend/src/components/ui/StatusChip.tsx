@@ -25,15 +25,17 @@ const VARIANTS: Record<string, { label: string; className: string }> = {
 
 export default function StatusChip({
   status,
+  label,
 }: {
   status: ResearchStatus | 'unknown' | null;
+  label?: string;
 }) {
   const variant = VARIANTS[status ?? 'unknown'] ?? VARIANTS.unknown;
   return (
     <span
       className={`inline-flex items-center border px-3 py-1 font-label text-[10px] uppercase tracking-widest ${variant.className}`}
     >
-      {variant.label}
+      {label ?? variant.label}
     </span>
   );
 }
