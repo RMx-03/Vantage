@@ -44,9 +44,11 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   const { pathname } = useLocation();
   const { signOut } = useAuth();
 
-  useEffect(() => {
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
     setShowHistory(false);
-  }, [pathname]);
+  }
 
   const { data: routeRun } = useQuery({
     queryKey: ['research-run', runId],
@@ -172,7 +174,9 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
 
       {/* Slide-over History Drawer */}
       <Drawer open={showHistory} onClose={() => setShowHistory(false)} title="Research History">
-        <ResearchHistory />
+        <div onClick={() => setShowHistory(false)}>
+          <ResearchHistory />
+        </div>
       </Drawer>
     </div>
   );

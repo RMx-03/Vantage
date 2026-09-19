@@ -133,10 +133,19 @@ test.describe('Research Run Browser Journey (Supabase and API route-mocked)', ()
     // Confirm no forbidden language
     await expect(page.getByText(/trade approved|trade rejected/i)).not.toBeVisible();
 
-    // 3. Reopen historical run from history sidebar
-    const historyButton = page.getByRole('button', { name: /AAPL.*Sep 11, 2026/i });
-    await expect(historyButton).toBeVisible();
-    await historyButton.click();
+    // Deep link assertion: url became addressable and reloading it restores the run
+    await expect(page).toHaveURL(/\/app\/research\/[0-9a-f-]+/i);
+
+    const runUrl = page.url();
+    await page.reload();
+    await expect(page.getByText(informationalRun.summary!)).toBeVisible();
+    expect(page.url()).toBe(runUrl);
+
+    // 3. Reopen historical run from history drawer
+    await page.getByRole('button', { name: /View History/i }).click();
+    const historyLink = page.getByRole('link', { name: /AAPL.*Sep 11, 2026/i });
+    await expect(historyLink).toBeVisible();
+    await historyLink.click();
 
     await expect(page.getByText(/Historical/i)).toBeVisible();
     await expect(page.getByText(/Original as of/i)).toBeVisible();
@@ -148,5 +157,11 @@ test.describe('Research Run Browser Journey (Supabase and API route-mocked)', ()
     await expect(page.getByRole('heading', { name: 'DEGRADED', exact: true })).toBeVisible();
     await expect(page.getByText('AI interpretation unavailable', { exact: true })).toBeVisible();
     await expect(page.getByText('20-Session Return')).toBeVisible();
+
+    // 5. Settings run-log regression assertion
+    await page.goto('/app/settings/runs');
+    const row = page.getByRole('link', { name: /AAPL/i }).first();
+    await row.click();
+    await expect(page).toHaveURL(/\/app\/research\/[0-9a-f-]+/i);
   });
 });

@@ -44,6 +44,23 @@ The UI shows one current result or one selected historical result. Starting a re
 
 Results use only the backend contract states: `informational`, `review`, `insufficient_data`, and `failed`, with model quality `healthy`, `degraded`, `failed`, or `not_run`. The Phase 1 UI does not claim real-time progress, latency, node counts, valuation metrics, SMA/RSI indicators, forecasts, confidence scores, or trade approval.
 
+## Routes
+
+| Path | View |
+|---|---|
+| `/` | Landing |
+| `/auth` | Sign in / register |
+| `/app` | redirects to `/app/research` |
+| `/app/research` | Research terminal, empty |
+| `/app/research/:runId` | A specific run — shareable |
+| `/app/settings` | redirects to `/app/settings/profile` |
+| `/app/settings/profile` | Operator profile |
+| `/app/settings/runs` | Durable research run log |
+
+Navigation destinations live in one place: `src/components/nav/navItems.ts`.
+Add a destination there and both the sidebar and the mobile bottom bar pick it
+up. Items with `to: null` render as disabled `PHASE 2` placeholders.
+
 ## Design system
 
 All UI uses the `@theme` tokens defined in `src/index.css` — never stock
