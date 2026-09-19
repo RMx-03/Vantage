@@ -41,6 +41,8 @@ def test_research_run_contract_exposes_v2_interpretation_and_provenance() -> Non
     run_properties = schemas["ResearchRun"]["properties"]
     assert "interpretation" in run_properties
     assert "snapshot" in run_properties
+    # Always emitted, so the published contract must match the consumer type.
+    assert {"interpretation", "snapshot"} <= set(schemas["ResearchRun"]["required"])
 
     provenance_properties = schemas["SnapshotProvenance"]["properties"]
     assert set(provenance_properties) == {

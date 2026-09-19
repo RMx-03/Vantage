@@ -36,6 +36,7 @@ from app.domain.research import (
 )
 import app.repositories.research_runs as research_runs_module
 from app.repositories.research_runs import ResearchRunRepository
+from app.services.snapshots import combined_snapshot_hash
 
 VALID_INTERPRETATION = AIInterpretation(
     sentiment_label="positive",
@@ -530,8 +531,7 @@ def test_interpretation_and_provenance_round_trip(
     assert run.interpretation == VALID_INTERPRETATION
     assert run.snapshot is not None
     assert run.snapshot.snapshot_id == snapshot_public_id
-    assert len(run.snapshot.content_hash) == 64
-    assert not hasattr(run.snapshot, "price_bars")
+    assert run.snapshot.content_hash == combined_snapshot_hash(market, news)
     assert set(run.snapshot.model_dump().keys()) == {
         "snapshot_id",
         "content_hash",
@@ -620,3 +620,33 @@ def test_snapshot_provenance_model_rejects_naive_timestamps() -> None:
             news_coverage_end=None,
             news_quality=ComponentQuality.FRESH,
         )
+
+
+def test_snapshot_cannot_be_attached_to_a_terminal_run(
+    repo: ResearchRunRepository,
+    user_id: UUID,
+    versions: VersionInfo,
+    valid_snapshot,
+) -> None:
+    run = repo.create_running(user_id=user_id, symbol="MSFT", versions=versions)
+    repo.finalize_failure(
+        internal_id=run.id,
+        user_id=user_id,
+        error_code="MARKET_DATA_PROVIDER_FAILED",
+        error_message_safe="Failed to retrieve market prices.",
+    )
+    market, news, sources = valid_snapshot
+
+    with pytest.raises(VantageError) as exc:
+        repo.save_snapshot(run.id, user_id, market, news, sources)
+
+    assert exc.value.code == "RUN_ALREADY_FINALIZED"
+    with SessionFactory() as session:
+        snapshot_count = session.execute(
+            text(
+                "SELECT count(*) FROM vantage_app.research_snapshots "
+                "WHERE run_id = :run_id"
+            ),
+            {"run_id": run.id},
+        ).scalar_one()
+    assert snapshot_count == 0

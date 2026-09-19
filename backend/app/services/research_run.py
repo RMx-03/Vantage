@@ -12,6 +12,7 @@ from app.domain.research import (
     EvidenceSource,
     MarketSnapshot,
     ModelInfo,
+    ModelQuality,
     NewsSnapshot,
     ResearchRun,
     VersionInfo,
@@ -208,6 +209,14 @@ class ResearchRunService:
 
             policy: PolicyResult = state["policy"]
             failure_code = state.get("model_failure_code")
+            # The graph keeps a safe placeholder interpretation on the skip path
+            # so policy and quality can derive `not_run` from it. Nothing the
+            # model never produced may be persisted or published, so the
+            # placeholder stops at this persistence boundary.
+            model_was_attempted = policy.data_quality.model != ModelQuality.NOT_RUN
+            interpretation = (
+                state.get("interpretation") if model_was_attempted else None
+            )
             model_info = (
                 ModelInfo(
                     provider=self.llm.name,
@@ -232,7 +241,7 @@ class ResearchRunService:
                     warnings=policy.warnings,
                     summary=policy.summary,
                     model_info=model_info,
-                    interpretation=state.get("interpretation"),
+                    interpretation=interpretation,
                 )
 
             if root_span is not None:

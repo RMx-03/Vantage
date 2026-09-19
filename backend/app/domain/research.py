@@ -238,8 +238,8 @@ class ResearchRun(StrictModel):
     sources: list[EvidenceSource]
     warnings: list[str]
     model_info: ModelInfo | None
-    interpretation: AIInterpretation | None = None
-    snapshot: SnapshotProvenance | None = None
+    interpretation: AIInterpretation | None
+    snapshot: SnapshotProvenance | None
     versions: VersionInfo
     error_code: str | None = None
     error_message_safe: str | None = None

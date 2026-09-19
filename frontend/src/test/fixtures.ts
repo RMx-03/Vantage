@@ -3,7 +3,7 @@ import type { ResearchRun } from '../types/research';
 const baseVersions = {
   response_schema: 'research-run-response-v2' as const,
   workflow: 'eod-research-v1' as const,
-  metrics: 'eod-metrics-v1' as const,
+  metrics: 'eod-metrics-v2' as const,
   policy: 'research-policy-v1' as const,
   code: 'git-commit-hash-test',
 };
@@ -37,7 +37,7 @@ export const informationalRun: ResearchRun = {
       unit: 'ratio',
       window_sessions: 20,
       as_of: '2026-09-11T20:00:00Z',
-      calculation_version: 'eod-metrics-v1',
+      calculation_version: 'eod-metrics-v2',
       quality: 'fresh',
     },
     {
@@ -47,7 +47,7 @@ export const informationalRun: ResearchRun = {
       unit: 'ratio',
       window_sessions: 20,
       as_of: '2026-09-11T20:00:00Z',
-      calculation_version: 'eod-metrics-v1',
+      calculation_version: 'eod-metrics-v2',
       quality: 'fresh',
     },
     {
@@ -57,7 +57,7 @@ export const informationalRun: ResearchRun = {
       unit: 'usd',
       window_sessions: 20,
       as_of: '2026-09-11T20:00:00Z',
-      calculation_version: 'eod-metrics-v1',
+      calculation_version: 'eod-metrics-v2',
       quality: 'fresh',
     },
     {
@@ -67,7 +67,7 @@ export const informationalRun: ResearchRun = {
       unit: 'count',
       window_sessions: 21,
       as_of: '2026-09-11T20:00:00Z',
-      calculation_version: 'eod-metrics-v1',
+      calculation_version: 'eod-metrics-v2',
       quality: 'fresh',
     },
   ],
@@ -157,7 +157,7 @@ export const reviewRun: ResearchRun = {
       unit: 'ratio',
       window_sessions: 20,
       as_of: '2026-09-11T20:00:00Z',
-      calculation_version: 'eod-metrics-v1',
+      calculation_version: 'eod-metrics-v2',
       quality: 'fresh',
     },
     {
@@ -167,7 +167,7 @@ export const reviewRun: ResearchRun = {
       unit: 'ratio',
       window_sessions: 20,
       as_of: '2026-09-11T20:00:00Z',
-      calculation_version: 'eod-metrics-v1',
+      calculation_version: 'eod-metrics-v2',
       quality: 'fresh',
     },
   ],
@@ -256,7 +256,7 @@ export const insufficientRun: ResearchRun = {
       unit: 'ratio',
       window_sessions: 20,
       as_of: '2026-09-11T20:00:00Z',
-      calculation_version: 'eod-metrics-v1',
+      calculation_version: 'eod-metrics-v2',
       quality: 'missing',
     },
     {
@@ -266,7 +266,7 @@ export const insufficientRun: ResearchRun = {
       unit: 'ratio',
       window_sessions: 20,
       as_of: '2026-09-11T20:00:00Z',
-      calculation_version: 'eod-metrics-v1',
+      calculation_version: 'eod-metrics-v2',
       quality: 'missing',
     },
   ],

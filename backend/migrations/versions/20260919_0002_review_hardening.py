@@ -46,7 +46,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError(
-        "Downgrade is disabled because research-run history is immutable; "
-        "deploy the prior application version without removing this column."
-    )
+    """Remove only the nullable interpretation column.
+
+    Rolling this back discards the stored model commentary but leaves every
+    deterministic research-run field intact, so no run loses its authoritative
+    result. Production rollback remains forward-fix oriented; this exists so the
+    additive change can be exercised and reverted in a disposable database.
+    """
+    op.drop_column("research_runs", "interpretation", schema="vantage_app")

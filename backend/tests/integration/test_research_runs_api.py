@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import Request
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from app.api.deps import (
     AuthenticatedUser,
@@ -12,6 +13,7 @@ from app.api.deps import (
     get_research_repository,
 )
 from app.core.config import Settings
+from app.db.session import SessionFactory
 from app.domain.errors import VantageError
 from app.domain.research import (
     AIInterpretation,
@@ -353,6 +355,7 @@ def test_disabled_model_skips_workflow_call_and_exposes_null_model_info(
                 completed_at=now,
                 workflow_status="succeeded",
                 sources=self.sources,
+                snapshot=None,
                 versions=self.versions,
                 **kwargs,
             )
@@ -569,6 +572,10 @@ def test_model_failure_is_a_persisted_degraded_success(
 def test_inadequate_prices_skip_model_and_return_typed_outcome(
     client: TestClient, auth_headers: dict, mock_market, mock_llm
 ) -> None:
+    """The second `model=not_run` path: the model is enabled but never called.
+
+    No interpretation may be published or persisted for a model that never ran.
+    """
     original_fetch = mock_market.fetch_daily_snapshot.side_effect
 
     def stale_fetch(*args, **kwargs):
@@ -583,7 +590,18 @@ def test_inadequate_prices_skip_model_and_return_typed_outcome(
     body = response.json()
     assert body["research_status"] == "insufficient_data"
     assert body["data_quality"]["model"] == "not_run"
+    assert body["interpretation"] is None
     mock_llm.interpret.assert_not_called()
+
+    with SessionFactory() as session:
+        stored = session.execute(
+            text(
+                "SELECT interpretation FROM vantage_app.research_runs "
+                "WHERE public_id = :public_id"
+            ),
+            {"public_id": body["run_id"]},
+        ).scalar_one()
+    assert stored is None
 
 
 def test_get_cross_user_returns_404(

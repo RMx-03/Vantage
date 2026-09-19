@@ -105,6 +105,22 @@ describe('ResearchResult', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('survives an unparsable provenance timestamp without blanking the page', () => {
+    const corruptedRun = {
+      ...informationalRun,
+      snapshot: { ...informationalRun.snapshot!, market_retrieved_at: 'not-a-timestamp' },
+    };
+
+    render(<ResearchResult run={corruptedRun} />);
+
+    const provenance = screen
+      .getByRole('heading', { name: 'Snapshot provenance' })
+      .closest('section');
+    expect(within(provenance!).getAllByText('Unavailable').length).toBeGreaterThan(0);
+    expect(screen.getByText(informationalRun.snapshot!.content_hash)).toBeVisible();
+    expect(screen.getByText(informationalRun.summary!)).toBeVisible();
+  });
+
   it('renders a legacy v1 run without fabricating interpretation or provenance', () => {
     render(<ResearchResult run={historicalRun} historical />);
 

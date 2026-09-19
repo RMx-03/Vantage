@@ -5,7 +5,10 @@ interface SnapshotProvenancePanelProps {
 }
 
 function formatInstant(value: string | null) {
-  return value ? new Date(value).toISOString() : 'Unavailable';
+  if (!value) return 'Unavailable';
+  const parsed = new Date(value);
+  // Never let one unparsable timestamp throw and blank the whole result page.
+  return Number.isNaN(parsed.getTime()) ? 'Unavailable' : parsed.toISOString();
 }
 
 function Field({ label, value }: { label: string; value: string }) {

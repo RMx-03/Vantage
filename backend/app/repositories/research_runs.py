@@ -109,15 +109,22 @@ class ResearchRunRepository:
         with SessionFactory() as session:
             with session.begin():
                 run = session.scalars(
-                    select(ResearchRunRow).where(
+                    select(ResearchRunRow)
+                    .where(
                         ResearchRunRow.id == internal_id,
                         ResearchRunRow.user_id == user_id,
                     )
+                    .with_for_update()
                 ).first()
                 if run is None:
                     raise VantageError(
                         code="RUN_NOT_FOUND",
                         safe_message="Research run not found.",
+                    )
+                if run.workflow_status != WorkflowStatus.RUNNING.value:
+                    raise VantageError(
+                        code=RUN_ALREADY_FINALIZED,
+                        safe_message=RUN_ALREADY_FINALIZED_MESSAGE,
                     )
 
                 if snapshot.bars:

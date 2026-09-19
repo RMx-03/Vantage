@@ -568,6 +568,8 @@
           "sources",
           "warnings",
           "model_info",
+          "interpretation",
+          "snapshot",
           "versions"
         ],
         "title": "ResearchRun",
