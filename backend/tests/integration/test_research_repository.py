@@ -328,6 +328,26 @@ def test_stored_versions_are_returned_from_the_row(
 def test_history_cursor_is_stable(
     repo: ResearchRunRepository, user_id: UUID, three_runs
 ) -> None:
+    # Pin created_at explicitly. Clock resolution differs by host -- on a
+    # coarse-clock machine three sequential inserts share one created_at and
+    # the tiebreaker silently decides the order -- so the direction of the
+    # ordering must be asserted against timestamps the test controls.
+    oldest, middle, newest = three_runs
+    stamps = {
+        oldest.public_id: datetime(2026, 9, 17, 12, 0, tzinfo=UTC),
+        middle.public_id: datetime(2026, 9, 18, 12, 0, tzinfo=UTC),
+        newest.public_id: datetime(2026, 9, 19, 12, 0, tzinfo=UTC),
+    }
+    with SessionFactory() as session, session.begin():
+        for public_id, created_at in stamps.items():
+            session.execute(
+                text(
+                    "UPDATE vantage_app.research_runs SET created_at = :created_at "
+                    "WHERE public_id = :public_id"
+                ),
+                {"created_at": created_at, "public_id": public_id},
+            )
+
     first = repo.list_owned(user_id=user_id, limit=2, before=None)
     assert len(first.items) == 2
     assert first.next_cursor is not None
@@ -336,13 +356,17 @@ def test_history_cursor_is_stable(
     assert len(second.items) == 1
 
     all_ids = [r.run_id for r in first.items + second.items]
-    # Ordering is desc by (created_at, public_id); walking the pages must
-    # reproduce the unpaged ordering exactly, whatever the tiebreaker resolves
-    # to for rows created within one clock tick.
+    # History is newest first: a user-visible guarantee, asserted concretely.
+    assert all_ids == [newest.public_id, middle.public_id, oldest.public_id]
+    assert [r.created_at for r in first.items + second.items] == [
+        stamps[newest.public_id],
+        stamps[middle.public_id],
+        stamps[oldest.public_id],
+    ]
+    # ...and walking the pages reproduces the unpaged ordering exactly.
     unpaged = repo.list_owned(user_id=user_id, limit=10, before=None)
     assert unpaged.next_cursor is None
     assert all_ids == [r.run_id for r in unpaged.items]
-    assert set(all_ids) == {r.public_id for r in three_runs}
 
 
 def test_invalid_cursor_raises_vantage_error(
