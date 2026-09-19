@@ -34,7 +34,7 @@ from app.domain.research import (
     VersionInfo,
     WorkflowStatus,
 )
-from app.domain.urls import normalize_url
+from app.domain.urls import safe_stored_url
 from app.services.snapshots import combined_snapshot_hash
 
 
@@ -401,10 +401,11 @@ class ResearchRunRepository:
                         publisher=s.publisher if s.publisher else None,
                         title=s.title,
                         # Rows written before the provider gained a scheme
-                        # allowlist can still hold a hostile URL. Historical
-                        # runs are immutable, so the same allowlist is applied
-                        # on read and a rejected URL is served as null.
-                        url=normalize_url(s.url),
+                        # allowlist can still hold a hostile URL. The same
+                        # allowlist rejects it on the way out. An accepted URL
+                        # is served exactly as stored: the run is immutable and
+                        # its published content_hash covers those bytes.
+                        url=safe_stored_url(s.url),
                         event_time=s.event_time,
                         retrieved_at=s.retrieved_at,
                         content_hash=s.content_hash if s.content_hash else None,

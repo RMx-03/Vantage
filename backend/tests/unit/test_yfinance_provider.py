@@ -555,3 +555,32 @@ def test_provider_news_item_drops_hostile_url(fixed_now: datetime) -> None:
     provider = YFinanceSnapshotProvider(ticker_factory=lambda _: ticker)
     snapshot = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
     assert [item.url for item in snapshot.items] == [None]
+
+
+def test_url_allowlist_fails_closed_when_the_parser_raises(monkeypatch) -> None:
+    """A parser error drops the link rather than propagating or passing it."""
+    from app.domain import urls as shared_urls
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise ValueError("unparseable")
+
+    monkeypatch.setattr(shared_urls, "urlparse", boom)
+    assert shared_urls.has_allowed_url_scheme("https://example.com/a") is False
+    assert shared_urls.normalize_url("https://example.com/a") is None
+    assert shared_urls.safe_stored_url("https://example.com/a") is None
+
+
+def test_normalize_url_fails_closed_when_canonicalization_raises(monkeypatch) -> None:
+    """The write path drops a link it cannot canonicalize, rather than raising."""
+    from app.domain import urls as shared_urls
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise ValueError("unencodable")
+
+    monkeypatch.setattr(shared_urls, "urlencode", boom)
+    assert shared_urls.normalize_url("https://example.com/a?b=1") is None
+    # The read path never canonicalizes, so it is unaffected.
+    assert (
+        shared_urls.safe_stored_url("https://example.com/a?b=1")
+        == "https://example.com/a?b=1"
+    )

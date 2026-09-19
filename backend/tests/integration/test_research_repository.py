@@ -777,9 +777,53 @@ def test_read_path_drops_a_hostile_stored_url(
 
 
 def test_write_and_read_paths_share_one_url_allowlist() -> None:
-    """One implementation, so the two boundaries can never drift apart."""
-    from app.domain.urls import normalize_url as shared_normalize_url
+    """Two entry points, one allowlist, so the boundaries cannot drift apart."""
+    from app.domain import urls as shared_urls
     import app.providers.yfinance_provider as yfinance_provider
 
-    assert yfinance_provider.normalize_url is shared_normalize_url
-    assert research_runs_module.normalize_url is shared_normalize_url
+    assert yfinance_provider.normalize_url is shared_urls.normalize_url
+    assert research_runs_module.safe_stored_url is shared_urls.safe_stored_url
+
+    hostile = [
+        "javascript:alert(1)",
+        "JavaScript:alert(document.cookie)",
+        "data:text/html;base64,PHNjcmlwdD4=",
+        "vbscript:msgbox(1)",
+        "file:///etc/passwd",
+        "//example.com/news/article-1",
+        "example.com/news/article-1",
+        "",
+        None,
+    ]
+    for url in hostile:
+        assert shared_urls.has_allowed_url_scheme(url) is False
+        assert shared_urls.normalize_url(url) is None
+        assert shared_urls.safe_stored_url(url) is None
+
+
+def test_read_path_serves_a_safe_stored_url_byte_identical(
+    repo: ResearchRunRepository, running_run, valid_snapshot, user_id: UUID
+) -> None:
+    """A legacy row may be safe but unnormalized; its bytes back the hash."""
+    unnormalized = "https://Example.com/news/a/?utm_source=x&b=2&a=1"
+    market, news, sources = valid_snapshot
+    repo.save_snapshot(running_run.id, user_id, market, news, sources)
+    with SessionFactory() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE vantage_app.research_sources SET url = :url "
+                "WHERE snapshot_id = (SELECT id FROM vantage_app.research_snapshots "
+                "WHERE run_id = :run_id)"
+            ),
+            {"url": unnormalized, "run_id": running_run.id},
+        )
+
+    stored = repo.get_owned(user_id=user_id, public_id=running_run.public_id)
+
+    assert stored is not None
+    # Served verbatim: canonicalizing here would make the payload disagree with
+    # the content_hash that was computed over the stored value.
+    assert [s.url for s in stored.sources] == [unnormalized]
+    from app.domain.urls import normalize_url
+
+    assert normalize_url(unnormalized) != unnormalized

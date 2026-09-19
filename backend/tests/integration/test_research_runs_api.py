@@ -911,3 +911,25 @@ def test_legacy_hostile_stored_url_is_dropped_by_the_read_path(
     listed = client.get("/api/v1/research-runs?limit=10", headers=auth_headers).json()
     listed_run = next(r for r in listed["items"] if r["run_id"] == created["run_id"])
     assert [s["url"] for s in listed_run["sources"]] == [None] * len(sources)
+
+    # A legacy row that is safe but unnormalized is served byte for byte: the
+    # run's published content_hash was derived from exactly those bytes.
+    unnormalized = "https://Example.com/news/a/?utm_source=x&b=2"
+    with SessionFactory() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE vantage_app.research_sources SET url = :url "
+                "WHERE snapshot_id = ("
+                "SELECT s.id FROM vantage_app.research_snapshots s "
+                "JOIN vantage_app.research_runs r ON r.id = s.run_id "
+                "WHERE r.public_id = :public_id)"
+            ),
+            {"url": unnormalized, "public_id": UUID(created["run_id"])},
+        )
+
+    refetched = client.get(
+        f"/api/v1/research-runs/{created['run_id']}", headers=auth_headers
+    )
+
+    assert refetched.status_code == 200
+    assert [s["url"] for s in refetched.json()["sources"]] == [unnormalized]
