@@ -1,56 +1,38 @@
 import type { AIInterpretation } from '../../types/research';
+import { Panel, PanelHeader } from '../../components/ui';
 
 interface InterpretationPanelProps {
   interpretation: AIInterpretation | null;
 }
 
-function getSentimentBadgeClass(label: AIInterpretation['sentiment_label']) {
-  switch (label) {
-    case 'positive':
-      return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300';
-    case 'negative':
-      return 'border-rose-500/30 bg-rose-500/10 text-rose-300';
-    case 'mixed':
-      return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
-    case 'neutral':
-    case 'unavailable':
-    default:
-      return 'border-slate-700 bg-slate-800 text-slate-400';
-  }
-}
-
 export default function InterpretationPanel({ interpretation }: InterpretationPanelProps) {
   return (
-    <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-sm">
+    <Panel>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <h2 className="text-xl font-semibold text-slate-100">AI interpretation</h2>
-        <span className="text-[11px] uppercase tracking-wider text-slate-500">
+        <PanelHeader icon="smart_toy">AI interpretation</PanelHeader>
+        <span className="text-[11px] uppercase tracking-wider text-outline font-label">
           Qualitative commentary
         </span>
       </div>
 
       {!interpretation ? (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-outline">
           Automated interpretation was not recorded for this run.
         </p>
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
-            <span
-              className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm font-semibold capitalize border ${getSentimentBadgeClass(
-                interpretation.sentiment_label
-              )}`}
-            >
+            <span className="inline-flex items-center border border-outline-variant bg-surface-container-highest text-on-surface-variant font-label text-[10px] uppercase tracking-widest px-2.5 py-1">
               {interpretation.sentiment_label}
             </span>
-            <span className="text-xs font-mono text-slate-400">
+            <span className="text-xs font-label text-outline">
               Score:{' '}
               {interpretation.sentiment_score === null
                 ? 'Unavailable'
                 : interpretation.sentiment_score.toFixed(2)}
             </span>
             {interpretation.abstained && (
-              <span className="text-xs font-mono text-amber-400">
+              <span className="text-xs font-label text-on-surface font-bold">
                 Abstained{
                   interpretation.abstention_reason
                     ? `: ${interpretation.abstention_reason}`
@@ -60,22 +42,22 @@ export default function InterpretationPanel({ interpretation }: InterpretationPa
             )}
           </div>
 
-          <p className="text-sm text-slate-300 leading-relaxed max-w-3xl">
+          <p className="text-sm text-on-surface-variant leading-relaxed max-w-3xl">
             {interpretation.summary}
           </p>
 
           <div>
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+            <div className="text-xs font-medium text-outline uppercase tracking-wider mb-2 font-label">
               Linked evidence
             </div>
             {interpretation.evidence_ids.length === 0 ? (
-              <p className="text-xs text-slate-500">No evidence was cited.</p>
+              <p className="text-xs text-outline">No evidence was cited.</p>
             ) : (
               <ul className="flex flex-wrap gap-2">
                 {interpretation.evidence_ids.map((evidenceId) => (
                   <li
                     key={evidenceId}
-                    className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-[11px] font-mono text-indigo-300"
+                    className="border border-outline-variant/30 bg-surface-container-low px-2 py-1 text-[11px] font-label text-primary"
                   >
                     {evidenceId}
                   </li>
@@ -86,12 +68,12 @@ export default function InterpretationPanel({ interpretation }: InterpretationPa
 
           {interpretation.warnings.length > 0 && (
             <div>
-              <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+              <div className="text-xs font-medium text-outline uppercase tracking-wider mb-2 font-label">
                 Warnings
               </div>
               <ul className="space-y-1">
                 {interpretation.warnings.map((warning) => (
-                  <li key={warning} className="text-xs text-amber-300">
+                  <li key={warning} className="text-xs text-on-surface-variant font-label">
                     {warning}
                   </li>
                 ))}
@@ -101,10 +83,10 @@ export default function InterpretationPanel({ interpretation }: InterpretationPa
         </div>
       )}
 
-      <p className="mt-4 pt-3 border-t border-slate-800/60 text-xs text-slate-400">
+      <p className="mt-4 pt-3 border-t border-outline-variant/30 text-xs text-outline">
         Research context only — not investment advice. Deterministic metrics and policy
         remain authoritative.
       </p>
-    </section>
+    </Panel>
   );
 }
