@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { listResearchRuns } from '../api/researchRuns';
-import UserSettingsPanel from '../components/UserSettingsPanel';
-import ResearchWorkspace from '../features/research/ResearchWorkspace';
 import { MicroLabel } from '../components/ui';
 
 export default function Terminal() {
-  const [showSettings, setShowSettings] = useState(false);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const isSettings = pathname.startsWith('/app/settings');
   const { user, signOut } = useAuth();
   const ownerId = user?.id ?? null;
 
@@ -33,7 +33,7 @@ export default function Terminal() {
 
           <div className="flex flex-col items-center">
             <span className="text-[10px] font-label uppercase tracking-[0.3em] text-primary animate-pulse">
-              {showSettings ? 'SYSTEM SETTINGS' : 'ANALYTICAL TERMINAL'}
+              {isSettings ? 'SYSTEM SETTINGS' : 'ANALYTICAL TERMINAL'}
             </span>
           </div>
 
@@ -53,9 +53,9 @@ export default function Terminal() {
           <div className="p-8 flex flex-col gap-12 h-full">
             <nav className="flex flex-col gap-4">
               <button
-                onClick={() => setShowSettings(false)}
+                onClick={() => navigate('/app/research')}
                 className={`flex items-center gap-4 p-3 w-full transition-colors duration-150 font-['Inter'] text-sm tracking-tight ${
-                  !showSettings
+                  !isSettings
                     ? 'text-[#c6c6c7] bg-[#191a1a]'
                     : 'text-[#484848] hover:bg-[#131313] hover:text-[#c6c6c7]'
                 }`}
@@ -86,9 +86,9 @@ export default function Terminal() {
                 <MicroLabel className="ml-auto">Phase 2</MicroLabel>
               </button>
               <button
-                onClick={() => setShowSettings(true)}
+                onClick={() => navigate('/app/settings')}
                 className={`flex items-center gap-4 p-3 w-full transition-colors duration-150 font-['Inter'] text-sm tracking-tight ${
-                  showSettings
+                  isSettings
                     ? 'text-[#c6c6c7] bg-[#191a1a]'
                     : 'text-[#484848] hover:bg-[#131313] hover:text-[#c6c6c7]'
                 }`}
@@ -107,7 +107,7 @@ export default function Terminal() {
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto w-full">
           <div className="py-12 md:py-24">
-            {showSettings ? <UserSettingsPanel /> : <ResearchWorkspace />}
+            <Outlet />
           </div>
         </main>
       </div>
@@ -115,9 +115,9 @@ export default function Terminal() {
       {/* BottomNavBar (Mobile) */}
       <nav className="lg:hidden w-full z-50 flex justify-around items-center h-16 bg-[#0e0e0e] border-t border-[#191a1a] shrink-0">
         <button
-          onClick={() => setShowSettings(false)}
+          onClick={() => navigate('/app/research')}
           className={`flex flex-col items-center justify-center p-2 flex-1 h-full transition-transform ${
-            !showSettings ? 'text-[#c6c6c7] bg-[#191a1a]' : 'text-[#484848] hover:bg-[#131313]'
+            !isSettings ? 'text-[#c6c6c7] bg-[#191a1a]' : 'text-[#484848] hover:bg-[#131313]'
           }`}
         >
           <span className="material-symbols-outlined">terminal</span>
@@ -144,9 +144,9 @@ export default function Terminal() {
           <span className="font-label text-[10px] uppercase tracking-widest mt-1">Risk</span>
         </button>
         <button
-          onClick={() => setShowSettings(true)}
+          onClick={() => navigate('/app/settings')}
           className={`flex flex-col items-center justify-center p-2 flex-1 h-full transition-transform ${
-            showSettings ? 'text-[#c6c6c7] bg-[#191a1a]' : 'text-[#484848] hover:bg-[#131313]'
+            isSettings ? 'text-[#c6c6c7] bg-[#191a1a]' : 'text-[#484848] hover:bg-[#131313]'
           }`}
         >
           <span className="material-symbols-outlined">settings</span>

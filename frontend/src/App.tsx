@@ -6,6 +6,9 @@ import Landing from './pages/Landing';
 import Terminal from './pages/Terminal';
 import Auth from './pages/Auth';
 
+import ResearchWorkspace from './features/research/ResearchWorkspace';
+import UserSettingsPanel from './components/UserSettingsPanel';
+
 export default function App() {
   return (
     <QueryProvider>
@@ -21,7 +24,13 @@ export default function App() {
                   <Terminal />
                 </ProtectedRoute>
               }
-            />
+            >
+              <Route index element={<Navigate to="research" replace />} />
+              <Route path="research" element={<ResearchWorkspace />} />
+              <Route path="research/:runId" element={<ResearchWorkspace />} />
+              <Route path="settings" element={<Navigate to="profile" replace />} />
+              <Route path="settings/:tab" element={<UserSettingsPanel />} />
+            </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
