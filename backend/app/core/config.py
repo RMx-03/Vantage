@@ -108,6 +108,7 @@ class Settings(BaseSettings):
     LANGFUSE_PUBLIC_KEY: str = ""
     LANGFUSE_SECRET_KEY: str = ""
     LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+    LANGFUSE_TIMEOUT_SECONDS: int = Field(default=5, gt=0)
 
     # ------------------------------------------------------------------
     # Logging

@@ -5,7 +5,7 @@ from app.telemetry.redaction import (
     user_hash,
 )
 from app.telemetry.tracing import (
-    SafeExportSpanProcessor,
+    SafeSpanExporter,
     configure_telemetry,
     get_tracer,
 )
@@ -13,7 +13,7 @@ from app.telemetry.tracing import (
 __all__ = [
     "ALLOWED_ATTRIBUTES",
     "RedactingSpanProcessor",
-    "SafeExportSpanProcessor",
+    "SafeSpanExporter",
     "configure_telemetry",
     "get_tracer",
     "safe_attributes",

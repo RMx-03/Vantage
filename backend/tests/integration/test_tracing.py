@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+import base64
 import hmac
 import hashlib
 from typing import Any
@@ -8,6 +9,7 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace import Status, StatusCode
 from opentelemetry.sdk.trace.export import (
@@ -43,7 +45,7 @@ from app.telemetry.redaction import (
 )
 from app.telemetry.tracing import (
     TRACER_NAME,
-    SafeExportSpanProcessor,
+    SafeSpanExporter,
     configure_telemetry,
     get_tracer,
 )
@@ -236,22 +238,32 @@ class ResultFailingExporter(SpanExporter):
 
 
 def test_export_failure_result_is_counted() -> None:
-    processor = SafeExportSpanProcessor(ResultFailingExporter())
+    exporter = SafeSpanExporter(ResultFailingExporter())
 
-    processor.on_end(MagicMock())
+    result = exporter.export([MagicMock()])
 
-    assert processor.export_failures == 1
+    assert result == SpanExportResult.FAILURE
+    assert exporter.export_failures == 1
+
+
+def test_safe_exporter_converts_exception_to_failure() -> None:
+    exporter = SafeSpanExporter(FailingExporter())
+
+    result = exporter.export([MagicMock()])
+
+    assert result == SpanExportResult.FAILURE
+    assert exporter.export_failures == 1
 
 
 def test_exporter_lifecycle_failures_are_isolated() -> None:
-    exporter = MagicMock()
-    exporter.shutdown.side_effect = RuntimeError("shutdown-secret")
-    exporter.force_flush.side_effect = RuntimeError("flush-secret")
-    processor = SafeExportSpanProcessor(exporter)
+    raw_exporter = MagicMock()
+    raw_exporter.shutdown.side_effect = RuntimeError("shutdown-secret")
+    raw_exporter.force_flush.side_effect = RuntimeError("flush-secret")
+    exporter = SafeSpanExporter(raw_exporter)
 
-    processor.shutdown()
+    exporter.shutdown()
 
-    assert processor.force_flush(125) is True
+    assert exporter.force_flush(125) is True
 
 
 def test_redaction_supports_plain_attribute_mappings() -> None:
@@ -277,7 +289,9 @@ def client_with_failing_exporter(service, test_user_id: UUID):
     trace._TRACER_PROVIDER_SET_ONCE._done = False
     provider = TracerProvider()
     provider.add_span_processor(RedactingSpanProcessor())
-    provider.add_span_processor(SafeExportSpanProcessor(FailingExporter()))
+    provider.add_span_processor(
+        SimpleSpanProcessor(SafeSpanExporter(FailingExporter()))
+    )
     trace.set_tracer_provider(provider)
 
     def fake_auth(request: Request) -> AuthenticatedUser:
@@ -443,6 +457,41 @@ def test_configure_telemetry_registers_langfuse_with_shared_provider(
     matching_span = MagicMock()
     matching_span.instrumentation_scope.name = TRACER_NAME
     assert should_export(matching_span) is True
+
+
+def install_fake_langfuse(monkeypatch) -> dict[str, Any]:
+    captured: dict[str, Any] = {}
+
+    class FakeLangfuse:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr("langfuse.Langfuse", FakeLangfuse)
+    monkeypatch.setattr(settings, "TRACE_EXPORT_ENABLED", True)
+    monkeypatch.setattr(settings, "LANGFUSE_PUBLIC_KEY", "pk-test")
+    monkeypatch.setattr(settings, "LANGFUSE_SECRET_KEY", "sk-test")
+    monkeypatch.setattr(settings, "LANGFUSE_HOST", "https://langfuse.example.com/")
+    return captured
+
+
+def test_langfuse_receives_safe_exporter(monkeypatch) -> None:
+    from app.telemetry import tracing
+
+    captured = install_fake_langfuse(monkeypatch)
+
+    tracing.configure_telemetry()
+
+    exporter = captured["span_exporter"]
+    assert isinstance(exporter, SafeSpanExporter)
+
+    otlp_exporter = exporter.exporter
+    assert isinstance(otlp_exporter, OTLPSpanExporter)
+    assert (
+        otlp_exporter._endpoint
+        == "https://langfuse.example.com/api/public/otel/v1/traces"
+    )
+    expected_auth = "Basic " + base64.b64encode(b"pk-test:sk-test").decode()
+    assert otlp_exporter._headers.get("Authorization") == expected_auth
 
 
 def test_langfuse_configuration_failure_is_sanitized(

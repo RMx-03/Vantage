@@ -1,9 +1,11 @@
+from collections.abc import Sequence
+import base64
 import logging
 from typing import Any
 
 from fastapi import FastAPI
 from opentelemetry import trace
-from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor, TracerProvider
+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
 from app.core.config import settings
@@ -15,28 +17,27 @@ TRACER_NAME = "vantage.research"
 _langfuse_client: Any | None = None
 
 
-class SafeExportSpanProcessor(SpanProcessor):
+class SafeSpanExporter(SpanExporter):
     """
     Wraps a SpanExporter so that any export failures are safely caught,
-    incremented, and logged, without ever interrupting the product research run.
+    counted, and logged, without ever interrupting the product research run.
     """
 
     def __init__(self, exporter: SpanExporter) -> None:
         self.exporter = exporter
         self.export_failures: int = 0
 
-    def on_start(self, span: Any, parent_context: Any = None) -> None:
-        pass
-
-    def on_end(self, span: ReadableSpan) -> None:
+    def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
         try:
-            result = self.exporter.export([span])
+            result = self.exporter.export(spans)
             if result == SpanExportResult.FAILURE:
                 self.export_failures += 1
                 logger.warning("Telemetry export failed safely")
+            return result
         except Exception:
             self.export_failures += 1
             logger.warning("Telemetry export failed safely")
+            return SpanExportResult.FAILURE
 
     def shutdown(self) -> None:
         try:
@@ -70,10 +71,25 @@ def configure_telemetry(app: FastAPI | None = None) -> TracerProvider:
             # When Langfuse v4 export is enabled, configure safe exporter
             if settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY:
                 from langfuse import Langfuse
+                from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                    OTLPSpanExporter,
+                )
 
                 def should_export_span(span: ReadableSpan) -> bool:
                     scope = span.instrumentation_scope
                     return scope is not None and scope.name == TRACER_NAME
+
+                credentials = (
+                    f"{settings.LANGFUSE_PUBLIC_KEY}:{settings.LANGFUSE_SECRET_KEY}"
+                )
+                auth_header = base64.b64encode(credentials.encode()).decode()
+                otlp_exporter = OTLPSpanExporter(
+                    endpoint=settings.LANGFUSE_HOST.rstrip("/")
+                    + "/api/public/otel/v1/traces",
+                    headers={"Authorization": f"Basic {auth_header}"},
+                    timeout=settings.LANGFUSE_TIMEOUT_SECONDS,
+                )
+                safe_exporter = SafeSpanExporter(otlp_exporter)
 
                 _langfuse_client = Langfuse(
                     public_key=settings.LANGFUSE_PUBLIC_KEY,
@@ -82,6 +98,7 @@ def configure_telemetry(app: FastAPI | None = None) -> TracerProvider:
                     release=settings.CODE_REVISION,
                     tracer_provider=provider,
                     should_export_span=should_export_span,
+                    span_exporter=safe_exporter,
                 )
                 logger.info(
                     "Langfuse export configured for host: %s", settings.LANGFUSE_HOST
