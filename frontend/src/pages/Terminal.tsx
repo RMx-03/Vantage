@@ -1,12 +1,23 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
+import { listResearchRuns } from '../api/researchRuns';
 import UserSettingsPanel from '../components/UserSettingsPanel';
 import ResearchWorkspace from '../features/research/ResearchWorkspace';
 import { MicroLabel } from '../components/ui';
 
 export default function Terminal() {
   const [showSettings, setShowSettings] = useState(false);
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
+  const ownerId = user?.id ?? null;
+
+  const { data: historyData } = useQuery({
+    queryKey: ['research-runs', ownerId],
+    queryFn: () => listResearchRuns(),
+    enabled: ownerId !== null,
+  });
+
+  const activeModel = historyData?.items?.[0]?.model_info?.model ?? null;
 
   return (
     <div className="dark font-body text-on-background selection:bg-primary selection:text-on-primary h-screen overflow-hidden flex flex-col bg-[#0e0e0e]">
@@ -88,7 +99,7 @@ export default function Terminal() {
             </nav>
             <div className="mt-auto border-t border-[#191a1a] pt-6 flex flex-col gap-2">
               <MicroLabel>Active Model</MicroLabel>
-              <span className="font-label text-xs text-primary">—</span>
+              <span className="font-label text-xs text-primary">{activeModel ?? '—'}</span>
             </div>
           </div>
         </aside>

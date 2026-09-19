@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { createResearchRun, ApiError } from '../../api/researchRuns';
+import { createResearchRun, listResearchRuns, ApiError } from '../../api/researchRuns';
 import { useAuth } from '../../context/AuthContext';
 import type { ResearchRun } from '../../types/research';
 import ResearchResult from './ResearchResult';
 import ResearchHistory from './ResearchHistory';
+import { buildStatusStrip, recentSymbols } from './runChrome';
+import { MicroLabel } from '../../components/ui';
 
 const SYMBOL_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
 
@@ -28,6 +30,14 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { signOut } = useAuth();
+
+  const { data: historyData } = useQuery({
+    queryKey: ['research-runs', ownerId],
+    queryFn: () => listResearchRuns(),
+    enabled: ownerId !== null,
+  });
+
+  const recent = recentSymbols(historyData?.items ?? []);
 
   const normalizedSymbol = symbolInput.trim().toUpperCase();
   const isValidSymbol = SYMBOL_PATTERN.test(normalizedSymbol);
@@ -169,6 +179,22 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
             </button>
           </div>
         </form>
+
+        {recent.length > 0 && (
+          <div className="flex gap-4 overflow-x-auto">
+            <MicroLabel>Recent:</MicroLabel>
+            {recent.map((sym) => (
+              <button
+                key={sym}
+                type="button"
+                onClick={() => setSymbolInput(sym)}
+                className="font-label text-[10px] text-primary uppercase tracking-tighter hover:text-on-surface transition-colors"
+              >
+                ${sym}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Main Workspace Area */}
@@ -199,6 +225,17 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
           </div>
         )}
       </div>
+
+      {buildStatusStrip(selectedRun) && (
+        <footer className="mt-20 py-8 border-t border-outline-variant/20 flex flex-col gap-4 items-center">
+          <div className="bg-primary/5 px-6 py-2 border border-primary/20">
+            <span className="font-label text-[10px] text-primary uppercase tracking-[0.3em]">
+              {buildStatusStrip(selectedRun)}
+            </span>
+          </div>
+          <p className="font-label text-[10px] text-outline-variant">© 2026 VANTAGE QUANT SYSTEMS</p>
+        </footer>
+      )}
 
       {/* Slide-over History Drawer */}
       {showHistory && (
