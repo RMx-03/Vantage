@@ -16,6 +16,7 @@ from app.domain.errors import (
     VantageError,
 )
 from app.domain.research import (
+    AIInterpretation,
     ComponentQuality,
     DataQuality,
     EvidenceSource,
@@ -29,6 +30,7 @@ from app.domain.research import (
     ResearchRun,
     ResearchRunPage,
     ResearchStatus,
+    SnapshotProvenance,
     VersionInfo,
     WorkflowStatus,
 )
@@ -195,6 +197,7 @@ class ResearchRunRepository:
         warnings: list[str],
         summary: str,
         model_info: ModelInfo | None = None,
+        interpretation: AIInterpretation | None = None,
     ) -> ResearchRun:
         with SessionFactory() as session:
             with session.begin():
@@ -232,6 +235,11 @@ class ResearchRunRepository:
                 row.data_quality = data_quality.model_dump(mode="json")
                 row.warnings = warnings
                 row.summary = summary
+                row.interpretation = (
+                    interpretation.model_dump(mode="json")
+                    if interpretation is not None
+                    else None
+                )
                 if model_info is not None:
                     row.model_provider = model_info.provider
                     row.model_name = model_info.model
@@ -409,6 +417,28 @@ class ResearchRunRepository:
         if row.data_quality is not None:
             data_quality = DataQuality.model_validate(row.data_quality)
 
+        interpretation: AIInterpretation | None = None
+        if row.interpretation is not None:
+            interpretation = AIInterpretation.model_validate(row.interpretation)
+
+        snapshot: SnapshotProvenance | None = None
+        if row.snapshot is not None:
+            snapshot = SnapshotProvenance(
+                snapshot_id=row.snapshot.public_id,
+                content_hash=row.snapshot.content_hash,
+                market_provider=row.snapshot.market_provider,
+                market_content_hash=row.snapshot.market_content_hash,
+                market_as_of=row.snapshot.as_of,
+                market_retrieved_at=row.snapshot.retrieved_at,
+                window_start=row.snapshot.window_start,
+                window_end=row.snapshot.window_end,
+                news_provider=row.snapshot.news_provider,
+                news_retrieved_at=row.snapshot.news_retrieved_at,
+                news_coverage_start=row.snapshot.news_coverage_start,
+                news_coverage_end=row.snapshot.news_coverage_end,
+                news_quality=ComponentQuality(row.snapshot.news_quality),
+            )
+
         return ResearchRun(
             run_id=row.public_id,
             symbol=cast(Any, row.symbol),
@@ -426,6 +456,8 @@ class ResearchRunRepository:
             sources=sources,
             warnings=list(row.warnings or []),
             model_info=model_info,
+            interpretation=interpretation,
+            snapshot=snapshot,
             versions=VersionInfo(
                 response_schema=row.response_schema_version,
                 workflow=row.workflow_version,

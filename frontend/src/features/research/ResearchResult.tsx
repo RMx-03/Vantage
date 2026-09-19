@@ -2,6 +2,8 @@ import type { ResearchRun } from '../../types/research';
 import ReasonsPanel from './ReasonsPanel';
 import ResearchMetrics from './ResearchMetrics';
 import DataQualityPanel from './DataQualityPanel';
+import InterpretationPanel from './InterpretationPanel';
+import SnapshotProvenancePanel from './SnapshotProvenancePanel';
 import SourcesPanel from './SourcesPanel';
 import RunDetails from './RunDetails';
 
@@ -130,13 +132,19 @@ export default function ResearchResult({ run, historical = false }: ResearchResu
       {/* Level 3: Metrics */}
       <ResearchMetrics metrics={run.metrics} version={run.versions.metrics} />
 
-      {/* Level 4: Data Quality */}
+      {/* Level 4: AI Interpretation (qualitative commentary only) */}
+      <InterpretationPanel interpretation={run.interpretation} />
+
+      {/* Level 5: Data Quality */}
       <DataQualityPanel dataQuality={run.data_quality} modelInfo={run.model_info} />
 
-      {/* Level 5: Evidence Sources */}
+      {/* Level 6: Evidence Sources */}
       <SourcesPanel sources={run.sources} />
 
-      {/* Level 6: Run Details */}
+      {/* Level 7: Snapshot Provenance */}
+      <SnapshotProvenancePanel snapshot={run.snapshot} />
+
+      {/* Level 8: Run Details */}
       <RunDetails run={run} />
     </div>
   );

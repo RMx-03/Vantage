@@ -48,6 +48,34 @@ export interface EvidenceSource {
   source_type: 'news';
 }
 
+export type SentimentLabel = 'positive' | 'mixed' | 'neutral' | 'negative' | 'unavailable';
+
+export interface AIInterpretation {
+  sentiment_label: SentimentLabel;
+  sentiment_score: number | null;
+  summary: string;
+  evidence_ids: string[];
+  warnings: string[];
+  abstained: boolean;
+  abstention_reason: string | null;
+}
+
+export interface SnapshotProvenance {
+  snapshot_id: string;
+  content_hash: string;
+  market_provider: string;
+  market_content_hash: string;
+  market_as_of: string;
+  market_retrieved_at: string;
+  window_start: string;
+  window_end: string;
+  news_provider: string;
+  news_retrieved_at: string;
+  news_coverage_start: string | null;
+  news_coverage_end: string | null;
+  news_quality: ComponentQuality;
+}
+
 export interface ModelInfo {
   provider: string;
   model: string;
@@ -78,6 +106,8 @@ export interface ResearchRun {
   sources: EvidenceSource[];
   warnings: string[];
   model_info: ModelInfo | null;
+  interpretation: AIInterpretation | null;
+  snapshot: SnapshotProvenance | null;
   versions: VersionInfo;
   error_code?: string | null;
   error_message_safe?: string | null;

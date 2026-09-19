@@ -33,3 +33,28 @@ def test_research_run_contract_matches_snapshot() -> None:
     assert snapshot_path.exists(), f"Snapshot missing: {snapshot_path}"
     expected = json.loads(snapshot_path.read_text(encoding="utf-8"))
     assert actual == expected
+
+
+def test_research_run_contract_exposes_v2_interpretation_and_provenance() -> None:
+    schemas = app.openapi()["components"]["schemas"]
+
+    run_properties = schemas["ResearchRun"]["properties"]
+    assert "interpretation" in run_properties
+    assert "snapshot" in run_properties
+
+    provenance_properties = schemas["SnapshotProvenance"]["properties"]
+    assert set(provenance_properties) == {
+        "snapshot_id",
+        "content_hash",
+        "market_provider",
+        "market_content_hash",
+        "market_as_of",
+        "market_retrieved_at",
+        "window_start",
+        "window_end",
+        "news_provider",
+        "news_retrieved_at",
+        "news_coverage_start",
+        "news_coverage_end",
+        "news_quality",
+    }

@@ -375,6 +375,7 @@ def test_disabled_model_skips_workflow_call_and_exposes_null_model_info(
     assert response.status_code == 201
     body = response.json()
     assert body["model_info"] is None
+    assert body["interpretation"] is None
     assert body["data_quality"]["model"] == "not_run"
     assert body["metrics"]
     no_call.assert_not_called()
@@ -554,6 +555,15 @@ def test_model_failure_is_a_persisted_degraded_success(
     assert body["research_status"] == "review"
     assert body["data_quality"]["model"] == "failed"
     assert body["model_info"]["failure_code"] == "MODEL_UNAVAILABLE"
+    assert body["interpretation"] == {
+        "sentiment_label": "unavailable",
+        "sentiment_score": None,
+        "summary": "AI interpretation was unavailable for this research run.",
+        "evidence_ids": [],
+        "warnings": ["AI interpretation failed or was unavailable."],
+        "abstained": True,
+        "abstention_reason": "MODEL_UNAVAILABLE",
+    }
 
 
 def test_inadequate_prices_skip_model_and_return_typed_outcome(
@@ -762,3 +772,46 @@ def test_run_already_finalized_maps_to_conflict(
         "request_id": None,
         "retryable": False,
     }
+
+
+def test_completed_response_is_v2(client: TestClient, auth_headers: dict) -> None:
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
+    assert response.status_code == 201
+    body = response.json()
+
+    assert body["versions"]["response_schema"] == "research-run-response-v2"
+    assert body["interpretation"]["evidence_ids"] == ["news-1"]
+    assert body["interpretation"]["sentiment_label"] == "positive"
+    assert body["interpretation"]["abstained"] is False
+    assert "price_bars" not in body["snapshot"]
+    assert "user_id" not in body["snapshot"]
+    assert "id" not in body["snapshot"]
+    assert len(body["snapshot"]["content_hash"]) == 64
+    assert body["snapshot"]["market_provider"] == "mock_market"
+    assert body["snapshot"]["news_provider"] == "mock_news"
+    assert body["snapshot"]["news_quality"] == "fresh"
+
+    # Provenance reports real retrieval times, never the analysis cutoff.
+    cutoff = datetime.fromisoformat(body["as_of"])
+    assert datetime.fromisoformat(body["snapshot"]["market_as_of"]) == cutoff
+    assert datetime.fromisoformat(body["snapshot"]["news_coverage_end"]) == cutoff
+    assert datetime.fromisoformat(body["snapshot"]["news_retrieved_at"]) > cutoff
+    assert datetime.fromisoformat(body["snapshot"]["market_retrieved_at"]) > cutoff
+
+
+def test_persisted_v2_run_is_re_readable_by_id(
+    client: TestClient, auth_headers: dict
+) -> None:
+    created = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    ).json()
+
+    fetched = client.get(
+        f"/api/v1/research-runs/{created['run_id']}", headers=auth_headers
+    )
+
+    assert fetched.status_code == 200
+    assert fetched.json()["interpretation"] == created["interpretation"]
+    assert fetched.json()["snapshot"] == created["snapshot"]

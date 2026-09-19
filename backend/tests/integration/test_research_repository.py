@@ -30,11 +30,22 @@ from app.domain.research import (
     ResearchMetric,
     ResearchRun,
     ResearchStatus,
+    SnapshotProvenance,
     VersionInfo,
     WorkflowStatus,
 )
 import app.repositories.research_runs as research_runs_module
 from app.repositories.research_runs import ResearchRunRepository
+
+VALID_INTERPRETATION = AIInterpretation(
+    sentiment_label="positive",
+    sentiment_score=0.5,
+    summary="Coverage supports a constructive read of recent sessions.",
+    evidence_ids=["ev-1"],
+    warnings=[],
+    abstained=False,
+    abstention_reason=None,
+)
 
 
 @pytest.fixture(scope="session")
@@ -158,6 +169,7 @@ def completed_run(
         warnings=[],
         summary="All good",
         model_info=model_info,
+        interpretation=VALID_INTERPRETATION,
     )
     return run
 
@@ -494,3 +506,117 @@ def test_competing_finalizers_allow_exactly_one_terminal_transition(
         assert stored.summary is None
         assert stored.error_code == "INTERNAL_ERROR"
         assert stored.error_message_safe == "Concurrent failure."
+
+
+def test_interpretation_and_provenance_round_trip(
+    repo: ResearchRunRepository,
+    completed_run,
+    user_id: UUID,
+    valid_snapshot,
+) -> None:
+    market, news, _ = valid_snapshot
+    with SessionFactory() as session:
+        snapshot_public_id = session.execute(
+            text(
+                "SELECT public_id FROM vantage_app.research_snapshots "
+                "WHERE run_id = :run_id"
+            ),
+            {"run_id": completed_run.id},
+        ).scalar_one()
+
+    run = repo.get_owned(user_id=user_id, public_id=completed_run.public_id)
+
+    assert run is not None
+    assert run.interpretation == VALID_INTERPRETATION
+    assert run.snapshot is not None
+    assert run.snapshot.snapshot_id == snapshot_public_id
+    assert len(run.snapshot.content_hash) == 64
+    assert not hasattr(run.snapshot, "price_bars")
+    assert set(run.snapshot.model_dump().keys()) == {
+        "snapshot_id",
+        "content_hash",
+        "market_provider",
+        "market_content_hash",
+        "market_as_of",
+        "market_retrieved_at",
+        "window_start",
+        "window_end",
+        "news_provider",
+        "news_retrieved_at",
+        "news_coverage_start",
+        "news_coverage_end",
+        "news_quality",
+    }
+    assert run.snapshot.market_provider == market.provider
+    assert run.snapshot.market_content_hash == market.content_hash
+    assert run.snapshot.market_as_of == market.as_of
+    assert run.snapshot.market_retrieved_at == market.retrieved_at
+    assert run.snapshot.window_start <= run.snapshot.window_end
+    assert run.snapshot.news_provider == news.provider
+    assert run.snapshot.news_retrieved_at == news.retrieved_at
+    assert run.snapshot.news_coverage_start == news.coverage_start
+    assert run.snapshot.news_coverage_end == news.coverage_end
+    assert run.snapshot.news_quality == ComponentQuality.FRESH
+
+
+def test_absent_interpretation_and_snapshot_map_to_null(
+    repo: ResearchRunRepository, running_run, user_id: UUID
+) -> None:
+    run = repo.get_owned(user_id=user_id, public_id=running_run.public_id)
+
+    assert run is not None
+    assert run.versions.response_schema == "research-run-response-v1"
+    assert run.interpretation is None
+    assert run.snapshot is None
+
+
+def test_interpretation_is_not_written_to_a_terminal_run(
+    repo: ResearchRunRepository, completed_run, user_id: UUID
+) -> None:
+    replacement = VALID_INTERPRETATION.model_copy(
+        update={"summary": "Replacement interpretation"}
+    )
+    quality = DataQuality(
+        overall=OverallQuality.SUFFICIENT,
+        prices=ComponentQuality.FRESH,
+        news=ComponentQuality.FRESH,
+        model=ModelQuality.HEALTHY,
+    )
+
+    with pytest.raises(VantageError) as exc:
+        repo.finalize_success(
+            internal_id=completed_run.id,
+            user_id=user_id,
+            research_status=ResearchStatus.INFORMATIONAL,
+            as_of=datetime.now(UTC),
+            reasons=[],
+            metrics=[],
+            data_quality=quality,
+            warnings=[],
+            summary="Replacement result",
+            interpretation=replacement,
+        )
+
+    assert exc.value.code == "RUN_ALREADY_FINALIZED"
+    stored = repo.get_owned(user_id=user_id, public_id=completed_run.public_id)
+    assert stored is not None
+    assert stored.interpretation == VALID_INTERPRETATION
+
+
+def test_snapshot_provenance_model_rejects_naive_timestamps() -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        SnapshotProvenance(
+            snapshot_id=uuid4(),
+            content_hash="a" * 64,
+            market_provider="fixture",
+            market_content_hash="b" * 64,
+            market_as_of=datetime(2026, 9, 11, 20, 0),
+            market_retrieved_at=datetime.now(UTC),
+            window_start=datetime.now(UTC),
+            window_end=datetime.now(UTC),
+            news_provider="fixture-news",
+            news_retrieved_at=datetime.now(UTC),
+            news_coverage_start=None,
+            news_coverage_end=None,
+            news_quality=ComponentQuality.FRESH,
+        )

@@ -73,6 +73,50 @@ describe('ResearchResult', () => {
     expect(screen.getAllByText(failedMarketRun.run_id)[0]).toBeVisible();
   });
 
+  it('renders interpretation and provenance', () => {
+    render(<ResearchResult run={informationalRun} />);
+
+    expect(screen.getByText(/AI interpretation/i)).toBeInTheDocument();
+    expect(screen.getByText(informationalRun.snapshot!.content_hash)).toBeInTheDocument();
+    expect(screen.getByText(/Not investment advice/i)).toBeInTheDocument();
+    expect(screen.getByText(informationalRun.interpretation!.summary)).toBeVisible();
+    expect(screen.getByText('positive')).toBeVisible();
+
+    const provenance = screen
+      .getByRole('heading', { name: 'Snapshot provenance' })
+      .closest('section');
+    expect(provenance).not.toBeNull();
+    expect(within(provenance!).getByText('yfinance')).toBeVisible();
+    expect(within(provenance!).getByText('yfinance-news')).toBeVisible();
+    expect(within(provenance!).getByText('fresh')).toBeVisible();
+  });
+
+  it('labels model interpretation as qualitative commentary, not a recommendation', () => {
+    render(<ResearchResult run={informationalRun} />);
+
+    const interpretation = screen
+      .getByRole('heading', { name: 'AI interpretation' })
+      .closest('section');
+    expect(interpretation).not.toBeNull();
+    expect(within(interpretation!).getByText(/qualitative/i)).toBeVisible();
+    expect(within(interpretation!).getByText('ev-001')).toBeVisible();
+    expect(
+      within(interpretation!).queryByText(/buy|sell|trade approved|price target/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders a legacy v1 run without fabricating interpretation or provenance', () => {
+    render(<ResearchResult run={historicalRun} historical />);
+
+    expect(screen.getByText('research-run-response-v1')).toBeInTheDocument();
+    expect(
+      screen.getByText('Automated interpretation was not recorded for this run.')
+    ).toBeVisible();
+    expect(
+      screen.getByText('Snapshot provenance was not recorded for this run.')
+    ).toBeVisible();
+  });
+
   it('renders absent optional run and source fields as unavailable, never fabricated', () => {
     const incompleteRun = {
       ...informationalRun,

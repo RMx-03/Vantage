@@ -1,6 +1,77 @@
 {
   "components": {
     "schemas": {
+      "AIInterpretation": {
+        "additionalProperties": false,
+        "properties": {
+          "abstained": {
+            "default": false,
+            "title": "Abstained",
+            "type": "boolean"
+          },
+          "abstention_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstention Reason"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "sentiment_label": {
+            "enum": [
+              "positive",
+              "mixed",
+              "neutral",
+              "negative",
+              "unavailable"
+            ],
+            "title": "Sentiment Label",
+            "type": "string"
+          },
+          "sentiment_score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": -1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentiment Score"
+          },
+          "summary": {
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sentiment_label",
+          "summary"
+        ],
+        "title": "AIInterpretation",
+        "type": "object"
+      },
       "ComponentQuality": {
         "enum": [
           "fresh",
@@ -386,6 +457,16 @@
             ],
             "title": "Error Message Safe"
           },
+          "interpretation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AIInterpretation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "metrics": {
             "items": {
               "$ref": "#/components/schemas/ResearchMetric"
@@ -424,6 +505,16 @@
             "format": "uuid",
             "title": "Run Id",
             "type": "string"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SnapshotProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sources": {
             "items": {
@@ -535,6 +626,102 @@
         ],
         "title": "ResearchStatus",
         "type": "string"
+      },
+      "SnapshotProvenance": {
+        "additionalProperties": false,
+        "description": "Owner-safe provenance for the immutable snapshot a run was computed from.\n\nDeliberately excludes raw price bars, internal row ids and the owner id.",
+        "properties": {
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "market_as_of": {
+            "format": "date-time",
+            "title": "Market As Of",
+            "type": "string"
+          },
+          "market_content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Market Content Hash",
+            "type": "string"
+          },
+          "market_provider": {
+            "title": "Market Provider",
+            "type": "string"
+          },
+          "market_retrieved_at": {
+            "format": "date-time",
+            "title": "Market Retrieved At",
+            "type": "string"
+          },
+          "news_coverage_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "News Coverage End"
+          },
+          "news_coverage_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "News Coverage Start"
+          },
+          "news_provider": {
+            "title": "News Provider",
+            "type": "string"
+          },
+          "news_quality": {
+            "$ref": "#/components/schemas/ComponentQuality"
+          },
+          "news_retrieved_at": {
+            "format": "date-time",
+            "title": "News Retrieved At",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "format": "uuid",
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "content_hash",
+          "market_provider",
+          "market_content_hash",
+          "market_as_of",
+          "market_retrieved_at",
+          "window_start",
+          "window_end",
+          "news_provider",
+          "news_retrieved_at",
+          "news_quality"
+        ],
+        "title": "SnapshotProvenance",
+        "type": "object"
       },
       "ValidationError": {
         "properties": {

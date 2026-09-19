@@ -54,6 +54,13 @@ class StrictModel(BaseModel):
         "event_time",
         "coverage_start",
         "coverage_end",
+        "market_as_of",
+        "market_retrieved_at",
+        "window_start",
+        "window_end",
+        "news_retrieved_at",
+        "news_coverage_start",
+        "news_coverage_end",
         check_fields=False,
     )
     @classmethod
@@ -180,6 +187,27 @@ class DataQuality(StrictModel):
     model: ModelQuality
 
 
+class SnapshotProvenance(StrictModel):
+    """Owner-safe provenance for the immutable snapshot a run was computed from.
+
+    Deliberately excludes raw price bars, internal row ids and the owner id.
+    """
+
+    snapshot_id: UUID
+    content_hash: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+    market_provider: str
+    market_content_hash: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+    market_as_of: datetime
+    market_retrieved_at: datetime
+    window_start: datetime
+    window_end: datetime
+    news_provider: str
+    news_retrieved_at: datetime
+    news_coverage_start: datetime | None = None
+    news_coverage_end: datetime | None = None
+    news_quality: ComponentQuality
+
+
 class ModelInfo(StrictModel):
     provider: str
     model: str
@@ -210,6 +238,8 @@ class ResearchRun(StrictModel):
     sources: list[EvidenceSource]
     warnings: list[str]
     model_info: ModelInfo | None
+    interpretation: AIInterpretation | None = None
+    snapshot: SnapshotProvenance | None = None
     versions: VersionInfo
     error_code: str | None = None
     error_message_safe: str | None = None

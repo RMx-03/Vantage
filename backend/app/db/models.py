@@ -92,6 +92,9 @@ class ResearchRunRow(Base):
         server_default=text("'[]'::jsonb"),
     )
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    interpretation: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB, nullable=True
+    )
     model_provider: Mapped[str | None] = mapped_column(Text, nullable=True)
     model_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(Text, nullable=True)

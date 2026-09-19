@@ -37,8 +37,8 @@ from app.telemetry.tracing import get_tracer
 logger = logging.getLogger(__name__)
 
 CODE_VERSION = settings.APP_VERSION
-RESPONSE_SCHEMA_VERSION: Literal["research-run-response-v1"] = (
-    "research-run-response-v1"
+RESPONSE_SCHEMA_VERSION: Literal["research-run-response-v2"] = (
+    "research-run-response-v2"
 )
 WORKFLOW_VERSION: Literal["eod-research-v1"] = "eod-research-v1"
 
@@ -232,6 +232,7 @@ class ResearchRunService:
                     warnings=policy.warnings,
                     summary=policy.summary,
                     model_info=model_info,
+                    interpretation=state.get("interpretation"),
                 )
 
             if root_span is not None:
