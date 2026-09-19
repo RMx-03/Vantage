@@ -8,13 +8,15 @@ export default function PanelHeader({
   icon?: string;
 }) {
   return (
-    <h2 className="font-headline text-xs font-bold uppercase tracking-widest text-primary flex items-center gap-2">
+    <div className="flex items-center gap-2">
       {icon && (
-        <span aria-hidden="true" className="material-symbols-outlined text-sm">
+        <span aria-hidden="true" className="material-symbols-outlined text-sm text-primary">
           {icon}
         </span>
       )}
-      {children}
-    </h2>
+      <h2 className="font-headline text-xs font-bold uppercase tracking-widest text-primary">
+        {children}
+      </h2>
+    </div>
   );
 }

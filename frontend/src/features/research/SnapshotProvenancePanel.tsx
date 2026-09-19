@@ -1,4 +1,5 @@
 import type { SnapshotProvenance } from '../../types/research';
+import { Panel, PanelHeader } from '../../components/ui';
 
 interface SnapshotProvenancePanelProps {
   snapshot: SnapshotProvenance | null;
@@ -14,10 +15,10 @@ function formatInstant(value: string | null) {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+      <dt className="text-[11px] font-medium text-outline uppercase tracking-wider">
         {label}
       </dt>
-      <dd className="mt-1 break-all font-mono text-xs text-slate-200">{value}</dd>
+      <dd className="mt-1 break-all font-label text-xs text-on-surface-variant">{value}</dd>
     </div>
   );
 }
@@ -26,11 +27,13 @@ export default function SnapshotProvenancePanel({
   snapshot,
 }: SnapshotProvenancePanelProps) {
   return (
-    <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-sm">
-      <h2 className="text-xl font-semibold text-slate-100 mb-4">Snapshot provenance</h2>
+    <Panel>
+      <div className="mb-4">
+        <PanelHeader icon="snapshot">Snapshot provenance</PanelHeader>
+      </div>
 
       {!snapshot ? (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-outline">
           Snapshot provenance was not recorded for this run.
         </p>
       ) : (
@@ -66,6 +69,6 @@ export default function SnapshotProvenancePanel({
           <Field label="News quality" value={snapshot.news_quality} />
         </dl>
       )}
-    </section>
+    </Panel>
   );
 }
