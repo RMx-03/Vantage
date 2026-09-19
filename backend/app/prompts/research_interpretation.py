@@ -20,7 +20,7 @@ SYSTEM_INSTRUCTION = (
     "observations only. If evidence is inadequate, abstain. When abstained is "
     "true, sentiment_label must be unavailable, sentiment_score must be null, "
     "evidence_ids must be empty, and abstention_reason must be exactly one of "
-    "MODEL_NOT_RUN, MODEL_UNAVAILABLE, MODEL_OUTPUT_INVALID. When abstained is "
+    "MODEL_UNAVAILABLE, MODEL_OUTPUT_INVALID. When abstained is "
     "false, sentiment_label must not be unavailable, abstention_reason must be "
     "null, and evidence_ids must contain at least one supplied evidence ID. "
     "Every cited evidence ID must come from the supplied evidence."

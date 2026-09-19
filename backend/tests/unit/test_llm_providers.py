@@ -12,11 +12,16 @@ from app.domain.errors import VantageError
 from app.domain.research import (
     AIInterpretation,
     ComponentQuality,
+    MarketSnapshot,
+    ModelQuality,
     NewsItem,
     NewsSnapshot,
     ResearchMetric,
 )
+from app.agents.research_graph import create_research_graph
+from app.prompts.research_interpretation import SYSTEM_INSTRUCTION
 from app.providers.llm import (
+    PROVIDER_ABSTENTION_REASONS,
     GeminiInterpretationProvider,
     GroqInterpretationProvider,
     OllamaInterpretationProvider,
@@ -200,9 +205,7 @@ def test_safety_normalization_preserves_accepted_original_text(text) -> None:
     assert result.warnings == [text]
 
 
-@pytest.mark.parametrize(
-    "reason", ["MODEL_NOT_RUN", "MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"]
-)
+@pytest.mark.parametrize("reason", ["MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"])
 def test_stable_abstention_reasons_are_accepted_without_evidence(reason) -> None:
     result = validate_interpretation(
         {**abstained_interpretation_json(), "abstention_reason": reason}, set()
@@ -212,6 +215,48 @@ def test_stable_abstention_reasons_are_accepted_without_evidence(reason) -> None
     assert result.sentiment_label == "unavailable"
     assert result.sentiment_score is None
     assert result.evidence_ids == []
+
+
+def test_model_not_run_is_rejected_from_a_provider() -> None:
+    """A model that ran cannot claim the reserved never-invoked sentinel."""
+    with pytest.raises(VantageError) as caught:
+        validate_interpretation(
+            {**abstained_interpretation_json(), "abstention_reason": "MODEL_NOT_RUN"},
+            set(),
+        )
+    assert caught.value.code == "MODEL_OUTPUT_INVALID"
+    assert "MODEL_NOT_RUN" not in PROVIDER_ABSTENTION_REASONS
+    assert "MODEL_NOT_RUN" not in SYSTEM_INSTRUCTION
+
+
+def test_internal_not_run_placeholder_bypasses_the_provider_validator() -> None:
+    """The code-generated sentinel keeps working; it never crosses the validator."""
+    provider = MagicMock()
+    provider.enabled = True
+    now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
+    market = MarketSnapshot(
+        symbol="AAPL",
+        bars=[],
+        provider="mock_market",
+        retrieved_at=now,
+        as_of=now,
+        latest_completed_session=now.date(),
+        content_hash="a" * 64,
+        quality=ComponentQuality.FRESH,
+    )
+    news = NewsSnapshot(
+        symbol="AAPL",
+        items=[],
+        provider="mock_news",
+        retrieved_at=now,
+        quality=ComponentQuality.MISSING,
+    )
+    state = create_research_graph(provider).invoke(
+        {"symbol": "AAPL", "market": market, "news": news}
+    )
+    provider.interpret.assert_not_called()
+    assert state["interpretation"].abstention_reason == "MODEL_NOT_RUN"
+    assert state["policy"].data_quality.model is ModelQuality.NOT_RUN
 
 
 @pytest.mark.parametrize(

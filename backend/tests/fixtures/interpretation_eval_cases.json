@@ -853,9 +853,9 @@
     }
   },
   {
-    "case_id": "accepted-model_not_run",
-    "category": "accepted_abstention",
-    "accepted": true,
+    "case_id": "reject-model_not_run-from-provider",
+    "category": "contradiction",
+    "accepted": false,
     "allowed_evidence_ids": [],
     "payload": {
       "sentiment_label": "unavailable",

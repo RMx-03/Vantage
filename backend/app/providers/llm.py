@@ -21,9 +21,11 @@ from app.prompts.research_interpretation import (
 from app.providers.contracts import InterpretationProvider
 
 
-_ABSTENTION_REASONS = frozenset(
-    {"MODEL_NOT_RUN", "MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"}
-)
+# Reasons a provider that actually ran may author. `MODEL_NOT_RUN` is the
+# reserved code-generated sentinel for "never invoked" -- quality, policy, and
+# persistence all key off it -- so accepting it here would let a model that ran
+# erase its own execution from the record.
+PROVIDER_ABSTENTION_REASONS = frozenset({"MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"})
 _NUMERIC_CLAIM = re.compile(
     r"\d|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|"
     r"twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
@@ -172,7 +174,7 @@ def validate_interpretation(
             result.sentiment_label == "unavailable"
             and result.sentiment_score is None
             and not result.evidence_ids
-            and result.abstention_reason in _ABSTENTION_REASONS
+            and result.abstention_reason in PROVIDER_ABSTENTION_REASONS
         )
     else:
         consistent = (
