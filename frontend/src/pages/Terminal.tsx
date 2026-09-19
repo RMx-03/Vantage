@@ -1,7 +1,7 @@
-import { useLocation, Outlet } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useLocation, useParams, Outlet } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
-import { listResearchRuns } from '../api/researchRuns';
+import type { ResearchRun } from '../types/research';
 import { MicroLabel } from '../components/ui';
 import SideNav from '../components/nav/SideNav';
 import BottomNav from '../components/nav/BottomNav';
@@ -9,16 +9,10 @@ import BottomNav from '../components/nav/BottomNav';
 export default function Terminal() {
   const { pathname } = useLocation();
   const isSettings = pathname.startsWith('/app/settings');
-  const { user, signOut } = useAuth();
-  const ownerId = user?.id ?? null;
-
-  const { data: historyData } = useQuery({
-    queryKey: ['research-runs', ownerId],
-    queryFn: () => listResearchRuns(),
-    enabled: ownerId !== null,
-  });
-
-  const activeModel = historyData?.items?.[0]?.model_info?.model ?? null;
+  const { signOut } = useAuth();
+  const { runId } = useParams<{ runId?: string }>();
+  const run = useQueryClient().getQueryData<ResearchRun>(['research-run', runId]);
+  const activeModel = run?.model_info?.model ?? null;
 
   return (
     <div className="dark font-body text-on-background selection:bg-primary selection:text-on-primary h-screen overflow-hidden flex flex-col bg-[#0e0e0e]">
