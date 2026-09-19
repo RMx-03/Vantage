@@ -1,0 +1,4 @@
+# Shell scripts are executed by Linux containers (for example the PostgreSQL
+# entrypoint initializer). A CRLF checkout breaks their shebang line, so keep
+# them LF regardless of the contributor platform.
+*.sh text eol=lf
