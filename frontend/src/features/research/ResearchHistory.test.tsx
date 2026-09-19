@@ -85,13 +85,15 @@ async function seedSignedInOwner(
 function renderAsOwner(
   ui: React.ReactElement,
   userId: string | null = 'user-a',
-  queryClient: QueryClient = makeQueryClient()
+  queryClient: QueryClient = makeQueryClient(),
+  options?: { route?: string; path?: string }
 ) {
   authMock.session = userId === null ? null : { user: { id: userId } };
   const view = renderWithRouter(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>{ui}</AuthProvider>
-    </QueryClientProvider>
+    </QueryClientProvider>,
+    options
   );
   return { ...view, queryClient };
 }
@@ -134,16 +136,13 @@ describe('ResearchHistory', () => {
       next_cursor: null,
     });
 
-    const onSelect = vi.fn();
-    renderAsOwner(<ResearchHistory onSelectRun={onSelect} />);
+    renderAsOwner(<ResearchHistory />);
 
-    const runButton = await screen.findByRole('button', {
+    const runLink = await screen.findByRole('link', {
       name: /AAPL.*Jul 31, 2026/i,
     });
-    expect(runButton).toBeVisible();
-
-    await userEvent.click(runButton);
-    expect(onSelect).toHaveBeenCalledWith(historicalRun);
+    expect(runLink).toBeVisible();
+    expect(runLink).toHaveAttribute('href', `/app/research/${historicalRun.run_id}`);
   });
 
   it('renders empty message when no history exists', async () => {
@@ -174,7 +173,7 @@ describe('ResearchHistory', () => {
     expect(loadMoreButton).toBeVisible();
 
     await userEvent.click(loadMoreButton);
-    expect(await screen.findByRole('button', { name: /AAPL.*Jul 31, 2026/i })).toBeVisible();
+    expect(await screen.findByRole('link', { name: /AAPL.*Jul 31, 2026/i })).toBeVisible();
   });
 
   it('recovers from a history request failure', async () => {
@@ -196,10 +195,13 @@ describe('ResearchHistory', () => {
     });
 
     renderAsOwner(
-      <ResearchHistory selectedRunId={historicalRun.run_id} onSelectRun={vi.fn()} />
+      <ResearchHistory />,
+      'user-a',
+      undefined,
+      { route: `/app/research/${historicalRun.run_id}`, path: '/app/research/:runId' }
     );
 
-    const selected = await screen.findByRole('button', {
+    const selected = await screen.findByRole('link', {
       name: /AAPL.*Jul 31, 2026/i,
     });
     expect(selected).toHaveAttribute('aria-current', 'true');
@@ -213,7 +215,7 @@ describe('ResearchHistory', () => {
 
     const { queryClient } = renderAsOwner(<ResearchHistory />, 'user-a');
 
-    await screen.findByRole('button', { name: /AAPL.*Jul 31, 2026/i });
+    await screen.findByRole('link', { name: /AAPL.*Jul 31, 2026/i });
     expect(queryClient.getQueryData(['research-runs', 'user-a'])).toBeDefined();
     expect(queryClient.getQueryData(['research-runs'])).toBeUndefined();
   });
@@ -231,12 +233,12 @@ describe('ResearchHistory', () => {
     seedQuery(queryClient, ['research-runs', 'user-a'], [priorOwnerRun]);
     seedQuery(queryClient, ['research-runs'], [priorOwnerRun]);
     expect(queryClient.getQueryData(['research-runs', 'user-a'])).toBeDefined();
-    expect(screen.queryByRole('button', { name: /TSLA/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /TSLA/i })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /Try again/i }));
 
     expect(await screen.findByText('History is temporarily unavailable.')).toBeVisible();
-    expect(screen.queryByRole('button', { name: /TSLA/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /TSLA/i })).not.toBeInTheDocument();
     expect(queryClient.getQueryData(['research-runs', 'user-a'])).toBeDefined();
   });
 
@@ -246,14 +248,14 @@ describe('ResearchHistory', () => {
     const { queryClient } = renderAsOwner(<ResearchHistory />, 'user-a');
     await seedSignedInOwner(queryClient, 'user-a', [priorOwnerRun]);
 
-    expect(await screen.findByRole('button', { name: /TSLA/i })).toBeVisible();
+    expect(await screen.findByRole('link', { name: /TSLA/i })).toBeVisible();
 
     await emitAuthState('SIGNED_OUT', null);
 
     await waitFor(() =>
       expect(queryClient.getQueryData(['research-runs', 'user-a'])).toBeUndefined()
     );
-    expect(screen.queryByRole('button', { name: /TSLA/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /TSLA/i })).not.toBeInTheDocument();
   });
 
   it('purges prior owner data when a different user signs in', async () => {
@@ -264,12 +266,43 @@ describe('ResearchHistory', () => {
     const { queryClient } = renderAsOwner(<ResearchHistory />, 'user-a');
     await seedSignedInOwner(queryClient, 'user-a', [priorOwnerRun]);
 
-    expect(await screen.findByRole('button', { name: /TSLA/i })).toBeVisible();
+    expect(await screen.findByRole('link', { name: /TSLA/i })).toBeVisible();
 
     await emitAuthState('SIGNED_IN', { user: { id: 'user-b' } });
 
-    expect(await screen.findByRole('button', { name: /AAPL.*Sep 11, 2026/i })).toBeVisible();
-    expect(screen.queryByRole('button', { name: /TSLA/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /AAPL.*Sep 11, 2026/i })).toBeVisible();
+    expect(screen.queryByRole('link', { name: /TSLA/i })).not.toBeInTheDocument();
     expect(queryClient.getQueryData(['research-runs', 'user-a'])).toBeUndefined();
+  });
+
+  it('renders each run as a link to its own url', async () => {
+    vi.mocked(api.listResearchRuns).mockResolvedValue({
+      items: [informationalRun],
+      next_cursor: null,
+    });
+
+    renderAsOwner(<ResearchHistory />, 'user-a', undefined, {
+      route: '/app/research',
+    });
+
+    const link = await screen.findByRole('link', {
+      name: new RegExp(informationalRun.symbol, 'i'),
+    });
+    expect(link).toHaveAttribute('href', `/app/research/${informationalRun.run_id}`);
+  });
+
+  it('works with no props, so the settings run log is never inert', async () => {
+    vi.mocked(api.listResearchRuns).mockResolvedValue({
+      items: [informationalRun],
+      next_cursor: null,
+    });
+
+    renderAsOwner(<ResearchHistory />, 'user-a', undefined, {
+      route: '/app/settings/runs',
+    });
+
+    expect(
+      await screen.findByRole('link', { name: new RegExp(informationalRun.symbol, 'i') })
+    ).toBeVisible();
   });
 });

@@ -175,12 +175,12 @@ describe('ResearchWorkspace', () => {
 
     renderWorkspace();
 
-    const historyBtn = await screen.findByRole('button', {
+    const historyLink = await screen.findByRole('link', {
       name: /AAPL.*Jul 31, 2026/i,
     });
-    expect(historyBtn).toBeVisible();
+    expect(historyLink).toBeVisible();
 
-    await userEvent.click(historyBtn);
+    await userEvent.click(historyLink);
 
     expect(await screen.findByText(/historical/i)).toBeVisible();
     expect(await screen.findByText(/original as of/i)).toBeVisible();
@@ -318,7 +318,7 @@ describe('ResearchWorkspace', () => {
     await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
 
     expect(
-      await screen.findByRole('button', { name: /AAPL.*Jul 31, 2026/i })
+      await screen.findByRole('link', { name: /AAPL.*Jul 31, 2026/i })
     ).toBeVisible();
     expect(queryClient.getQueryData(['research-runs', 'user-a'])).toBeDefined();
     expect(queryClient.getQueryData(['research-runs'])).toBeUndefined();

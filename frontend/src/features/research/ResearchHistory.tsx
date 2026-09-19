@@ -1,19 +1,12 @@
+import { Link, useParams } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { listResearchRuns } from '../../api/researchRuns';
 import { useAuth } from '../../context/AuthContext';
 import { formatUtcDate } from './dateFormatters';
-import type { ResearchRun } from '../../types/research';
 import { StatusChip } from '../../components/ui';
 
-interface ResearchHistoryProps {
-  onSelectRun?: (run: ResearchRun) => void;
-  selectedRunId?: string;
-}
-
-export default function ResearchHistory({
-  onSelectRun,
-  selectedRunId,
-}: ResearchHistoryProps) {
+export default function ResearchHistory() {
+  const { runId } = useParams<{ runId?: string }>();
   const { user } = useAuth();
   const ownerId = user?.id ?? null;
 
@@ -76,13 +69,13 @@ export default function ResearchHistory({
       <div className="space-y-2">
         {runs.map((run) => {
           const formattedDate = formatUtcDate(run.as_of || run.created_at);
-          const isSelected = selectedRunId === run.run_id;
+          const isSelected = runId === run.run_id;
           const accessibleName = `${run.symbol} - ${formattedDate}`;
 
           return (
-            <button
+            <Link
               key={run.run_id}
-              onClick={() => onSelectRun?.(run)}
+              to={`/app/research/${run.run_id}`}
               aria-label={accessibleName}
               aria-current={isSelected ? 'true' : undefined}
               className={`w-full text-left p-4 border transition-colors flex flex-col gap-1.5 ${
@@ -108,7 +101,7 @@ export default function ResearchHistory({
                   {run.run_id.slice(0, 8)}...
                 </span>
               </div>
-            </button>
+            </Link>
           );
         })}
       </div>

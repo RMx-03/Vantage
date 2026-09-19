@@ -281,15 +281,7 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-4">
-              <ResearchHistory
-                onSelectRun={(run) => {
-                  setLiveRunId(null);
-                  queryClient.setQueryData(['research-run', run.run_id], run);
-                  navigate(`/app/research/${run.run_id}`);
-                  setShowHistory(false);
-                }}
-                selectedRunId={selectedRun?.run_id}
-              />
+              <ResearchHistory />
             </div>
           </aside>
         </>
