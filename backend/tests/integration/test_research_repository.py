@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 import json
 import os
+from pathlib import Path
 from threading import Barrier, current_thread, main_thread
 from typing import Any
 from uuid import UUID, uuid4
@@ -650,3 +651,12 @@ def test_snapshot_cannot_be_attached_to_a_terminal_run(
             {"run_id": run.id},
         ).scalar_one()
     assert snapshot_count == 0
+
+
+def test_compose_has_no_embedded_runtime_password(project_root: Path) -> None:
+    compose = (project_root / "docker-compose.yml").read_text()
+    init = (project_root / "backend/docker/postgres/init-runtime-role.sh").read_text()
+    assert "vantage_runtime:vantage_runtime" not in compose
+    assert "PASSWORD 'vantage_runtime'" not in init
+    assert "POSTGRES_RUNTIME_PASSWORD" in compose
+    assert "LLM_PROVIDER: ${LLM_PROVIDER:-disabled}" in compose

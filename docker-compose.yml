@@ -5,11 +5,14 @@ services:
       POSTGRES_USER: vantage_owner
       POSTGRES_PASSWORD: ${POSTGRES_OWNER_PASSWORD:-vantage_owner}
       POSTGRES_DB: vantage
+      # Development-only default. Deployed environments must supply this
+      # from a managed secret store, not this fallback.
+      POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:-vantage_runtime}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/docker/postgres/init-runtime-role.sql:/docker-entrypoint-initdb.d/10-runtime-role.sql:ro
+      - ./backend/docker/postgres/init-runtime-role.sh:/docker-entrypoint-initdb.d/10-runtime-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vantage_owner -d vantage"]
       interval: 5s
@@ -35,7 +38,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+psycopg://vantage_runtime:vantage_runtime@postgres:5432/vantage
+      DATABASE_URL: postgresql+psycopg://vantage_runtime:${POSTGRES_RUNTIME_PASSWORD:-vantage_runtime}@postgres:5432/vantage
       SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
       SUPABASE_KEY: ${SUPABASE_KEY:-local-development-anon-key}
       TRACE_EXPORT_ENABLED: ${TRACE_EXPORT_ENABLED:-false}
@@ -43,7 +46,10 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      # Disabled by default: no model runs unless an operator opts in. The
+      # `local` profile starts Ollama but does not select it — set
+      # LLM_PROVIDER=ollama explicitly to use it.
+      LLM_PROVIDER: ${LLM_PROVIDER:-disabled}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       OLLAMA_BASE_URL: http://ollama:11434
