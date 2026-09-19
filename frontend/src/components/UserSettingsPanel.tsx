@@ -1,6 +1,7 @@
 import { NavLink, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ResearchHistory from '../features/research/ResearchHistory';
+import { Panel, PanelHeader } from './ui';
 
 const TABS = [
   { slug: 'profile', label: 'User Profile' },
@@ -54,10 +55,8 @@ export default function UserSettingsPanel() {
 
       {tab === 'profile' && (
         <div className="space-y-8">
-          <section className="bg-surface-container border border-outline-variant p-8 space-y-6">
-            <h2 className="text-xs uppercase font-label tracking-widest text-outline border-b border-outline-variant/30 pb-2">
-              Authenticated Operator
-            </h2>
+          <Panel className="space-y-6">
+            <PanelHeader>Authenticated Operator</PanelHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1.5">
                 <label className="text-xs font-label text-outline uppercase tracking-widest">
@@ -76,7 +75,7 @@ export default function UserSettingsPanel() {
                 </div>
               </div>
             </div>
-          </section>
+          </Panel>
 
           {/* Session Control Block */}
           <section className="flex justify-end">
@@ -95,12 +94,12 @@ export default function UserSettingsPanel() {
       )}
 
       {tab === 'runs' && (
-        <section className="bg-surface-container border border-outline-variant p-8">
-          <h2 className="text-xs uppercase font-label tracking-widest text-outline border-b border-outline-variant/30 pb-3 mb-6">
-            Durable Research Runs
-          </h2>
+        <Panel>
+          <div className="mb-6">
+            <PanelHeader>Durable Research Runs</PanelHeader>
+          </div>
           <ResearchHistory />
-        </section>
+        </Panel>
       )}
     </div>
   );
