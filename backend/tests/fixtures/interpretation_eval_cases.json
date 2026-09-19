@@ -1557,5 +1557,106 @@
       "abstained": false,
       "abstention_reason": null
     }
+  },
+  {
+    "case_id": "accepted-fiscal-quarter",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "End of quarter results were mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "End of quarter results were mixed."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-third-party-statements",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "The report relied on statements of third parties.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "The report relied on statements of third parties."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-third-party-author",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "The report was prepared by a third party.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "The report was prepared by a third party."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-half-of-revenue",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Half of revenue came from services.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-one-third-of-revenue",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "One third of revenue came from services.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
   }
 ]

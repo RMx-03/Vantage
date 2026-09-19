@@ -29,7 +29,11 @@ _NUMERIC_CLAIM = re.compile(
     r"twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
     r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|"
     r"million|billion|trillion)\b"
-    r"|\b(?:by|of)\s+(?:a\s+)?(?:half|quarter|third|fourth)\b(?!-)"
+    # Fraction words need a quantitative change or an explicit fraction-of
+    # construction; fiscal quarters and third-party attribution are not claims.
+    r"|\b(?:increased?|decreased?|grew|grown|rose|risen|fell|fallen|"
+    r"declined?|dropped?|reduced?|expanded?|contracted?|up|down)\s+by\s+"
+    r"(?:a\s+)?(?:half|quarter|third|fourth)\b(?!-)"
     r"|\b(?:half|quarter|third|fourth)\s+of\b",
     re.IGNORECASE,
 )

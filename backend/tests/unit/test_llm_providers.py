@@ -147,6 +147,8 @@ UNSAFE_AUTHORED_TEXT = [
     "Revenue increased by half.",
     "Costs decreased by a quarter.",
     "Revenue was half of the previous total.",
+    "Half of revenue came from services.",
+    "One third of revenue came from services.",
 ]
 
 
@@ -179,6 +181,9 @@ def test_unsafe_text_is_rejected_in_every_authored_field(field, text) -> None:
         "The statement was half-hearted and the outlook remains uncertain.",
         "Management was criticized for a pattern of half-hearted responses.",
         "The company reported mixed quarter results.",
+        "End of quarter results were mixed.",
+        "The report relied on statements of third parties.",
+        "The report was prepared by a third party.",
         "Buy orders were processed through the exchange.",
         "Sell orders reflected historical activity.",
         "The report describes buy-side and sell-side activity.",
