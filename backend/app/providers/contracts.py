@@ -36,7 +36,9 @@ class NewsProvider(Protocol):
 
 class InterpretationProvider(Protocol):
     name: str
+    model: str
+    enabled: bool
 
     def interpret(
         self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
-    ) -> AIInterpretation: ...
+    ) -> AIInterpretation | None: ...

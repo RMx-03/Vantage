@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import List, Union, Any
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Root of the repository (two levels up from this file: core/ → app/ → backend/)
@@ -62,10 +62,10 @@ class Settings(BaseSettings):
     # Ollama — local LLM server (used from Phase 3 onwards)
     # ------------------------------------------------------------------
     LLM_PROVIDER: str = "ollama"
+    LLM_TIMEOUT_SECONDS: int = Field(default=30, gt=0)
+    LLM_MAX_RETRIES: int = Field(default=1, ge=0)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "vantage-fin"
-    OLLAMA_TIMEOUT_SECONDS: int = 60
-    OLLAMA_MAX_RETRIES: int = 2
 
     # ------------------------------------------------------------------
     # Multi-Provider Cloud LLMs (Phase 3 Architecture Shift)

@@ -17,6 +17,6 @@ class ResearchState(TypedDict, total=False):
     market: MarketSnapshot
     news: NewsSnapshot
     metrics: list[ResearchMetric]
-    interpretation: AIInterpretation
+    interpretation: AIInterpretation | None
     model_failure_code: str | None
     policy: PolicyResult

@@ -26,6 +26,7 @@ from app.domain.research import (
     NewsSnapshot,
     OverallQuality,
     ResearchMetric,
+    ResearchRun,
     ResearchStatus,
     VersionInfo,
 )
@@ -36,6 +37,8 @@ from app.services.research_run import (
     get_research_service,
 )
 from app.services.policy import PolicyResult
+from app.providers.llm import build_interpretation_provider
+from app.agents.research_graph import create_research_graph
 
 
 @pytest.fixture
@@ -281,6 +284,7 @@ def test_invalid_price_fallback_preserves_exchange_cutoff(
 @pytest.fixture
 def mock_llm():
     llm = MagicMock()
+    llm.enabled = True
     llm.name = "gemini"
     llm.model = "gemini-2.5-flash"
 
@@ -299,6 +303,81 @@ def mock_llm():
 
     llm.interpret.side_effect = interpret
     return llm
+
+
+def test_disabled_model_skips_workflow_call_and_exposes_null_model_info(
+    test_user_id, mock_market, mock_news, monkeypatch
+):
+    now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
+    provider = build_interpretation_provider(
+        Settings(_env_file=None, LLM_PROVIDER="disabled")
+    )
+    no_call = MagicMock(side_effect=AssertionError("disabled model must not be called"))
+    monkeypatch.setattr(provider, "interpret", no_call)
+    market = mock_market.fetch_daily_snapshot(
+        "AAPL", date(2026, 8, 1), date(2026, 9, 14), now
+    )
+    news = mock_news.fetch_company_news("AAPL", now, now, 7, 10)
+    state = create_research_graph(provider).invoke(
+        {"symbol": "AAPL", "market": market, "news": news}
+    )
+    assert state["interpretation"] is None
+    assert state["model_failure_code"] is None
+    assert state["policy"].data_quality.model == ModelQuality.NOT_RUN
+    assert state["policy"].metrics
+    assert not any(r.code.startswith("MODEL_") for r in state["policy"].reasons)
+
+    class MemoryRepo:
+        def create_running(self, *, versions, **kwargs):
+            self.versions = versions
+            self.row = RunningResearchRun(
+                id=1,
+                public_id=uuid4(),
+                user_id=test_user_id,
+                symbol="AAPL",
+                workflow_status="running",
+                created_at=now,
+                started_at=now,
+            )
+            return self.row
+
+        def save_snapshot(self, internal_id, user_id, market, news, sources):
+            self.sources = sources
+            return "c" * 64
+
+        def finalize_success(self, *, internal_id, user_id, **kwargs):
+            return ResearchRun(
+                run_id=self.row.public_id,
+                symbol="AAPL",
+                created_at=now,
+                completed_at=now,
+                workflow_status="succeeded",
+                sources=self.sources,
+                versions=self.versions,
+                **kwargs,
+            )
+
+    service = ResearchRunService(
+        repo=MemoryRepo(),
+        market_provider=mock_market,
+        news_provider=mock_news,
+        interpretation_provider=provider,
+    )
+    app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
+        id=test_user_id
+    )
+    app.dependency_overrides[get_research_service] = lambda: service
+    try:
+        with TestClient(app) as client:
+            response = client.post("/api/v1/research-runs", json={"symbol": "AAPL"})
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 201
+    body = response.json()
+    assert body["model_info"] is None
+    assert body["data_quality"]["model"] == "not_run"
+    assert body["metrics"]
+    no_call.assert_not_called()
 
 
 class TrackingRepo(ResearchRunRepository):

@@ -157,6 +157,7 @@ def mock_news():
 @pytest.fixture
 def mock_llm():
     llm = MagicMock()
+    llm.enabled = True
     llm.name = "gemini"
     llm.model = "gemini-2.5-flash"
 

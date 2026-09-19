@@ -1,7 +1,11 @@
 from datetime import UTC, datetime
+import json
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 import pytest
+import httpx
+from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.domain.errors import VantageError
@@ -308,3 +312,246 @@ def test_build_interpretation_provider(provider_name: str, expected_cls: type) -
     settings = Settings(LLM_PROVIDER=provider_name)
     provider = build_interpretation_provider(settings)
     assert isinstance(provider, expected_cls)
+
+
+@pytest.fixture(params=["gemini", "groq", "ollama"])
+def adapter(request, monkeypatch):
+    """Replace only the network boundary; run the real builder and adapter."""
+    name = request.param
+
+    def build(outcomes, *, max_retries=1, timeout_seconds=7):
+        def response(payload):
+            if isinstance(payload, (Exception, httpx.Response, SimpleNamespace)):
+                return payload
+            content = payload if isinstance(payload, str) else json.dumps(payload)
+            if name == "gemini":
+                return SimpleNamespace(text=content, candidates=[])
+            if name == "groq":
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(content=content, refusal=None)
+                        )
+                    ]
+                )
+            return httpx.Response(
+                200,
+                json={"message": {"content": content}},
+                request=httpx.Request("POST", "http://localhost/api/chat"),
+            )
+
+        call = MagicMock(side_effect=[response(item) for item in outcomes])
+        client = MagicMock()
+        if name == "gemini":
+            from google import genai
+
+            client.models.generate_content = call
+            constructor = MagicMock(return_value=client)
+            monkeypatch.setattr(genai, "Client", constructor)
+        elif name == "groq":
+            import groq
+
+            client.chat.completions.create = call
+            constructor = MagicMock(return_value=client)
+            monkeypatch.setattr(groq, "Groq", constructor)
+        else:
+            client.post = call
+            constructor = MagicMock(return_value=client)
+            monkeypatch.setattr(httpx, "Client", constructor)
+        provider = build_interpretation_provider(
+            Settings(
+                _env_file=None,
+                LLM_PROVIDER=name,
+                GEMINI_API_KEY="test",
+                GROQ_API_KEY="test",
+                LLM_MAX_RETRIES=max_retries,
+                LLM_TIMEOUT_SECONDS=timeout_seconds,
+            )
+        )
+        return provider, call, constructor
+
+    return name, build
+
+
+def transport_error(name, kind):
+    request = httpx.Request("POST", "http://localhost/model")
+    if kind == "timeout":
+        return httpx.ReadTimeout("timed out", request=request)
+    if kind == "connection":
+        if name == "groq":
+            from groq import APIConnectionError
+
+            return APIConnectionError(request=request)
+        return httpx.ConnectError("connection failed", request=request)
+    if kind == "misleading_message":
+        return ValueError("timeout in invalid configuration")
+    if name == "gemini":
+        from google.genai.errors import APIError
+
+        return APIError(kind, {"error": {"message": "provider error"}})
+    response = httpx.Response(kind, request=request)
+    if name == "groq":
+        from groq import APIStatusError
+
+        return APIStatusError("provider error", response=response, body=None)
+    return httpx.HTTPStatusError("provider error", request=request, response=response)
+
+
+@pytest.mark.parametrize("kind", ["timeout", "connection", 429, 500, 503])
+def test_each_adapter_retries_transient_failure(adapter, kind, metrics, news):
+    name, build = adapter
+    provider, call, _ = build(
+        [transport_error(name, kind), valid_interpretation_json()]
+    )
+    result = provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    assert result.sentiment_label == "mixed"
+    assert result.evidence_ids == ["news-1"]
+    assert call.call_count == 2
+
+
+@pytest.mark.parametrize("max_retries", [0, 1, 3])
+@pytest.mark.parametrize("error_kind", ["timeout", "builtin_timeout"])
+def test_each_adapter_exhausts_exact_retry_budget(
+    adapter, max_retries, error_kind, metrics, news
+):
+    name, build = adapter
+    error = (
+        TimeoutError()
+        if error_kind == "builtin_timeout"
+        else transport_error(name, error_kind)
+    )
+    provider, call, _ = build([error] * 6, max_retries=max_retries)
+    with pytest.raises(VantageError) as caught:
+        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    assert caught.value.code == "MODEL_UNAVAILABLE"
+    assert call.call_count == max_retries + 1
+
+
+@pytest.mark.parametrize("kind", [400, 401, 403, 404, 422, "misleading_message"])
+def test_each_adapter_never_retries_permanent_errors(adapter, kind, metrics, news):
+    name, build = adapter
+    provider, call, _ = build(
+        [transport_error(name, kind), valid_interpretation_json()]
+    )
+    with pytest.raises(VantageError):
+        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    assert call.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "not json",
+        "",
+        {"bad": "schema"},
+        {**valid_interpretation_json(), "evidence_ids": ["invented"]},
+        {**valid_interpretation_json(), "summary": "Revenue grew 25 percent."},
+    ],
+)
+def test_each_adapter_never_retries_invalid_output(adapter, payload, metrics, news):
+    _, build = adapter
+    provider, call, _ = build([payload, valid_interpretation_json()])
+    with pytest.raises(VantageError) as caught:
+        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    assert caught.value.code == "MODEL_OUTPUT_INVALID"
+    assert call.call_count == 1
+
+
+def test_each_adapter_applies_timeout_and_disables_sdk_retries(adapter, metrics, news):
+    name, build = adapter
+    provider, call, constructor = build([valid_interpretation_json()])
+    provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    options = constructor.call_args.kwargs
+    if name == "gemini":
+        assert options["http_options"].timeout == 7000
+        assert options["http_options"].retry_options.attempts == 1
+    elif name == "groq":
+        assert options["timeout"] == 7
+        assert options["max_retries"] == 0
+    else:
+        assert options["timeout"] == 7
+        assert call.call_args.kwargs["timeout"] == 7
+
+
+def test_disabled_provider_is_first_class(metrics, news):
+    provider = build_interpretation_provider(
+        Settings(_env_file=None, LLM_PROVIDER="disabled")
+    )
+    assert provider.name == "disabled"
+    assert provider.model == "none"
+    assert provider.enabled is False
+    assert provider.interpret(symbol="AAPL", metrics=metrics, news=news) is None
+
+
+@pytest.mark.parametrize(
+    "values",
+    [{"LLM_TIMEOUT_SECONDS": 0}, {"LLM_TIMEOUT_SECONDS": -1}, {"LLM_MAX_RETRIES": -1}],
+)
+def test_invalid_execution_bounds_are_rejected(values):
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **values)
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422, 429, 500, 503])
+@pytest.mark.parametrize("adapter", ["ollama"], indirect=True)
+def test_ollama_http_status_controls_retry(adapter, status, metrics, news):
+    _, build = adapter
+    response = httpx.Response(
+        status, request=httpx.Request("POST", "http://localhost/api/chat")
+    )
+    provider, call, _ = build([response, valid_interpretation_json()])
+    if status == 429 or status >= 500:
+        assert (
+            provider.interpret(
+                symbol="AAPL", metrics=metrics, news=news
+            ).sentiment_label
+            == "mixed"
+        )
+        assert call.call_count == 2
+    else:
+        with pytest.raises(VantageError):
+            provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+        assert call.call_count == 1
+
+
+@pytest.mark.parametrize("factory", [gemini_factory, groq_factory, ollama_factory])
+def test_every_provider_refusal_is_not_retried(factory, metrics, news):
+    provider = factory(failure="refusal")
+    with pytest.raises(VantageError) as caught:
+        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    assert caught.value.code == "MODEL_OUTPUT_INVALID"
+    client = provider._client
+    call = {
+        "gemini": client.models.generate_content,
+        "groq": client.chat.completions.create,
+        "ollama": client.post,
+    }[provider.name]
+    assert call.call_count == 1
+
+
+@pytest.mark.parametrize("adapter", ["groq"], indirect=True)
+def test_groq_no_choices_is_not_retried(adapter, metrics, news):
+    _, build = adapter
+    provider, call, _ = build(
+        [SimpleNamespace(choices=[]), valid_interpretation_json()]
+    )
+    with pytest.raises(VantageError) as caught:
+        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    assert caught.value.code == "MODEL_OUTPUT_INVALID"
+    assert call.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "body", [None, [], {"message": None}, {"message": []}, {"message": {"content": 12}}]
+)
+@pytest.mark.parametrize("adapter", ["ollama"], indirect=True)
+def test_ollama_invalid_envelope_is_not_retried(adapter, body, metrics, news):
+    _, build = adapter
+    response = httpx.Response(
+        200, json=body, request=httpx.Request("POST", "http://localhost/api/chat")
+    )
+    provider, call, _ = build([response, valid_interpretation_json()])
+    with pytest.raises(VantageError) as caught:
+        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    assert caught.value.code == "MODEL_OUTPUT_INVALID"
+    assert call.call_count == 1

@@ -1,6 +1,9 @@
 import json
 import re
+from collections.abc import Callable
 from typing import Any
+import httpx
+from groq import APIConnectionError
 from pydantic import ValidationError
 
 from app.core.config import Settings
@@ -15,6 +18,54 @@ from app.prompts.research_interpretation import (
     build_interpretation_input,
 )
 from app.providers.contracts import InterpretationProvider
+
+
+def is_transient_model_error(error: Exception) -> bool:
+    """Retry only typed transport failures or explicit retryable HTTP statuses."""
+    if isinstance(
+        error,
+        (
+            TimeoutError,
+            ConnectionError,
+            httpx.TimeoutException,
+            httpx.NetworkError,
+            APIConnectionError,
+        ),
+    ):
+        return True
+    status = getattr(error, "status_code", None)
+    if status is None:
+        status = getattr(error, "code", None)
+    if status is None:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+    return isinstance(status, int) and (status == 429 or 500 <= status < 600)
+
+
+def _request_with_retries(request: Callable[[], Any], max_retries: int) -> Any:
+    for attempt in range(max_retries + 1):
+        try:
+            return request()
+        except VantageError:
+            raise
+        except Exception as exc:
+            if attempt < max_retries and is_transient_model_error(exc):
+                continue
+            raise VantageError(
+                code="MODEL_UNAVAILABLE",
+                safe_message="AI interpretation provider was unavailable.",
+            ) from exc
+    raise ValueError("max_retries must be non-negative")
+
+
+class DisabledInterpretationProvider(InterpretationProvider):
+    name: str = "disabled"
+    model: str = "none"
+    enabled: bool = False
+
+    def interpret(
+        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+    ) -> None:
+        return None
 
 
 def validate_interpretation(
@@ -45,23 +96,35 @@ def validate_interpretation(
 
 class GeminiInterpretationProvider(InterpretationProvider):
     name: str = "gemini"
+    enabled: bool = True
 
     def __init__(
         self,
         api_key: str = "",
         model: str = "gemini-2.5-flash",
         client: Any = None,
+        timeout_seconds: int = 30,
+        max_retries: int = 1,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self._client = client
+        self.timeout_seconds = timeout_seconds
+        self.max_retries = max_retries
 
     def _get_client(self) -> Any:
         if self._client is not None:
             return self._client
         from google import genai
+        from google.genai import types
 
-        return genai.Client(api_key=self.api_key)
+        return genai.Client(
+            api_key=self.api_key,
+            http_options=types.HttpOptions(
+                timeout=self.timeout_seconds * 1000,
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
+        )
 
     def interpret(
         self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
@@ -80,65 +143,28 @@ class GeminiInterpretationProvider(InterpretationProvider):
 
         client = self._get_client()
 
-        for attempt in range(2):
-            try:
-                response = client.models.generate_content(
-                    model=self.model,
-                    contents=user_content,
-                    config=config,
-                )
-            except Exception as e:
-                err_str = str(e).lower()
-                is_timeout = (
-                    isinstance(e, (TimeoutError, ConnectionError))
-                    or "timeout" in err_str
-                    or "deadline" in err_str
-                )
-                if is_timeout and attempt == 0:
-                    continue
-                code = "MODEL_UNAVAILABLE" if is_timeout else "MODEL_UNAVAILABLE"
-                raise VantageError(
-                    code=code,
-                    safe_message="AI interpretation provider was unavailable.",
-                ) from e
-
-            # Check refusal
-            if hasattr(response, "candidates") and response.candidates:
-                candidate = response.candidates[0]
-                finish_reason = getattr(candidate, "finish_reason", None)
-                if finish_reason and str(finish_reason).upper() in {
-                    "SAFETY",
-                    "RECITATION",
-                    "BLOCKLIST",
-                    "OTHER",
-                }:
-                    raise VantageError(
-                        code="MODEL_OUTPUT_INVALID",
-                        safe_message="Model refused or blocked content.",
-                    )
-
-            raw_text = getattr(response, "text", "") or ""
-            if not raw_text.strip():
+        response = _request_with_retries(
+            lambda: client.models.generate_content(
+                model=self.model, contents=user_content, config=config
+            ),
+            self.max_retries,
+        )
+        if getattr(response, "candidates", None):
+            finish_reason = getattr(response.candidates[0], "finish_reason", None)
+            reason = getattr(finish_reason, "value", finish_reason)
+            if reason in {"SAFETY", "RECITATION", "BLOCKLIST", "OTHER"}:
                 raise VantageError(
                     code="MODEL_OUTPUT_INVALID",
-                    safe_message="Model returned empty response.",
+                    safe_message="Model refused or blocked content.",
                 )
-
-            try:
-                return validate_interpretation(raw_text, allowed_evidence_ids)
-            except VantageError:
-                if attempt == 0:
-                    continue
-                raise
-
-        raise VantageError(
-            code="MODEL_OUTPUT_INVALID",
-            safe_message="AI interpretation was unavailable after retry.",
+        return validate_interpretation(
+            getattr(response, "text", "") or "", allowed_evidence_ids
         )
 
 
 class GroqInterpretationProvider(InterpretationProvider):
     name: str = "groq"
+    enabled: bool = True
 
     def __init__(
         self,
@@ -146,6 +172,8 @@ class GroqInterpretationProvider(InterpretationProvider):
         model: str = "llama-3.3-70b-versatile",
         json_schema_models: list[str] | None = None,
         client: Any = None,
+        timeout_seconds: int = 30,
+        max_retries: int = 1,
     ) -> None:
         self.api_key = api_key
         self.model = model
@@ -155,13 +183,17 @@ class GroqInterpretationProvider(InterpretationProvider):
             "llama-3.1-8b-instant",
         ]
         self._client = client
+        self.timeout_seconds = timeout_seconds
+        self.max_retries = max_retries
 
     def _get_client(self) -> Any:
         if self._client is not None:
             return self._client
         import groq
 
-        return groq.Groq(api_key=self.api_key)
+        return groq.Groq(
+            api_key=self.api_key, timeout=self.timeout_seconds, max_retries=0
+        )
 
     def interpret(
         self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
@@ -189,72 +221,44 @@ class GroqInterpretationProvider(InterpretationProvider):
 
         client = self._get_client()
 
-        for attempt in range(2):
-            try:
-                completion = client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    response_format=response_format,
-                )
-            except Exception as e:
-                err_str = str(e).lower()
-                is_timeout = (
-                    isinstance(e, (TimeoutError, ConnectionError))
-                    or "timeout" in err_str
-                )
-                if is_timeout and attempt == 0:
-                    continue
-                code = "MODEL_UNAVAILABLE" if is_timeout else "MODEL_UNAVAILABLE"
-                raise VantageError(
-                    code=code,
-                    safe_message="AI interpretation provider was unavailable.",
-                ) from e
-
-            choices = getattr(completion, "choices", None)
-            if not choices:
-                if attempt == 0:
-                    continue
-                raise VantageError(
-                    code="MODEL_OUTPUT_INVALID",
-                    safe_message="Groq returned no choices.",
-                )
-
-            choice = choices[0]
-            message = getattr(choice, "message", None)
-            refusal = getattr(message, "refusal", None)
-            if refusal:
-                raise VantageError(
-                    code="MODEL_OUTPUT_INVALID",
-                    safe_message="AI interpretation provider refused the request.",
-                )
-
-            raw_content = getattr(message, "content", "") or ""
-            try:
-                return validate_interpretation(raw_content, allowed_evidence_ids)
-            except VantageError:
-                if attempt == 0:
-                    continue
-                raise
-
-        raise VantageError(
-            code="MODEL_OUTPUT_INVALID",
-            safe_message="AI interpretation was unavailable after retry.",
+        completion = _request_with_retries(
+            lambda: client.chat.completions.create(
+                model=self.model, messages=messages, response_format=response_format
+            ),
+            self.max_retries,
+        )
+        choices = getattr(completion, "choices", None)
+        if not choices:
+            raise VantageError(
+                code="MODEL_OUTPUT_INVALID", safe_message="Groq returned no choices."
+            )
+        message = getattr(choices[0], "message", None)
+        if getattr(message, "refusal", None):
+            raise VantageError(
+                code="MODEL_OUTPUT_INVALID",
+                safe_message="AI interpretation provider refused the request.",
+            )
+        return validate_interpretation(
+            getattr(message, "content", "") or "", allowed_evidence_ids
         )
 
 
 class OllamaInterpretationProvider(InterpretationProvider):
     name: str = "ollama"
+    enabled: bool = True
 
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
         model: str = "vantage-fin",
-        timeout_seconds: int = 60,
+        timeout_seconds: int = 30,
         client: Any = None,
+        max_retries: int = 1,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_seconds = timeout_seconds
+        self.max_retries = max_retries
         self._client = client
 
     def _get_client(self) -> Any:
@@ -283,82 +287,54 @@ class OllamaInterpretationProvider(InterpretationProvider):
 
         client = self._get_client()
 
-        for attempt in range(2):
-            try:
-                resp = client.post(
-                    f"{self.base_url}/api/chat",
-                    json=payload,
-                )
-            except Exception as e:
-                err_str = str(e).lower()
-                is_timeout = (
-                    isinstance(e, (TimeoutError, ConnectionError))
-                    or "timeout" in err_str
-                )
-                if is_timeout and attempt == 0:
-                    continue
-                raise VantageError(
-                    code="MODEL_UNAVAILABLE",
-                    safe_message="AI interpretation provider was unavailable.",
-                ) from e
-
-            status_code = getattr(resp, "status_code", 200)
-            if status_code in {401, 403}:
+        def request() -> Any:
+            response = client.post(
+                f"{self.base_url}/api/chat", json=payload, timeout=self.timeout_seconds
+            )
+            if response.status_code in {401, 403}:
                 raise VantageError(
                     code="MODEL_OUTPUT_INVALID",
                     safe_message="Ollama request was refused or unauthorized.",
                 )
-            if status_code >= 400:
-                if attempt == 0:
-                    continue
-                raise VantageError(
-                    code="MODEL_UNAVAILABLE",
-                    safe_message="AI interpretation provider returned an error.",
-                )
+            response.raise_for_status()
+            return response
 
-            try:
-                resp_json = resp.json()
-                msg = resp_json.get("message", {})
-                content = msg.get("content", "")
-            except Exception:
-                if attempt == 0:
-                    continue
-                raise VantageError(
-                    code="MODEL_OUTPUT_INVALID",
-                    safe_message="Failed to parse Ollama response.",
-                )
-
-            try:
-                return validate_interpretation(content, allowed_evidence_ids)
-            except VantageError:
-                if attempt == 0:
-                    continue
-                raise
-
-        raise VantageError(
-            code="MODEL_OUTPUT_INVALID",
-            safe_message="AI interpretation was unavailable after retry.",
-        )
+        resp = _request_with_retries(request, self.max_retries)
+        try:
+            content = resp.json()["message"]["content"]
+        except (ValueError, TypeError, KeyError) as exc:
+            raise VantageError(
+                code="MODEL_OUTPUT_INVALID",
+                safe_message="Failed to parse Ollama response.",
+            ) from exc
+        return validate_interpretation(content, allowed_evidence_ids)
 
 
 def build_interpretation_provider(settings: Settings) -> InterpretationProvider:
     provider = settings.LLM_PROVIDER.lower().strip()
+    if provider == "disabled":
+        return DisabledInterpretationProvider()
     if provider == "gemini":
         return GeminiInterpretationProvider(
             api_key=settings.GEMINI_API_KEY,
             model=settings.GEMINI_MODEL,
+            timeout_seconds=settings.LLM_TIMEOUT_SECONDS,
+            max_retries=settings.LLM_MAX_RETRIES,
         )
     if provider == "groq":
         return GroqInterpretationProvider(
             api_key=settings.GROQ_API_KEY,
             model=settings.GROQ_MODEL,
             json_schema_models=settings.GROQ_JSON_SCHEMA_MODELS,
+            timeout_seconds=settings.LLM_TIMEOUT_SECONDS,
+            max_retries=settings.LLM_MAX_RETRIES,
         )
     if provider == "ollama":
         return OllamaInterpretationProvider(
             base_url=settings.OLLAMA_BASE_URL,
             model=settings.OLLAMA_MODEL,
-            timeout_seconds=settings.OLLAMA_TIMEOUT_SECONDS,
+            timeout_seconds=settings.LLM_TIMEOUT_SECONDS,
+            max_retries=settings.LLM_MAX_RETRIES,
         )
     raise VantageError(
         code="CONFIG_ERROR",

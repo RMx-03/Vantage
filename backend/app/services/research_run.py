@@ -208,11 +208,15 @@ class ResearchRunService:
 
             policy: PolicyResult = state["policy"]
             failure_code = state.get("model_failure_code")
-            model_info = ModelInfo(
-                provider=self.llm.name,
-                model=getattr(self.llm, "model", "default"),
-                prompt_version="research-interpretation-v1",
-                failure_code=failure_code,
+            model_info = (
+                ModelInfo(
+                    provider=self.llm.name,
+                    model=self.llm.model,
+                    prompt_version="research-interpretation-v1",
+                    failure_code=failure_code,
+                )
+                if self.llm.enabled
+                else None
             )
 
             with tracer.start_as_current_span("persist_result") as p_span:

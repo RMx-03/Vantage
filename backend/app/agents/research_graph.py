@@ -32,6 +32,8 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
                 return {"market": market, "metrics": []}
 
     def skip_interpretation_node(state: ResearchState) -> dict[str, Any]:
+        if not interpretation_provider.enabled:
+            return {"interpretation": None, "model_failure_code": None}
         return {
             "interpretation": AIInterpretation(
                 sentiment_label="unavailable",
@@ -43,6 +45,8 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
         }
 
     def interpretation_route(state: ResearchState) -> str:
+        if not interpretation_provider.enabled:
+            return "skip_interpretation"
         market = state["market"]
         is_usable = (
             market.error_code is None
@@ -99,7 +103,13 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
             policy_result = apply_policy(
                 market=state["market"],
                 news=state["news"],
-                interpretation=state["interpretation"],
+                interpretation=state["interpretation"]
+                or AIInterpretation(
+                    sentiment_label="unavailable",
+                    summary="Automated interpretation is disabled.",
+                    abstained=True,
+                    abstention_reason="MODEL_NOT_RUN",
+                ),
                 metrics=state.get("metrics", []),
             )
             return {"policy": policy_result}
