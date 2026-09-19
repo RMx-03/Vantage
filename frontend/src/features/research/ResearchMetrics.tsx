@@ -1,4 +1,5 @@
 import type { ResearchMetric } from '../../types/research';
+import { Panel, PanelHeader } from '../../components/ui';
 
 interface ResearchMetricsProps {
   metrics: ResearchMetric[];
@@ -45,14 +46,14 @@ export default function ResearchMetrics({ metrics, version }: ResearchMetricsPro
   const hasVolatility = metrics.some((m) => m.key.includes('volatility'));
 
   return (
-    <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-sm">
+    <Panel>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold text-slate-100">Metrics</h2>
-        <span className="text-xs font-mono text-slate-500">{version}</span>
+        <PanelHeader icon="analytics">Metrics</PanelHeader>
+        <span className="text-xs font-label text-outline">{version}</span>
       </div>
 
       {metrics.length === 0 ? (
-        <p className="text-sm text-slate-400">No quantitative metrics computed for this run.</p>
+        <p className="text-sm text-outline">No quantitative metrics computed for this run.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {metrics.map((metric) => {
@@ -62,39 +63,42 @@ export default function ResearchMetrics({ metrics, version }: ResearchMetricsPro
             return (
               <div
                 key={metric.key}
-                className="flex flex-col justify-between rounded-lg border border-slate-800 bg-slate-950/40 p-4 transition-all hover:border-slate-700"
+                className="flex flex-col justify-between border border-outline-variant/30 bg-surface-container-low p-4 transition-colors hover:border-outline-variant"
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-xs font-medium text-slate-400 truncate" title={metric.label}>
+                    <span
+                      className="text-xs font-medium text-outline truncate font-label"
+                      title={metric.label}
+                    >
                       {metric.label}
                     </span>
                     <span
-                      className={`text-[10px] uppercase font-mono px-1.5 py-0.5 rounded border ${
+                      className={`text-[10px] uppercase font-label px-1.5 py-0.5 border ${
                         metric.quality === 'fresh'
-                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                          ? 'border-outline-variant bg-surface-container-highest text-on-surface'
                           : metric.quality === 'stale'
-                            ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-                            : 'border-slate-700 bg-slate-800 text-slate-400'
+                            ? 'border-outline bg-surface-container-highest text-on-surface-variant font-bold'
+                            : 'border-outline-variant/30 bg-surface-container text-outline'
                       }`}
                     >
                       {metric.quality}
                     </span>
                   </div>
                   <div
-                    className={`text-2xl font-bold font-mono tracking-tight mt-1 ${
-                      isUnavailable ? 'text-slate-500 text-lg font-sans' : 'text-slate-100'
+                    className={`text-2xl font-bold font-label tracking-tight mt-1 ${
+                      isUnavailable ? 'text-outline text-lg font-body' : 'text-on-surface'
                     }`}
                   >
                     {formatted}
                   </div>
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-400">
+                <div className="mt-3 pt-2 border-t border-outline-variant/30 flex items-center justify-between text-[11px] text-outline font-label">
                   <span>
                     {metric.window_sessions ? `${metric.window_sessions} sessions` : 'Full snapshot'}
                   </span>
-                  <span className="font-mono text-[10px]">{metric.key}</span>
+                  <span className="text-[10px]">{metric.key}</span>
                 </div>
               </div>
             );
@@ -103,10 +107,10 @@ export default function ResearchMetrics({ metrics, version }: ResearchMetricsPro
       )}
 
       {hasVolatility && (
-        <p className="mt-4 text-xs text-slate-400 italic">
+        <p className="mt-4 text-xs text-outline italic font-body">
           * Volatility: 20-session annualized single-security variability; not portfolio risk.
         </p>
       )}
-    </section>
+    </Panel>
   );
 }
