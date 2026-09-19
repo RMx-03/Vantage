@@ -175,6 +175,7 @@ describe('ResearchWorkspace', () => {
 
     renderWorkspace();
 
+    await userEvent.click(screen.getByRole('button', { name: /View History/i }));
     const historyLink = await screen.findByRole('link', {
       name: /AAPL.*Jul 31, 2026/i,
     });
@@ -290,13 +291,13 @@ describe('ResearchWorkspace', () => {
 
   it('toggles owner-scoped history without affecting the workspace', async () => {
     renderWorkspace();
+    expect(screen.queryByRole('heading', { name: /Research History/i })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /View History/i }));
     expect(await screen.findByRole('heading', { name: /Research History/i })).toBeVisible();
 
     await userEvent.click(screen.getByRole('button', { name: /Hide History/i }));
     expect(screen.queryByRole('heading', { name: /Research History/i })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: /View History/i }));
-    expect(screen.getByRole('heading', { name: /Research History/i })).toBeVisible();
   });
 
   it('does not display fabricated latency or node counts', async () => {
@@ -312,11 +313,13 @@ describe('ResearchWorkspace', () => {
     vi.mocked(api.createResearchRun).mockResolvedValueOnce(informationalRun);
 
     const { queryClient } = renderWorkspace();
+    await userEvent.click(screen.getByRole('button', { name: /View History/i }));
     expect(await screen.findByText(/no previous research runs/i)).toBeVisible();
 
     await userEvent.type(screen.getByLabelText(/US equity symbol/i), 'AAPL');
     await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
 
+    await userEvent.click(await screen.findByRole('button', { name: /View History/i }));
     expect(
       await screen.findByRole('link', { name: /AAPL.*Jul 31, 2026/i })
     ).toBeVisible();
@@ -361,8 +364,10 @@ describe('ResearchWorkspace', () => {
       { route: '/app/research' }
     );
 
-    // The provider has hydrated once the owner-scoped history has resolved.
-    expect(await screen.findByText(/no previous research runs/i)).toBeVisible();
+    // The provider has hydrated once the owner workspace renders.
+    await waitFor(() => {
+      expect(screen.getByLabelText(/US equity symbol/i)).toBeVisible();
+    });
 
     const input = screen.getByLabelText(/US equity symbol/i);
     await userEvent.type(input, 'AAPL');

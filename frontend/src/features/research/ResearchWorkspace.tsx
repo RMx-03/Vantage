@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { createResearchRun, listResearchRuns, getResearchRun, ApiError } from '../../api/researchRuns';
 import { useAuth } from '../../context/AuthContext';
 import type { ResearchRun } from '../../types/research';
 import ResearchResult from './ResearchResult';
 import ResearchHistory from './ResearchHistory';
 import { buildStatusStrip, recentSymbols } from './runChrome';
-import { MicroLabel } from '../../components/ui';
+import { MicroLabel, Drawer } from '../../components/ui';
 
 const SYMBOL_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
 
@@ -34,11 +34,16 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   const [symbolInput, setSymbolInput] = useState('');
   const { runId } = useParams<{ runId?: string }>();
   const [liveRunId, setLiveRunId] = useState<string | null>(null);
-  const [showHistory, setShowHistory] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { signOut } = useAuth();
+
+  useEffect(() => {
+    setShowHistory(false);
+  }, [pathname]);
 
   const { data: routeRun } = useQuery({
     queryKey: ['research-run', runId],
@@ -49,13 +54,17 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   const selectedRun: ResearchRun | null = routeRun ?? null;
   const isHistorical = Boolean(runId) && runId !== liveRunId;
 
-  const { data: historyData } = useQuery({
+  const { data: historyData } = useInfiniteQuery({
     queryKey: ['research-runs', ownerId],
-    queryFn: () => listResearchRuns(),
+    queryFn: ({ pageParam }) => listResearchRuns(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage?.next_cursor ?? undefined,
     enabled: ownerId !== null,
+    staleTime: 30_000,
   });
 
-  const recent = recentSymbols(historyData?.items ?? []);
+  const allRuns = historyData?.pages.flatMap((page) => page.items) ?? [];
+  const recent = recentSymbols(allRuns);
 
   const normalizedSymbol = symbolInput.trim().toUpperCase();
   const isValidSymbol = SYMBOL_PATTERN.test(normalizedSymbol);
@@ -151,7 +160,7 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   };
 
   return (
-    <div className={`w-full max-w-5xl mx-auto px-6 flex flex-col gap-12 ${showHistory ? 'lg:pr-[444px]' : ''}`}>
+    <div className="w-full max-w-5xl mx-auto px-6 flex flex-col gap-12">
       {/* Search Header and Input */}
       <section className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
@@ -257,35 +266,9 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
       )}
 
       {/* Slide-over History Drawer */}
-      {showHistory && (
-        <>
-          <div
-            onClick={() => setShowHistory(false)}
-            className="lg:hidden fixed inset-0 z-40 bg-surface-container-lowest/60"
-            aria-hidden="true"
-          />
-          <aside className="fixed right-0 top-16 bottom-0 z-50 w-full lg:w-[420px] bg-surface-container border-l border-outline-variant flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant shrink-0">
-              <h2 className="font-headline text-xs uppercase tracking-widest text-primary">
-                Research History
-              </h2>
-              <button
-                type="button"
-                onClick={() => setShowHistory(false)}
-                aria-label="Close history"
-                className="text-outline hover:text-on-surface transition-colors"
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-lg">
-                  close
-                </span>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-6 py-4">
-              <ResearchHistory />
-            </div>
-          </aside>
-        </>
-      )}
+      <Drawer open={showHistory} onClose={() => setShowHistory(false)} title="Research History">
+        <ResearchHistory />
+      </Drawer>
     </div>
   );
 }

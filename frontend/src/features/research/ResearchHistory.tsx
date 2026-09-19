@@ -27,6 +27,7 @@ export default function ResearchHistory() {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     enabled: ownerId !== null,
+    staleTime: 30_000,
   });
 
   const runs = data?.pages.flatMap((page) => page.items) ?? [];
