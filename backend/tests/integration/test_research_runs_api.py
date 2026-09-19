@@ -33,6 +33,7 @@ from app.domain.research import (
     VersionInfo,
 )
 from app.main import app
+from app.prompts.research_interpretation import PROMPT_VERSION
 from app.repositories.research_runs import ResearchRunRepository, RunningResearchRun
 from app.services.research_run import (
     ResearchRunService,
@@ -591,17 +592,41 @@ def test_inadequate_prices_skip_model_and_return_typed_outcome(
     assert body["research_status"] == "insufficient_data"
     assert body["data_quality"]["model"] == "not_run"
     assert body["interpretation"] is None
+    assert body["model_info"] is None
     mock_llm.interpret.assert_not_called()
 
     with SessionFactory() as session:
         stored = session.execute(
             text(
-                "SELECT interpretation FROM vantage_app.research_runs "
+                "SELECT interpretation, model_provider, model_name, prompt_version "
+                "FROM vantage_app.research_runs WHERE public_id = :public_id"
+            ),
+            {"public_id": body["run_id"]},
+        ).one()
+    assert stored == (None, None, None, None)
+
+
+def test_new_run_records_the_prompt_version_the_code_sends(
+    client: TestClient, auth_headers: dict, mock_llm
+) -> None:
+    """Recorded provenance must name the prompt that actually produced the output."""
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert PROMPT_VERSION == "research-interpretation-v2"
+    assert body["model_info"]["prompt_version"] == PROMPT_VERSION
+
+    with SessionFactory() as session:
+        stored = session.execute(
+            text(
+                "SELECT prompt_version FROM vantage_app.research_runs "
                 "WHERE public_id = :public_id"
             ),
             {"public_id": body["run_id"]},
         ).scalar_one()
-    assert stored is None
+    assert stored == PROMPT_VERSION
 
 
 def test_get_cross_user_returns_404(

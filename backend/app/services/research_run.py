@@ -22,6 +22,7 @@ from app.providers.contracts import (
     MarketDataProvider,
     NewsProvider,
 )
+from app.prompts.research_interpretation import PROMPT_VERSION
 from app.providers.llm import build_interpretation_provider
 from app.providers.yfinance_provider import (
     YFinanceSnapshotProvider,
@@ -210,8 +211,9 @@ class ResearchRunService:
             failure_code = state.get("model_failure_code")
             # The graph keeps a safe placeholder interpretation on the skip path
             # so policy and quality can derive `not_run` from it. Nothing the
-            # model never produced may be persisted or published, so the
-            # placeholder stops at this persistence boundary.
+            # model never produced may be persisted or published, so both the
+            # placeholder and the model provenance that would imply an
+            # invocation stop at this persistence boundary.
             model_was_attempted = policy.data_quality.model != ModelQuality.NOT_RUN
             interpretation = (
                 state.get("interpretation") if model_was_attempted else None
@@ -220,10 +222,10 @@ class ResearchRunService:
                 ModelInfo(
                     provider=self.llm.name,
                     model=self.llm.model,
-                    prompt_version="research-interpretation-v1",
+                    prompt_version=PROMPT_VERSION,
                     failure_code=failure_code,
                 )
-                if self.llm.enabled
+                if model_was_attempted and self.llm.enabled
                 else None
             )
 
