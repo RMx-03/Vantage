@@ -1,6 +1,6 @@
 import type { ResearchRun } from '../../types/research';
 import { formatUtcDate } from './dateFormatters';
-import { StatusChip } from '../../components/ui';
+import { StatusChip, CopyButton } from '../../components/ui';
 import ReasonsPanel from './ReasonsPanel';
 import ResearchMetrics from './ResearchMetrics';
 import DataQualityPanel from './DataQualityPanel';
@@ -43,6 +43,10 @@ export default function ResearchResult({ run, historical = false }: ResearchResu
           </div>
 
           <div className="flex items-center gap-2">
+            <CopyButton
+              value={`${window.location.origin}/app/research/${run.run_id}`}
+              label="Copy link to this run"
+            />
             <StatusChip status={run.research_status} />
           </div>
         </div>

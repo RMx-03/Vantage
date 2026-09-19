@@ -1,4 +1,5 @@
 import { mapResearchError } from './researchErrors';
+import { CopyButton } from '../../components/ui';
 
 interface ResearchErrorProps {
   error: unknown;
@@ -24,8 +25,18 @@ export default function ResearchError({
 
       {(runId || requestId) && (
         <div className="mt-3 flex flex-wrap gap-4 text-xs font-label text-error">
-          {runId && <span>Run ID: {runId}</span>}
-          {requestId && <span>Request ID: {requestId}</span>}
+          {runId && (
+            <span className="inline-flex items-center gap-2">
+              <span>Run ID: {runId}</span>
+              <CopyButton value={runId} label="Copy run ID" />
+            </span>
+          )}
+          {requestId && (
+            <span className="inline-flex items-center gap-2">
+              <span>Request ID: {requestId}</span>
+              <CopyButton value={requestId} label="Copy request ID" />
+            </span>
+          )}
         </div>
       )}
 

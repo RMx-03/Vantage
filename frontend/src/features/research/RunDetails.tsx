@@ -1,5 +1,5 @@
 import type { ResearchRun } from '../../types/research';
-import { Panel } from '../../components/ui';
+import { Panel, CopyButton } from '../../components/ui';
 
 interface RunDetailsProps {
   run: ResearchRun;
@@ -21,9 +21,10 @@ export default function RunDetails({ run }: RunDetailsProps) {
 
         <div className="mt-4 pt-4 border-t border-outline-variant/30 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-label text-on-surface-variant">
           <div className="space-y-2">
-            <div>
+            <div className="flex items-center gap-2">
               <span className="text-outline">Run ID: </span>
               <span className="select-all text-primary">{run.run_id}</span>
+              <CopyButton value={run.run_id} label="Copy run ID" />
             </div>
             <div>
               <span className="text-outline">Symbol: </span>
