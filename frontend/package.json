@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "check:design": "node scripts/check-design-drift.mjs",
     "preview": "vite preview",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
