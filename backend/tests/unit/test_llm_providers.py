@@ -50,6 +50,148 @@ def valid_interpretation_json() -> dict[str, Any]:
     }
 
 
+def abstained_interpretation_json() -> dict[str, Any]:
+    return {
+        **valid_interpretation_json(),
+        "sentiment_label": "unavailable",
+        "sentiment_score": None,
+        "evidence_ids": [],
+        "abstained": True,
+        "abstention_reason": "MODEL_UNAVAILABLE",
+    }
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"sentiment_label": "positive"},
+        {"sentiment_score": 0.0},
+        {"evidence_ids": ["news-1"]},
+        {"abstention_reason": None},
+        {"abstention_reason": ""},
+        {"abstention_reason": "INSUFFICIENT_EVIDENCE"},
+        {"abstention_reason": "Confidence is 80 percent."},
+    ],
+)
+def test_abstention_requires_consistent_unavailable_state(overrides) -> None:
+    with pytest.raises(VantageError) as caught:
+        validate_interpretation(
+            {**abstained_interpretation_json(), **overrides}, {"news-1"}
+        )
+    assert caught.value.code == "MODEL_OUTPUT_INVALID"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"sentiment_label": "unavailable"},
+        {"evidence_ids": []},
+        {"abstention_reason": "MODEL_UNAVAILABLE"},
+        {"abstention_reason": ""},
+    ],
+)
+def test_non_abstention_requires_evidence_and_no_reason(overrides) -> None:
+    with pytest.raises(VantageError) as caught:
+        validate_interpretation(
+            {**valid_interpretation_json(), **overrides}, {"news-1"}
+        )
+    assert caught.value.code == "MODEL_OUTPUT_INVALID"
+
+
+UNSAFE_AUTHORED_TEXT = [
+    "Revenue grew 25 percent.",
+    "Confidence is eighty percent.",
+    "Buy this stock.",
+    "SELL the shares now.",
+    "Hold this security.",
+    "Consider buying this security.",
+    "Investors should sell their shares.",
+    "We recommend holding the stock.",
+    "This stock is a strong buy.",
+    "The shares have a hold rating.",
+    "Invest in this company.",
+    "Add this stock to your portfolio.",
+    "This investment is suitable for retirees.",
+    "This stock fits your risk tolerance.",
+    "The stock is ideal for conservative investors.",
+    "The target price is above the current market price.",
+    "Our price target remains unchanged.",
+    "These returns are guaranteed.",
+    "This is a risk-free investment.",
+    "The stock will rise soon.",
+    "The share price will certainly fall next quarter.",
+    "The stock is certain to outperform.",
+    "The price is going to increase.",
+    "Buy now.",
+    "Sell immediately.",
+    "Hold.",
+    "We recommend this stock.",
+    "Purchase this security.",
+    "Avoid this stock.",
+    "This stock is a good fit for you.",
+    "This is a suitable investment for your retirement.",
+    "The stock will go up.",
+    "You will make money.",
+    "The shares cannot lose value.",
+    "Positive returns are certain.",
+]
+
+
+@pytest.mark.parametrize("text", UNSAFE_AUTHORED_TEXT)
+@pytest.mark.parametrize("field", ["summary", "warnings", "abstention_reason"])
+def test_unsafe_text_is_rejected_in_every_authored_field(field, text) -> None:
+    payload = valid_interpretation_json()
+    payload[field] = (
+        ["Historical evidence is limited.", text] if field == "warnings" else text
+    )
+    with pytest.raises(VantageError) as caught:
+        validate_interpretation(payload, {"news-1"})
+    assert caught.value.code == "MODEL_OUTPUT_INVALID"
+
+
+@pytest.mark.parametrize(
+    "reason", ["MODEL_NOT_RUN", "MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"]
+)
+def test_stable_abstention_reasons_are_accepted_without_evidence(reason) -> None:
+    result = validate_interpretation(
+        {**abstained_interpretation_json(), "abstention_reason": reason}, set()
+    )
+    assert result.abstained is True
+    assert result.abstention_reason == reason
+    assert result.sentiment_label == "unavailable"
+    assert result.sentiment_score is None
+    assert result.evidence_ids == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Shareholder concerns reflected a household spending slowdown.",
+        "The company sells software through resellers.",
+        "The company put its expansion plans on hold.",
+        "Buyback activity and seller demand were discussed in the report.",
+        "Management discussed goodwill and withholding obligations.",
+        "Reported earnings were mixed and future performance remains uncertain.",
+        "The company sells shares through its employee benefit program.",
+        "The report recommends monitoring the quality of historical evidence.",
+    ],
+)
+@pytest.mark.parametrize("score", [None, -1.0, 0.0, 1.0])
+def test_cited_historical_text_avoids_substring_false_positives(text, score) -> None:
+    result = validate_interpretation(
+        {
+            **valid_interpretation_json(),
+            "summary": text,
+            "warnings": [text],
+            "sentiment_score": score,
+        },
+        {"news-1"},
+    )
+    assert result.summary == text
+    assert result.sentiment_score == score
+    assert result.evidence_ids == ["news-1"]
+
+
 @pytest.fixture
 def fixed_now() -> datetime:
     return datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
@@ -446,6 +588,10 @@ def test_each_adapter_never_retries_permanent_errors(adapter, kind, metrics, new
         {"bad": "schema"},
         {**valid_interpretation_json(), "evidence_ids": ["invented"]},
         {**valid_interpretation_json(), "summary": "Revenue grew 25 percent."},
+        {**valid_interpretation_json(), "evidence_ids": []},
+        {**valid_interpretation_json(), "summary": "The stock will rise soon."},
+        {**valid_interpretation_json(), "warnings": ["Consider buying this security."]},
+        {**abstained_interpretation_json(), "sentiment_label": "positive"},
     ],
 )
 def test_each_adapter_never_retries_invalid_output(adapter, payload, metrics, news):

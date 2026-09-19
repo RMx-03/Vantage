@@ -20,6 +20,45 @@ from app.prompts.research_interpretation import (
 from app.providers.contracts import InterpretationProvider
 
 
+_ABSTENTION_REASONS = frozenset(
+    {"MODEL_NOT_RUN", "MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"}
+)
+_NUMERIC_CLAIM = re.compile(
+    r"\d|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|"
+    r"twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
+    r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|"
+    r"million|billion|trillion)\b",
+    re.IGNORECASE,
+)
+_UNSAFE_LANGUAGE = re.compile(
+    # Trading instructions and recommendations; do not match shareholder,
+    # resellers, buybacks, or historical statements such as "plans on hold".
+    r"\b(?:buy|buying|sell|selling|hold|holding|purchase|avoid|recommend)\s+"
+    r"(?:(?:this|that|the|these|those|your|their|our|its|a)\s+)?"
+    r"(?:stock|stocks|share|shares|security|securities|position|positions)\b"
+    r"|\b(?:should|must|consider|recommend|recommended|recommends|advise|advised)\b"
+    r"(?:\s+\w+){0,3}\s+(?:buy|buying|sell|selling|hold|holding|invest|investing)\b"
+    r"|\b(?:a|strong)\s+(?:buy|sell|hold)\b"
+    r"|\b(?:buy|sell|hold)\s+(?:rating|recommendation)\b"
+    r"|(?:^|[.!?;:]\s*)(?:buy|sell|hold)(?:\s+(?:now|immediately))?\s*(?:[.!?;:]|$)"
+    r"|\b(?:invest|investing)\s+in\b"
+    r"|\b(?:suitable|appropriate|ideal|perfect)\s+for\b"
+    r"|\bgood\s+fit\s+for\s+(?:you|your|investors|retirees)\b"
+    r"|\byour\s+(?:portfolio|risk\s+tolerance|investment\s+goals|financial\s+"
+    r"(?:goals|situation)|retirement)\b"
+    r"|\b(?:target[\s-]+prices?|price[\s-]+targets?)\b"
+    r"|\b(?:guarantee|guarantees|guaranteed|guaranteeing|risk[\s-]+free)\b"
+    # Certain future outcomes are outside historical interpretation.
+    r"|\b(?:will|going\s+to|certain\s+to|sure\s+to|bound\s+to|set\s+to)\b"
+    r"(?:\s+\w+){0,3}\s+(?:rise|fall|gain|grow|increase|decrease|drop|rally|"
+    r"recover|outperform|underperform|deliver|return|profit|double|triple|"
+    r"go\s+(?:up|down)|make\s+money)\b"
+    r"|\b(?:cannot|can't|can\s+not)\s+lose\b"
+    r"|\b(?:returns?|profits?|gains?)\s+(?:are|is)\s+(?:certain|assured)\b",
+    re.IGNORECASE,
+)
+
+
 def is_transient_model_error(error: Exception) -> bool:
     """Retry only typed transport failures or explicit retryable HTTP statuses."""
     if isinstance(
@@ -85,11 +124,34 @@ def validate_interpretation(
             code="MODEL_OUTPUT_INVALID",
             safe_message="AI interpretation referenced unsupported evidence.",
         )
-    authored_text = " ".join([result.summary, *result.warnings])
-    if re.search(r"\d", authored_text):
+    authored_fields = [result.summary, *result.warnings, result.abstention_reason or ""]
+    if any(_NUMERIC_CLAIM.search(text) for text in authored_fields):
         raise VantageError(
             code="MODEL_OUTPUT_INVALID",
             safe_message="AI interpretation contained unsupported numeric claims.",
+        )
+    if any(_UNSAFE_LANGUAGE.search(text) for text in authored_fields):
+        raise VantageError(
+            code="MODEL_OUTPUT_INVALID",
+            safe_message="AI interpretation contained unsupported advisory or predictive language.",
+        )
+    if result.abstained:
+        consistent = (
+            result.sentiment_label == "unavailable"
+            and result.sentiment_score is None
+            and not result.evidence_ids
+            and result.abstention_reason in _ABSTENTION_REASONS
+        )
+    else:
+        consistent = (
+            result.sentiment_label != "unavailable"
+            and result.abstention_reason is None
+            and bool(result.evidence_ids)
+        )
+    if not consistent:
+        raise VantageError(
+            code="MODEL_OUTPUT_INVALID",
+            safe_message="AI interpretation contained inconsistent abstention fields.",
         )
     return result
 
