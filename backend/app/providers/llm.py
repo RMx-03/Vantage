@@ -1,5 +1,6 @@
 import json
 import re
+import unicodedata
 from collections.abc import Callable
 from typing import Any
 import httpx
@@ -27,7 +28,9 @@ _NUMERIC_CLAIM = re.compile(
     r"\d|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|"
     r"twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
     r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|"
-    r"million|billion|trillion)\b",
+    r"million|billion|trillion)\b"
+    r"|\b(?:by|of)\s+(?:a\s+)?(?:half|quarter|third|fourth)\b(?!-)"
+    r"|\b(?:half|quarter|third|fourth)\s+of\b",
     re.IGNORECASE,
 )
 _UNSAFE_LANGUAGE = re.compile(
@@ -41,6 +44,12 @@ _UNSAFE_LANGUAGE = re.compile(
     r"|\b(?:a|strong)\s+(?:buy|sell|hold)\b"
     r"|\b(?:buy|sell|hold)\s+(?:rating|recommendation)\b"
     r"|(?:^|[.!?;:]\s*)(?:buy|sell|hold)(?:\s+(?:now|immediately))?\s*(?:[.!?;:]|$)"
+    r"|(?:^|[.!?;:]\s*)\s*(?:buy|sell|hold)\s+"
+    r"(?:(?:onto|on\s+to)\s+)?"
+    r"(?:it|them|(?-i:\$?[A-Z]{1,5}(?:[.-][A-Z])?)|"
+    r"(?:(?:this|that|the|these|those|your|their)\s+)?"
+    r"(?:shares?|stocks?|securities|security|positions?))"
+    r"(?:\s+(?:now|immediately))?\s*(?:[.!?;:]|$)"
     r"|\b(?:invest|investing)\s+in\b"
     r"|\b(?:suitable|appropriate|ideal|perfect)\s+for\b"
     r"|\bgood\s+fit\s+for\s+(?:you|your|investors|retirees)\b"
@@ -57,6 +66,20 @@ _UNSAFE_LANGUAGE = re.compile(
     r"|\b(?:returns?|profits?|gains?)\s+(?:are|is)\s+(?:certain|assured)\b",
     re.IGNORECASE,
 )
+
+
+def _normalize_safety_text(text: str) -> str:
+    """Fold typography for matching only; keep the returned model text intact."""
+    normalized = unicodedata.normalize("NFKC", text)
+    return "".join(
+        "-"
+        if unicodedata.category(char) == "Pd" or char == "\u2212"
+        else "'"
+        if char in "\u2018\u2019\u02bc"
+        else char
+        for char in normalized
+        if char not in "*_"
+    ).strip()
 
 
 def is_transient_model_error(error: Exception) -> bool:
@@ -125,12 +148,17 @@ def validate_interpretation(
             safe_message="AI interpretation referenced unsupported evidence.",
         )
     authored_fields = [result.summary, *result.warnings, result.abstention_reason or ""]
-    if any(_NUMERIC_CLAIM.search(text) for text in authored_fields):
+    normalized_fields = [_normalize_safety_text(text) for text in authored_fields]
+    # Check the original as well: NFKC maps some numeric characters (e.g. Roman
+    # numerals) into ordinary letters, which would otherwise hide the claim.
+    if any(char.isnumeric() for text in authored_fields for char in text) or any(
+        _NUMERIC_CLAIM.search(text) for text in normalized_fields
+    ):
         raise VantageError(
             code="MODEL_OUTPUT_INVALID",
             safe_message="AI interpretation contained unsupported numeric claims.",
         )
-    if any(_UNSAFE_LANGUAGE.search(text) for text in authored_fields):
+    if any(_UNSAFE_LANGUAGE.search(text) for text in normalized_fields):
         raise VantageError(
             code="MODEL_OUTPUT_INVALID",
             safe_message="AI interpretation contained unsupported advisory or predictive language.",

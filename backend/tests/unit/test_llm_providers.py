@@ -134,19 +134,65 @@ UNSAFE_AUTHORED_TEXT = [
     "You will make money.",
     "The shares cannot lose value.",
     "Positive returns are certain.",
+    "Buy AAPL.",
+    "Sell it now.",
+    "Hold onto these shares.",
+    "  Buy now.",
+    "This is a risk\u2011free investment.",
+    "The shares can\u2019t lose value.",
+    "Recommendation: **BUY**",
+    "Recommendation: __SELL__",
+    "Revenue grew \u00bd percent.",
+    "Revenue grew \u216b percent.",
+    "Revenue increased by half.",
+    "Costs decreased by a quarter.",
+    "Revenue was half of the previous total.",
 ]
 
 
 @pytest.mark.parametrize("text", UNSAFE_AUTHORED_TEXT)
 @pytest.mark.parametrize("field", ["summary", "warnings", "abstention_reason"])
 def test_unsafe_text_is_rejected_in_every_authored_field(field, text) -> None:
-    payload = valid_interpretation_json()
+    payload = (
+        abstained_interpretation_json()
+        if field == "abstention_reason"
+        else valid_interpretation_json()
+    )
     payload[field] = (
         ["Historical evidence is limited.", text] if field == "warnings" else text
     )
     with pytest.raises(VantageError) as caught:
         validate_interpretation(payload, {"news-1"})
     assert caught.value.code == "MODEL_OUTPUT_INVALID"
+    # A contradictory reason alone also fails the state invariant. Require the
+    # text scanner's diagnosis so omitting reason scanning cannot pass this test.
+    assert caught.value.safe_message in {
+        "AI interpretation contained unsupported numeric claims.",
+        "AI interpretation contained unsupported advisory or predictive language.",
+    }
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Shareholder concerns were discussed at half-time.",
+        "The statement was half-hearted and the outlook remains uncertain.",
+        "Management was criticized for a pattern of half-hearted responses.",
+        "The company reported mixed quarter results.",
+        "Buy orders were processed through the exchange.",
+        "Sell orders reflected historical activity.",
+        "The report describes buy-side and sell-side activity.",
+        "The company put its expansion plans on hold.",
+        "The company\u2019s **historical** outlook remains uncertain\u2014coverage is limited.",
+    ],
+)
+def test_safety_normalization_preserves_accepted_original_text(text) -> None:
+    result = validate_interpretation(
+        {**valid_interpretation_json(), "summary": text, "warnings": [text]},
+        {"news-1"},
+    )
+    assert result.summary == text
+    assert result.warnings == [text]
 
 
 @pytest.mark.parametrize(
@@ -592,6 +638,9 @@ def test_each_adapter_never_retries_permanent_errors(adapter, kind, metrics, new
         {**valid_interpretation_json(), "summary": "The stock will rise soon."},
         {**valid_interpretation_json(), "warnings": ["Consider buying this security."]},
         {**abstained_interpretation_json(), "sentiment_label": "positive"},
+        {**valid_interpretation_json(), "summary": "Buy AAPL."},
+        {**valid_interpretation_json(), "warnings": ["Recommendation: **BUY**"]},
+        {**valid_interpretation_json(), "summary": "Revenue grew \u00bd percent."},
     ],
 )
 def test_each_adapter_never_retries_invalid_output(adapter, payload, metrics, news):
