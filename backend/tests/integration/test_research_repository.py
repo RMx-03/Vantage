@@ -718,3 +718,44 @@ def test_history_pagination_visits_tied_rows_exactly_once(
     assert len(seen) == len(created)
     assert set(seen) == {r.public_id for r in created}
     assert seen == sorted(seen, key=lambda run_id: run_id.bytes, reverse=True)
+
+
+def test_read_path_drops_a_hostile_stored_url(
+    repo: ResearchRunRepository, running_run, valid_snapshot, user_id: UUID
+) -> None:
+    """Historical rows are immutable, so the allowlist runs on the way out."""
+    market, news, sources = valid_snapshot
+    repo.save_snapshot(running_run.id, user_id, market, news, sources)
+    with SessionFactory() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE vantage_app.research_sources SET url = :url "
+                "WHERE snapshot_id = (SELECT id FROM vantage_app.research_snapshots "
+                "WHERE run_id = :run_id)"
+            ),
+            {"url": "javascript:alert(1)", "run_id": running_run.id},
+        )
+
+    stored = repo.get_owned(user_id=user_id, public_id=running_run.public_id)
+
+    assert stored is not None
+    assert stored.sources
+    assert all(s.url is None for s in stored.sources)
+    with SessionFactory() as session:
+        raw_url = session.execute(
+            text(
+                "SELECT url FROM vantage_app.research_sources WHERE snapshot_id = "
+                "(SELECT id FROM vantage_app.research_snapshots WHERE run_id = :run_id)"
+            ),
+            {"run_id": running_run.id},
+        ).scalar_one()
+    assert raw_url == "javascript:alert(1)"
+
+
+def test_write_and_read_paths_share_one_url_allowlist() -> None:
+    """One implementation, so the two boundaries can never drift apart."""
+    from app.domain.urls import normalize_url as shared_normalize_url
+    import app.providers.yfinance_provider as yfinance_provider
+
+    assert yfinance_provider.normalize_url is shared_normalize_url
+    assert research_runs_module.normalize_url is shared_normalize_url

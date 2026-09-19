@@ -873,3 +873,41 @@ def test_run_records_the_immutable_code_revision(
         f"/api/v1/research-runs/{created['run_id']}", headers=auth_headers
     ).json()
     assert fetched["versions"]["code"] == settings.CODE_REVISION
+
+
+def test_legacy_hostile_stored_url_is_dropped_by_the_read_path(
+    client: TestClient, auth_headers: dict
+) -> None:
+    """A row persisted before the write-side allowlist must not leave the API."""
+    created = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    ).json()
+
+    with SessionFactory() as session, session.begin():
+        updated = session.execute(
+            text(
+                "UPDATE vantage_app.research_sources SET url = :url "
+                "WHERE snapshot_id = ("
+                "SELECT s.id FROM vantage_app.research_snapshots s "
+                "JOIN vantage_app.research_runs r ON r.id = s.run_id "
+                "WHERE r.public_id = :public_id)"
+            ),
+            {
+                "url": "javascript:alert(document.cookie)",
+                "public_id": UUID(created["run_id"]),
+            },
+        ).rowcount
+    assert updated == 1
+
+    fetched = client.get(
+        f"/api/v1/research-runs/{created['run_id']}", headers=auth_headers
+    )
+
+    assert fetched.status_code == 200
+    sources = fetched.json()["sources"]
+    assert sources
+    assert [s["url"] for s in sources] == [None] * len(sources)
+
+    listed = client.get("/api/v1/research-runs?limit=10", headers=auth_headers).json()
+    listed_run = next(r for r in listed["items"] if r["run_id"] == created["run_id"])
+    assert [s["url"] for s in listed_run["sources"]] == [None] * len(sources)

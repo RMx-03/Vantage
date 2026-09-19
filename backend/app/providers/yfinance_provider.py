@@ -4,7 +4,6 @@ import json
 import math
 from numbers import Real
 from typing import Any, cast
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import exchange_calendars
 import pandas as pd
@@ -18,6 +17,7 @@ from app.domain.research import (
     NewsItem,
     NewsSnapshot,
 )
+from app.domain.urls import normalize_url
 from app.providers.contracts import MarketDataProvider, NewsProvider
 
 XNYS = exchange_calendars.get_calendar("XNYS")
@@ -46,34 +46,6 @@ def trailing_xnys_sessions(end_session: date, count: int = 21) -> tuple[date, ..
     end = XNYS.date_to_session(end_session, direction="previous")
     sessions = XNYS.sessions_window(end, -count)
     return tuple(session.date() for session in sessions)
-
-
-# A normalized URL is rendered as an href by clients, so only web schemes may
-# survive. A provider payload carrying javascript:, data:, or a scheme-relative
-# reference is dropped rather than passed through as a link target.
-ALLOWED_URL_SCHEMES = frozenset({"http", "https"})
-
-
-def normalize_url(url: str | None) -> str | None:
-    if not url or not url.strip():
-        return None
-    try:
-        parsed = urlparse(url.strip())
-        if parsed.scheme.lower() not in ALLOWED_URL_SCHEMES or not parsed.netloc:
-            return None
-        clean_netloc = parsed.netloc.lower()
-        clean_scheme = parsed.scheme.lower()
-        clean_path = parsed.path.rstrip("/")
-        # Filter out tracking query params like utm_*
-        query_pairs = [
-            (k, v)
-            for k, v in parse_qsl(parsed.query, keep_blank_values=False)
-            if not k.lower().startswith("utm_")
-        ]
-        clean_query = urlencode(sorted(query_pairs))
-        return urlunparse((clean_scheme, clean_netloc, clean_path, "", clean_query, ""))
-    except Exception:
-        return None
 
 
 def snapshot_hash(symbol: str, bars: list[DailyBar]) -> str:

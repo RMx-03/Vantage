@@ -34,6 +34,7 @@ from app.domain.research import (
     VersionInfo,
     WorkflowStatus,
 )
+from app.domain.urls import normalize_url
 from app.services.snapshots import combined_snapshot_hash
 
 
@@ -399,7 +400,11 @@ class ResearchRunRepository:
                         provider=s.provider,
                         publisher=s.publisher if s.publisher else None,
                         title=s.title,
-                        url=s.url if s.url else None,
+                        # Rows written before the provider gained a scheme
+                        # allowlist can still hold a hostile URL. Historical
+                        # runs are immutable, so the same allowlist is applied
+                        # on read and a rejected URL is served as null.
+                        url=normalize_url(s.url),
                         event_time=s.event_time,
                         retrieved_at=s.retrieved_at,
                         content_hash=s.content_hash if s.content_hash else None,
