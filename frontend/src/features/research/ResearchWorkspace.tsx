@@ -132,7 +132,7 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-6 flex flex-col gap-12">
+    <div className={`w-full max-w-5xl mx-auto px-6 flex flex-col gap-12 ${showHistory ? 'lg:pr-[444px]' : ''}`}>
       {/* Search Header and Input */}
       <section className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
@@ -242,7 +242,7 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
         <>
           <div
             onClick={() => setShowHistory(false)}
-            className="fixed inset-0 z-40 bg-surface-container-lowest/60"
+            className="lg:hidden fixed inset-0 z-40 bg-surface-container-lowest/60"
             aria-hidden="true"
           />
           <aside className="fixed right-0 top-16 bottom-0 z-50 w-full lg:w-[420px] bg-surface-container border-l border-outline-variant flex flex-col">
