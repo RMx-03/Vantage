@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { createResearchRun, listResearchRuns, getResearchRun, ApiError } from '../../api/researchRuns';
+import { createResearchRun, listResearchRuns, getResearchRun } from '../../api/researchRuns';
 import { useAuth } from '../../context/AuthContext';
 import type { ResearchRun } from '../../types/research';
 import ResearchResult from './ResearchResult';
 import ResearchHistory from './ResearchHistory';
+import ResearchError from './ResearchError';
 import { buildStatusStrip, recentSymbols } from './runChrome';
 import { MicroLabel, Drawer } from '../../components/ui';
 
@@ -96,68 +97,6 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
     navigate('/auth');
   };
 
-  const renderError = () => {
-    if (!mutation.isError) return null;
-
-    const err = mutation.error;
-    let message = 'Research run could not be completed. Please try again later.';
-    let isAuthError = false;
-    let runId: string | null | undefined = null;
-    let requestId: string | null | undefined = null;
-
-    if (err instanceof ApiError) {
-      runId = err.error.run_id;
-      requestId = err.error.request_id;
-      if (err.status === 401) {
-        isAuthError = true;
-        message = 'Your session has expired. Please sign in again.';
-      } else if (err.status === 503 || err.error.code === 'MARKET_DATA_FAILED') {
-        message =
-          'Market data could not be retrieved. Please check the symbol and market hours, then retry.';
-      } else {
-        message = err.error.message || message;
-      }
-    } else if (err instanceof Error) {
-      message = err.message || message;
-    }
-
-    return (
-      <div className="border border-error-container bg-error-container/30 p-6 text-error">
-        <div className="flex items-center gap-2 font-semibold text-error text-base mb-2 font-label">
-          <span>Failed to complete research run</span>
-        </div>
-        <p className="text-sm leading-relaxed text-error font-body">{message}</p>
-
-        {(runId || requestId) && (
-          <div className="mt-3 flex flex-wrap gap-4 text-xs font-label text-error">
-            {runId && <span>Run ID: {runId}</span>}
-            {requestId && <span>Request ID: {requestId}</span>}
-          </div>
-        )}
-
-        <div className="mt-4 flex items-center gap-3">
-          {isAuthError ? (
-            <button
-              type="button"
-              onClick={handleSignOutAndAuth}
-              className="px-4 py-2 bg-error text-on-error text-xs font-bold font-label uppercase tracking-widest transition-opacity hover:opacity-90"
-            >
-              Sign in again
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleRetry}
-              disabled={mutation.isPending}
-              className="px-4 py-2 bg-surface-container hover:bg-surface-container-highest text-on-surface text-xs font-bold font-label uppercase tracking-widest border border-outline-variant transition-colors disabled:opacity-50"
-            >
-              Retry research
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="w-full max-w-5xl mx-auto px-6 flex flex-col gap-12">
@@ -241,7 +180,14 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
           </div>
         )}
 
-        {renderError()}
+        {mutation.isError && (
+          <ResearchError
+            error={mutation.error}
+            onRetry={handleRetry}
+            onReauth={handleSignOutAndAuth}
+            retrying={mutation.isPending}
+          />
+        )}
 
         {!mutation.isPending && !mutation.isError && selectedRun && (
           <ResearchResult run={selectedRun} historical={isHistorical} />
