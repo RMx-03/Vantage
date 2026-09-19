@@ -84,14 +84,14 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
     }
 
     return (
-      <div className="rounded-xl border border-rose-500/40 bg-rose-950/30 p-6 text-rose-200">
-        <div className="flex items-center gap-2 font-semibold text-rose-100 text-base mb-2">
+      <div className="border border-error-container bg-error-container/30 p-6 text-error">
+        <div className="flex items-center gap-2 font-semibold text-error text-base mb-2 font-label">
           <span>Failed to complete research run</span>
         </div>
-        <p className="text-sm leading-relaxed text-rose-200/90">{message}</p>
+        <p className="text-sm leading-relaxed text-error font-body">{message}</p>
 
         {(runId || requestId) && (
-          <div className="mt-3 flex flex-wrap gap-4 text-xs font-mono text-rose-300/80">
+          <div className="mt-3 flex flex-wrap gap-4 text-xs font-label text-error">
             {runId && <span>Run ID: {runId}</span>}
             {requestId && <span>Request ID: {requestId}</span>}
           </div>
@@ -100,16 +100,18 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
         <div className="mt-4 flex items-center gap-3">
           {isAuthError ? (
             <button
+              type="button"
               onClick={handleSignOutAndAuth}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg transition-colors"
+              className="px-4 py-2 bg-error text-on-error text-xs font-bold font-label uppercase tracking-widest transition-opacity hover:opacity-90"
             >
               Sign in again
             </button>
           ) : (
             <button
+              type="button"
               onClick={handleRetry}
               disabled={mutation.isPending}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg border border-slate-700 transition-colors disabled:opacity-50"
+              className="px-4 py-2 bg-surface-container hover:bg-surface-container-highest text-on-surface text-xs font-bold font-label uppercase tracking-widest border border-outline-variant transition-colors disabled:opacity-50"
             >
               Retry research
             </button>
@@ -120,47 +122,48 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-8">
+    <div className="w-full max-w-5xl mx-auto px-6 flex flex-col gap-12">
       {/* Search Header and Input */}
-      <section className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 sm:p-8 backdrop-blur-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Vantage Research Workspace
-            </h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Deterministic, explainable US-equity end-of-day research analysis.
+      <section className="flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-4xl font-extrabold tracking-tighter text-primary">Vantage.</h1>
+            <p className="text-on-surface-variant font-label tracking-wide uppercase text-sm">
+              Agentic Quant Terminal
             </p>
           </div>
 
           <button
+            type="button"
             onClick={() => setShowHistory(!showHistory)}
-            className="self-start sm:self-auto px-4 py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-800 transition-colors flex items-center gap-2"
+            className="px-4 py-2 text-xs font-label uppercase tracking-widest border border-outline-variant bg-surface-container-low text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors flex items-center gap-2"
           >
             <span>{showHistory ? 'Hide History' : 'View History'}</span>
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 flex flex-col gap-1.5">
-            <label htmlFor="symbol-input" className="text-xs font-medium text-slate-300">
-              US equity symbol
-            </label>
-            <input
-              id="symbol-input"
-              type="text"
-              value={symbolInput}
-              onChange={(e) => setSymbolInput(e.target.value)}
-              placeholder="e.g. AAPL, MSFT, NVDA"
-              className="w-full bg-slate-950/60 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-4 py-3 text-white font-mono text-base placeholder:text-slate-600 transition-colors"
-            />
-          </div>
-
-          <div className="flex items-end">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+          <label
+            htmlFor="symbol-input"
+            className="text-xs font-label text-outline uppercase tracking-widest"
+          >
+            US equity symbol
+          </label>
+          <div className="flex flex-col md:flex-row gap-0">
+            <div className="flex-1 bg-surface-container-low border border-outline-variant focus-within:border-primary transition-colors">
+              <input
+                id="symbol-input"
+                type="text"
+                value={symbolInput}
+                onChange={(e) => setSymbolInput(e.target.value)}
+                placeholder="e.g. AAPL, MSFT, NVDA"
+                className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-on-surface font-label p-4 placeholder:text-outline-variant"
+              />
+            </div>
             <button
               type="submit"
               disabled={!isValidSymbol || mutation.isPending}
-              className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+              className="bg-primary text-on-primary font-bold px-8 py-4 hover:opacity-90 transition-opacity uppercase tracking-widest text-xs disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Run research
             </button>
@@ -168,55 +171,72 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
         </form>
       </section>
 
-      {/* Main Workspace Layout with Optional History Drawer */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Results / Error Area */}
-        <div className={showHistory ? 'lg:col-span-8 space-y-6' : 'lg:col-span-12 space-y-6'}>
-          {mutation.isPending && (
-            <div
-              role="status"
-              className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-8 flex flex-col items-center justify-center gap-3 text-center"
-            >
-              <div className="w-8 h-8 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></div>
-              <p className="text-sm font-medium text-indigo-200">
+      {/* Main Workspace Area */}
+      <div className="flex flex-col gap-6">
+        {mutation.isPending && (
+          <div role="status" className="flex flex-col gap-2 py-4">
+            <div className="flex items-center gap-4">
+              <div className="w-2 h-2 bg-primary animate-pulse" />
+              <p className="text-outline text-xs font-label uppercase tracking-[0.2em] animate-pulse">
                 Running research analysis for {normalizedSymbol}...
               </p>
-              <span className="text-xs text-slate-400">
-                Verifying 21 trading sessions and fetching EOD snapshot
-              </span>
             </div>
-          )}
+            <span className="text-xs font-label text-outline pl-6">
+              Verifying 21 trading sessions and fetching EOD snapshot
+            </span>
+          </div>
+        )}
 
-          {renderError()}
+        {renderError()}
 
-          {!mutation.isPending && !mutation.isError && selectedRun && (
-            <ResearchResult run={selectedRun} historical={isHistorical} />
-          )}
+        {!mutation.isPending && !mutation.isError && selectedRun && (
+          <ResearchResult run={selectedRun} historical={isHistorical} />
+        )}
 
-          {!mutation.isPending && !mutation.isError && !selectedRun && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-12 text-center text-slate-500">
-              <p className="text-sm">Enter a US equity symbol above to begin an EOD research run.</p>
-            </div>
-          )}
-        </div>
-
-        {/* History Sidebar */}
-        {showHistory && (
-          <aside className="lg:col-span-4 rounded-xl border border-slate-800 bg-slate-900/80 p-6 backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-800">
-              <h2 className="text-base font-semibold text-white">Research History</h2>
-              <span className="text-xs text-slate-400">Owner-scoped</span>
-            </div>
-            <ResearchHistory
-              onSelectRun={(run) => {
-                setSelectedRun(run);
-                setIsHistorical(true);
-              }}
-              selectedRunId={selectedRun?.run_id}
-            />
-          </aside>
+        {!mutation.isPending && !mutation.isError && !selectedRun && (
+          <div className="border border-outline-variant/30 bg-surface-container-low p-12 text-center text-outline font-label">
+            <p className="text-sm">Enter a US equity symbol above to begin an EOD research run.</p>
+          </div>
         )}
       </div>
+
+      {/* Slide-over History Drawer */}
+      {showHistory && (
+        <>
+          <div
+            onClick={() => setShowHistory(false)}
+            className="fixed inset-0 z-40 bg-surface-container-lowest/60"
+            aria-hidden="true"
+          />
+          <aside className="fixed right-0 top-16 bottom-0 z-50 w-full lg:w-[420px] bg-surface-container border-l border-outline-variant flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant shrink-0">
+              <h2 className="font-headline text-xs uppercase tracking-widest text-primary">
+                Research History
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowHistory(false)}
+                aria-label="Close history"
+                className="text-outline hover:text-on-surface transition-colors"
+              >
+                <span aria-hidden="true" className="material-symbols-outlined text-lg">
+                  close
+                </span>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <ResearchHistory
+                onSelectRun={(run) => {
+                  setSelectedRun(run);
+                  setIsHistorical(true);
+                  setShowHistory(false);
+                }}
+                selectedRunId={selectedRun?.run_id}
+              />
+            </div>
+          </aside>
+        </>
+      )}
     </div>
   );
 }
