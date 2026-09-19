@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,6 +7,7 @@ import { formatUtcDate } from './dateFormatters';
 import { AuthProvider } from '../../context/AuthContext';
 import * as api from '../../api/researchRuns';
 import { historicalRun, informationalRun } from '../../test/fixtures';
+import { renderWithRouter } from '../../test/renderWithRouter';
 
 import type { ResearchRun, SafeError } from '../../types/research';
 
@@ -87,7 +88,7 @@ function renderAsOwner(
   queryClient: QueryClient = makeQueryClient()
 ) {
   authMock.session = userId === null ? null : { user: { id: userId } };
-  const view = render(
+  const view = renderWithRouter(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>{ui}</AuthProvider>
     </QueryClientProvider>

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,10 +7,13 @@ import { AuthProvider } from '../../context/AuthContext';
 import * as api from '../../api/researchRuns';
 import { historicalRun, informationalRun } from '../../test/fixtures';
 
+import { renderWithRouter } from '../../test/renderWithRouter';
+
 const mockNavigate = vi.fn();
-vi.mock('react-router-dom', () => ({
-  useNavigate: () => mockNavigate,
-}));
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 
 const authMock = vi.hoisted(() => ({
   user: null as { id: string; email: string } | null,
@@ -79,7 +82,7 @@ function renderWorkspace() {
       <ResearchWorkspace />
     </QueryClientProvider>
   );
-  const view = render(tree());
+  const view = renderWithRouter(tree());
   return { ...view, queryClient, rerenderWorkspace: () => view.rerender(tree()) };
 }
 
@@ -328,7 +331,7 @@ describe('ResearchWorkspace', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
-    render(
+    renderWithRouter(
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <ResearchWorkspace />
