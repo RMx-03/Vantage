@@ -21,7 +21,12 @@ class Settings(BaseSettings):
     # Application metadata
     # ------------------------------------------------------------------
     APP_NAME: str = "Vantage"
+    # Semantic product version used for API display and package identity.
     APP_VERSION: str = "0.1.0"
+    # Immutable revision of the running artifact (Git SHA or image/build digest).
+    # Recorded on every research run so a persisted result identifies the exact
+    # code that produced it. Defaults to "development" outside a built artifact.
+    CODE_REVISION: str = "development"
 
     # ------------------------------------------------------------------
     # Local model store

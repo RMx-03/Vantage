@@ -12,7 +12,7 @@ from app.api.deps import (
     get_current_user,
     get_research_repository,
 )
-from app.core.config import Settings
+from app.core.config import Settings, settings
 from app.db.session import SessionFactory
 from app.domain.errors import VantageError
 from app.domain.research import (
@@ -833,3 +833,34 @@ def test_persisted_v2_run_is_re_readable_by_id(
     assert fetched.status_code == 200
     assert fetched.json()["interpretation"] == created["interpretation"]
     assert fetched.json()["snapshot"] == created["snapshot"]
+
+
+def test_run_records_the_immutable_code_revision(
+    client: TestClient, auth_headers: dict
+) -> None:
+    created = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    ).json()
+
+    assert created["versions"]["code"] == settings.CODE_REVISION
+
+    fetched = client.get(
+        f"/api/v1/research-runs/{created['run_id']}", headers=auth_headers
+    ).json()
+    assert fetched["versions"]["code"] == settings.CODE_REVISION
+
+
+def test_version_info_tracks_code_revision_not_display_version(
+    monkeypatch, mock_market, mock_news, mock_llm
+) -> None:
+    monkeypatch.setattr(settings, "CODE_REVISION", "0f1e2d3c4b5a")
+
+    service = ResearchRunService(
+        repo=MagicMock(),
+        market_provider=mock_market,
+        news_provider=mock_news,
+        interpretation_provider=mock_llm,
+    )
+
+    assert service.versions.code == "0f1e2d3c4b5a"
+    assert service.versions.code != settings.APP_VERSION

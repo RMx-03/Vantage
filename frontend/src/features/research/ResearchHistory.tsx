@@ -1,5 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { listResearchRuns } from '../../api/researchRuns';
+import { useAuth } from '../../context/AuthContext';
+import { formatUtcDate } from './dateFormatters';
 import type { ResearchRun } from '../../types/research';
 
 interface ResearchHistoryProps {
@@ -11,6 +13,9 @@ export default function ResearchHistory({
   onSelectRun,
   selectedRunId,
 }: ResearchHistoryProps) {
+  const { user } = useAuth();
+  const ownerId = user?.id ?? null;
+
   const {
     data,
     fetchNextPage,
@@ -21,15 +26,18 @@ export default function ResearchHistory({
     error,
     refetch,
   } = useInfiniteQuery({
-    queryKey: ['research-runs'],
+    // Scoped to the owner so one user's history can never be read from the
+    // cache by the next user signed into the same browser session.
+    queryKey: ['research-runs', ownerId],
     queryFn: ({ pageParam }) => listResearchRuns(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    enabled: ownerId !== null,
   });
 
   const runs = data?.pages.flatMap((page) => page.items) ?? [];
 
-  if (isLoading) {
+  if (ownerId === null || isLoading) {
     return (
       <div className="flex items-center justify-center p-8 text-sm text-slate-400">
         <span className="animate-pulse">Loading research history...</span>
@@ -66,10 +74,7 @@ export default function ResearchHistory({
     <div className="space-y-3">
       <div className="space-y-2">
         {runs.map((run) => {
-          const formattedDate = new Date(run.as_of || run.created_at).toLocaleDateString(
-            'en-US',
-            { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }
-          );
+          const formattedDate = formatUtcDate(run.as_of || run.created_at);
           const isSelected = selectedRunId === run.run_id;
           const accessibleName = `${run.symbol} - ${formattedDate}`;
 

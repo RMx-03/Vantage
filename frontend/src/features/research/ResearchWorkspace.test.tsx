@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,11 +11,14 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
 }));
 
-const mockSignOut = vi.fn();
+const authMock = vi.hoisted(() => ({
+  user: null as { id: string; email: string } | null,
+  signOut: vi.fn(),
+}));
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
-    user: { email: 'test@example.com' },
-    signOut: mockSignOut,
+    user: authMock.user,
+    signOut: authMock.signOut,
   }),
 }));
 
@@ -47,11 +50,13 @@ function renderWorkspace() {
       mutations: { retry: false },
     },
   });
-  return render(
+  const tree = () => (
     <QueryClientProvider client={queryClient}>
       <ResearchWorkspace />
     </QueryClientProvider>
   );
+  const view = render(tree());
+  return { ...view, queryClient, rerenderWorkspace: () => view.rerender(tree()) };
 }
 
 function deferred<T>() {
@@ -65,6 +70,7 @@ function deferred<T>() {
 describe('ResearchWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authMock.user = { id: 'user-a', email: 'test@example.com' };
     vi.mocked(api.listResearchRuns).mockResolvedValue({
       items: [],
       next_cursor: null,
@@ -151,7 +157,7 @@ describe('ResearchWorkspace', () => {
     expect(signinBtn).toBeVisible();
 
     await userEvent.click(signinBtn);
-    expect(mockSignOut).toHaveBeenCalled();
+    expect(authMock.signOut).toHaveBeenCalled();
     expect(mockNavigate).toHaveBeenCalledWith('/auth');
   });
 
@@ -249,5 +255,41 @@ describe('ResearchWorkspace', () => {
     renderWorkspace();
     expect(screen.queryByText(/latency:\s*\d+ms/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/nodes active/i)).not.toBeInTheDocument();
+  });
+
+  it('refreshes the signed-in owner history after a completed run', async () => {
+    vi.mocked(api.listResearchRuns)
+      .mockResolvedValueOnce({ items: [], next_cursor: null })
+      .mockResolvedValue({ items: [historicalRun], next_cursor: null });
+    vi.mocked(api.createResearchRun).mockResolvedValueOnce(informationalRun);
+
+    const { queryClient } = renderWorkspace();
+    expect(await screen.findByText(/no previous research runs/i)).toBeVisible();
+
+    await userEvent.type(screen.getByLabelText(/US equity symbol/i), 'AAPL');
+    await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
+
+    expect(
+      await screen.findByRole('button', { name: /AAPL.*Jul 31, 2026/i })
+    ).toBeVisible();
+    expect(queryClient.getQueryData(['research-runs', 'user-a'])).toBeDefined();
+    expect(queryClient.getQueryData(['research-runs'])).toBeUndefined();
+  });
+
+  it('clears the previous owner result when the signed-in user changes', async () => {
+    vi.mocked(api.createResearchRun).mockResolvedValueOnce(informationalRun);
+
+    const { rerenderWorkspace } = renderWorkspace();
+    await userEvent.type(screen.getByLabelText(/US equity symbol/i), 'AAPL');
+    await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
+    expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
+
+    authMock.user = { id: 'user-b', email: 'other@example.com' };
+    rerenderWorkspace();
+
+    await waitFor(() =>
+      expect(screen.queryByText(informationalRun.summary!)).not.toBeInTheDocument()
+    );
+    expect(screen.getByText(/Enter a US equity symbol above/i)).toBeVisible();
   });
 });

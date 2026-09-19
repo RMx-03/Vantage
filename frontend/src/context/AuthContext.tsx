@@ -2,10 +2,12 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
 interface AuthContextValue {
@@ -26,12 +28,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const ownerIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const applySession = (nextSession: Session | null) => {
+      const nextOwnerId = nextSession?.user?.id ?? null;
+
+      if (nextOwnerId !== ownerIdRef.current) {
+        // The signed-in owner changed (sign-in, sign-out, account switch).
+        // Drop every owner-scoped research query before the next owner can
+        // render, so cached rows never outlive the session that fetched them.
+        void queryClient.cancelQueries({ queryKey: ['research-runs'] });
+        queryClient.removeQueries({ queryKey: ['research-runs'] });
+        ownerIdRef.current = nextOwnerId;
+      }
+
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+    };
+
     // Hydrate from an existing persisted session on first mount.
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
+      applySession(data.session);
       setLoading(false);
     });
 
@@ -39,12 +58,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
+      applySession(newSession);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [queryClient]);
 
   const signOut = async () => {
     await supabase.auth.signOut();

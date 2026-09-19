@@ -1,5 +1,6 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 import asyncio
+import threading
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -69,3 +70,35 @@ def test_missing_authenticated_user_is_rejected(monkeypatch) -> None:
 
 def test_repository_dependency_returns_owner_scoped_repository() -> None:
     assert isinstance(deps.get_research_repository(), ResearchRunRepository)
+
+
+@pytest.mark.anyio
+async def test_auth_offloads_supabase(monkeypatch) -> None:
+    user_id = uuid4()
+    run = AsyncMock(return_value=SimpleNamespace(user=SimpleNamespace(id=str(user_id))))
+    monkeypatch.setattr(deps, "run_in_threadpool", run)
+
+    authenticated = await deps.get_current_user(MagicMock(credentials="valid-token"))
+
+    run.assert_awaited_once()
+    assert run.await_args.args[1] == "valid-token"
+    assert authenticated.id == user_id
+
+
+@pytest.mark.anyio
+async def test_supabase_verification_leaves_the_event_loop_thread(monkeypatch) -> None:
+    user_id = uuid4()
+    verification_threads: list[int] = []
+    client = MagicMock()
+
+    def get_user(token: str) -> SimpleNamespace:
+        verification_threads.append(threading.get_ident())
+        return SimpleNamespace(user=SimpleNamespace(id=str(user_id)))
+
+    client.auth.get_user.side_effect = get_user
+    monkeypatch.setattr(deps, "supabase_client", client)
+
+    authenticated = await deps.get_current_user(MagicMock(credentials="valid-token"))
+
+    assert authenticated.id == user_id
+    assert verification_threads and threading.get_ident() not in verification_threads

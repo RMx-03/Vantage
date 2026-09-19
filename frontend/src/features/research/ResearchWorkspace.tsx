@@ -10,6 +10,16 @@ import ResearchHistory from './ResearchHistory';
 const SYMBOL_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
 
 export default function ResearchWorkspace() {
+  const { user } = useAuth();
+
+  // Remounting on owner change is what guarantees that no run, error or input
+  // a previous owner produced can survive into the next owner's session.
+  return (
+    <OwnerWorkspace key={user?.id ?? 'signed-out'} ownerId={user?.id ?? null} />
+  );
+}
+
+function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   const [symbolInput, setSymbolInput] = useState('');
   const [selectedRun, setSelectedRun] = useState<ResearchRun | null>(null);
   const [isHistorical, setIsHistorical] = useState(false);
@@ -27,7 +37,7 @@ export default function ResearchWorkspace() {
     onSuccess: (data) => {
       setSelectedRun(data);
       setIsHistorical(false);
-      queryClient.invalidateQueries({ queryKey: ['research-runs'] });
+      queryClient.invalidateQueries({ queryKey: ['research-runs', ownerId] });
     },
   });
 

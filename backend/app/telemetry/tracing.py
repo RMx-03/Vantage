@@ -79,7 +79,7 @@ def configure_telemetry(app: FastAPI | None = None) -> TracerProvider:
                     public_key=settings.LANGFUSE_PUBLIC_KEY,
                     secret_key=settings.LANGFUSE_SECRET_KEY,
                     base_url=settings.LANGFUSE_HOST,
-                    release=settings.APP_VERSION,
+                    release=settings.CODE_REVISION,
                     tracer_provider=provider,
                     should_export_span=should_export_span,
                 )

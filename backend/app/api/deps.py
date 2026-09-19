@@ -2,6 +2,7 @@ from uuid import UUID
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
+from starlette.concurrency import run_in_threadpool
 
 from app.core.database import supabase_client
 from app.domain.errors import VantageError
@@ -38,7 +39,9 @@ async def get_current_user(
         token = credentials.credentials
 
         try:
-            response = supabase_client.auth.get_user(token)
+            # The Supabase SDK verifies tokens synchronously; keep that blocking
+            # call off the event loop so concurrent requests are not stalled.
+            response = await run_in_threadpool(supabase_client.auth.get_user, token)
             user = response.user
             if user is None or not hasattr(user, "id"):
                 raise ValueError("No user returned from authentication service")

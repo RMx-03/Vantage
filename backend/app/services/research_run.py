@@ -37,7 +37,6 @@ from app.telemetry.tracing import get_tracer
 
 logger = logging.getLogger(__name__)
 
-CODE_VERSION = settings.APP_VERSION
 RESPONSE_SCHEMA_VERSION: Literal["research-run-response-v2"] = (
     "research-run-response-v2"
 )
@@ -62,7 +61,7 @@ class ResearchRunService:
             workflow=WORKFLOW_VERSION,
             metrics=METRICS_VERSION,
             policy=POLICY_VERSION,
-            code=CODE_VERSION,
+            code=settings.CODE_REVISION,
         )
         self.workflow = create_research_graph(self.llm)
 
