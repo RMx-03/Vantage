@@ -75,6 +75,5 @@ strict = true
 [[tool.mypy.overrides]]
 module = [
     "app.agents.*",
-    "app.api.deps",
 ]
 ignore_errors = true

@@ -76,7 +76,7 @@ jobs:
         run: uv run ruff format --check app tests migrations
 
       - name: Run Mypy type checker
-        run: uv run mypy app/domain app/services app/providers app/repositories app/telemetry
+        run: uv run mypy app/domain app/services app/providers app/repositories app/telemetry app/api
 
       - name: Run Pytest with coverage gate (>=85%)
         run: uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=85

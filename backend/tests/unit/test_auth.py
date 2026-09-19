@@ -68,6 +68,18 @@ def test_missing_authenticated_user_is_rejected(monkeypatch) -> None:
     assert exc_info.value.code == "AUTH_INVALID"
 
 
+def test_absent_verification_response_is_rejected(monkeypatch) -> None:
+    """No response at all is an unverified token, so it must fail closed too."""
+    client = MagicMock()
+    client.auth.get_user.return_value = None
+    monkeypatch.setattr(deps, "supabase_client", client)
+
+    with pytest.raises(VantageError) as exc_info:
+        asyncio.run(deps.get_current_user(MagicMock(credentials="valid-token")))
+
+    assert exc_info.value.code == "AUTH_INVALID"
+
+
 def test_repository_dependency_returns_owner_scoped_repository() -> None:
     assert isinstance(deps.get_research_repository(), ResearchRunRepository)
 

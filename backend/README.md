@@ -60,6 +60,6 @@ Run from `backend/` with a PostgreSQL database whose name contains `vantage_test
 ```bash
 uv run alembic upgrade head
 uv run ruff check app tests migrations
-uv run mypy app/domain app/services app/providers app/repositories app/telemetry
+uv run mypy app/domain app/services app/providers app/repositories app/telemetry app/api
 uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=85
 ```

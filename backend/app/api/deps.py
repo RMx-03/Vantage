@@ -42,7 +42,9 @@ async def get_current_user(
             # The Supabase SDK verifies tokens synchronously; keep that blocking
             # call off the event loop so concurrent requests are not stalled.
             response = await run_in_threadpool(supabase_client.auth.get_user, token)
-            user = response.user
+            # The SDK may return no response at all; an absent response is an
+            # unverified token, so it fails closed exactly like an absent user.
+            user = response.user if response is not None else None
             if user is None or not hasattr(user, "id"):
                 raise ValueError("No user returned from authentication service")
             return AuthenticatedUser(id=UUID(str(user.id)))
