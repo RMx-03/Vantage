@@ -1,12 +1,19 @@
-import { useState } from 'react';
+import { NavLink, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ResearchHistory from '../features/research/ResearchHistory';
 
-type SettingsTab = 'profile' | 'history';
+const TABS = [
+  { slug: 'profile', label: 'User Profile' },
+  { slug: 'runs', label: 'Research Run Log' },
+] as const;
 
 export default function UserSettingsPanel() {
   const { user, signOut } = useAuth();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
+  const { tab } = useParams<{ tab: string }>();
+
+  if (tab !== 'profile' && tab !== 'runs') {
+    return <Navigate to="/app/settings/profile" replace />;
+  }
 
   const handleLogout = async () => {
     await signOut();
@@ -27,32 +34,25 @@ export default function UserSettingsPanel() {
 
         {/* Internal Tabs */}
         <div className="flex gap-6 border-b border-outline-variant/30">
-          <button
-            type="button"
-            onClick={() => setActiveTab('profile')}
-            className={`font-label text-[11px] uppercase tracking-widest pb-2 transition-colors ${
-              activeTab === 'profile'
-                ? 'text-primary border-b border-primary'
-                : 'text-outline-variant hover:text-primary'
-            }`}
-          >
-            User Profile
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('history')}
-            className={`font-label text-[11px] uppercase tracking-widest pb-2 transition-colors ${
-              activeTab === 'history'
-                ? 'text-primary border-b border-primary'
-                : 'text-outline-variant hover:text-primary'
-            }`}
-          >
-            Research Run Log
-          </button>
+          {TABS.map((t) => (
+            <NavLink
+              key={t.slug}
+              to={`/app/settings/${t.slug}`}
+              className={({ isActive }) =>
+                `font-label text-[11px] uppercase tracking-widest pb-2 transition-colors ${
+                  isActive
+                    ? 'text-primary border-b border-primary'
+                    : 'text-outline-variant hover:text-primary'
+                }`
+              }
+            >
+              {t.label}
+            </NavLink>
+          ))}
         </div>
       </div>
 
-      {activeTab === 'profile' && (
+      {tab === 'profile' && (
         <div className="space-y-8">
           <section className="bg-surface-container border border-outline-variant p-8 space-y-6">
             <h2 className="text-xs uppercase font-label tracking-widest text-outline border-b border-outline-variant/30 pb-2">
@@ -94,7 +94,7 @@ export default function UserSettingsPanel() {
         </div>
       )}
 
-      {activeTab === 'history' && (
+      {tab === 'runs' && (
         <section className="bg-surface-container border border-outline-variant p-8">
           <h2 className="text-xs uppercase font-label tracking-widest text-outline border-b border-outline-variant/30 pb-3 mb-6">
             Durable Research Runs
