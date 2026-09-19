@@ -848,19 +848,3 @@ def test_run_records_the_immutable_code_revision(
         f"/api/v1/research-runs/{created['run_id']}", headers=auth_headers
     ).json()
     assert fetched["versions"]["code"] == settings.CODE_REVISION
-
-
-def test_version_info_tracks_code_revision_not_display_version(
-    monkeypatch, mock_market, mock_news, mock_llm
-) -> None:
-    monkeypatch.setattr(settings, "CODE_REVISION", "0f1e2d3c4b5a")
-
-    service = ResearchRunService(
-        repo=MagicMock(),
-        market_provider=mock_market,
-        news_provider=mock_news,
-        interpretation_provider=mock_llm,
-    )
-
-    assert service.versions.code == "0f1e2d3c4b5a"
-    assert service.versions.code != settings.APP_VERSION

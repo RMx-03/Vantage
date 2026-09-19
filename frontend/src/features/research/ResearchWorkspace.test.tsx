@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ResearchWorkspace from './ResearchWorkspace';
+import { AuthProvider } from '../../context/AuthContext';
 import * as api from '../../api/researchRuns';
 import { historicalRun, informationalRun } from '../../test/fixtures';
 
@@ -14,12 +15,35 @@ vi.mock('react-router-dom', () => ({
 const authMock = vi.hoisted(() => ({
   user: null as { id: string; email: string } | null,
   signOut: vi.fn(),
+  // When true, useAuth resolves through the real AuthProvider instead of the
+  // stub, so one test can exercise the provider/workspace seam end to end.
+  useRealProvider: false,
+  listeners: [] as Array<(event: string, session: unknown) => void>,
+  session: null as { user: { id: string } } | null,
 }));
-vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({
-    user: authMock.user,
-    signOut: authMock.signOut,
-  }),
+vi.mock('../../context/AuthContext', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../context/AuthContext')>();
+  return {
+    ...actual,
+    useAuth: () =>
+      authMock.useRealProvider
+        ? actual.useAuth()
+        : { user: authMock.user, signOut: authMock.signOut },
+  };
+});
+
+vi.mock('../../lib/supabase', () => ({
+  supabase: {
+    auth: {
+      getSession: () => Promise.resolve({ data: { session: authMock.session } }),
+      onAuthStateChange: (listener: (event: string, session: unknown) => void) => {
+        authMock.listeners.push(listener);
+        return { data: { subscription: { unsubscribe: vi.fn() } } };
+      },
+      signOut: () => Promise.resolve({ error: null }),
+    },
+  },
 }));
 
 import type { SafeError } from '../../types/research';
@@ -71,6 +95,9 @@ describe('ResearchWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authMock.user = { id: 'user-a', email: 'test@example.com' };
+    authMock.useRealProvider = false;
+    authMock.listeners.length = 0;
+    authMock.session = null;
     vi.mocked(api.listResearchRuns).mockResolvedValue({
       items: [],
       next_cursor: null,
@@ -291,5 +318,43 @@ describe('ResearchWorkspace', () => {
       expect(screen.queryByText(informationalRun.summary!)).not.toBeInTheDocument()
     );
     expect(screen.getByText(/Enter a US equity symbol above/i)).toBeVisible();
+  });
+
+  it('drops the previous owner workspace state when the real provider switches owner', async () => {
+    authMock.useRealProvider = true;
+    authMock.session = { user: { id: 'user-a' } };
+    vi.mocked(api.createResearchRun).mockResolvedValueOnce(informationalRun);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <ResearchWorkspace />
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+
+    // The provider has hydrated once the owner-scoped history has resolved.
+    expect(await screen.findByText(/no previous research runs/i)).toBeVisible();
+
+    const input = screen.getByLabelText(/US equity symbol/i);
+    await userEvent.type(input, 'AAPL');
+    await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
+    expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
+
+    authMock.session = { user: { id: 'user-b' } };
+    await act(async () => {
+      authMock.listeners.forEach((listener) =>
+        listener('SIGNED_IN', authMock.session)
+      );
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByText(informationalRun.summary!)).not.toBeInTheDocument()
+    );
+    expect(screen.getByText(/Enter a US equity symbol above/i)).toBeVisible();
+    expect(screen.getByLabelText(/US equity symbol/i)).toHaveValue('');
   });
 });

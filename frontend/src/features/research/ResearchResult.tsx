@@ -1,4 +1,5 @@
 import type { ResearchRun } from '../../types/research';
+import { formatUtcDate } from './dateFormatters';
 import ReasonsPanel from './ReasonsPanel';
 import ResearchMetrics from './ResearchMetrics';
 import DataQualityPanel from './DataQualityPanel';
@@ -54,14 +55,7 @@ export default function ResearchResult({ run, historical = false }: ResearchResu
           <span className="font-semibold uppercase tracking-wider">Historical run result</span>
           <span>
             Original as of:{' '}
-            {run.as_of
-              ? new Date(run.as_of).toLocaleDateString('en-US', {
-                  timeZone: 'UTC',
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })
-              : 'Unavailable'}
+            {run.as_of ? formatUtcDate(run.as_of) : 'Unavailable'}
           </span>
         </div>
       )}
@@ -114,7 +108,7 @@ export default function ResearchResult({ run, historical = false }: ResearchResu
           <span>
             Market As-Of:{' '}
             <strong className="text-slate-200 font-mono">
-              {run.as_of ? new Date(run.as_of).toLocaleDateString() : 'Unavailable'}
+              {run.as_of ? formatUtcDate(run.as_of) : 'Unavailable'}
             </strong>
           </span>
           <span>

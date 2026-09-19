@@ -75,6 +75,9 @@ def test_repository_dependency_returns_owner_scoped_repository() -> None:
 @pytest.mark.anyio
 async def test_auth_offloads_supabase(monkeypatch) -> None:
     user_id = uuid4()
+    # Stubbed so that reverting the offload fails on the awaited-once assertion
+    # instead of reaching the real Supabase client over the network.
+    monkeypatch.setattr(deps, "supabase_client", MagicMock())
     run = AsyncMock(return_value=SimpleNamespace(user=SimpleNamespace(id=str(user_id))))
     monkeypatch.setattr(deps, "run_in_threadpool", run)
 

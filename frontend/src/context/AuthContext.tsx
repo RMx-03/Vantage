@@ -39,6 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // The signed-in owner changed (sign-in, sign-out, account switch).
         // Drop every owner-scoped research query before the next owner can
         // render, so cached rows never outlive the session that fetched them.
+        //
+        // INVARIANT: every owner-scoped query key root must be purged here.
+        // If you add a query whose data belongs to one user, add its root to
+        // this list — otherwise the next user signed into the same browser
+        // can render the previous user's rows from the cache.
         void queryClient.cancelQueries({ queryKey: ['research-runs'] });
         queryClient.removeQueries({ queryKey: ['research-runs'] });
         ownerIdRef.current = nextOwnerId;

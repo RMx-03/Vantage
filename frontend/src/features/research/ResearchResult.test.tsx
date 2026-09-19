@@ -163,4 +163,32 @@ describe('ResearchResult', () => {
     expect(screen.getByText('Pending')).toBeInTheDocument();
     expect(screen.getByText('None')).toBeInTheDocument();
   });
+
+  it('renders the market session date in UTC wherever it appears', () => {
+    // 00:30 UTC falls on the previous calendar day for every viewer west of
+    // UTC; the market session date must not move with the viewer.
+    const run = { ...historicalRun, as_of: '2026-07-31T00:30:00Z' };
+
+    render(<ResearchResult run={run} historical />);
+
+    expect(
+      screen.getByText(/Market As-Of:/, { selector: 'span' })
+    ).toHaveTextContent('Market As-Of: Jul 31, 2026');
+    expect(
+      screen.getByText(/Original as of:/, { selector: 'span' })
+    ).toHaveTextContent('Original as of: Jul 31, 2026');
+  });
+
+  it('renders a missing market session date as unavailable', () => {
+    const run = { ...historicalRun, as_of: null };
+
+    render(<ResearchResult run={run} historical />);
+
+    expect(
+      screen.getByText(/Market As-Of:/, { selector: 'span' })
+    ).toHaveTextContent('Market As-Of: Unavailable');
+    expect(
+      screen.getByText(/Original as of:/, { selector: 'span' })
+    ).toHaveTextContent('Original as of: Unavailable');
+  });
 });
