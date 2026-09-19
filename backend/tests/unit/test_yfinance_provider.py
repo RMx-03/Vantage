@@ -17,6 +17,9 @@ from app.providers.yfinance_provider import (
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
+START = date(2026, 8, 13)
+END = date(2026, 9, 11)
+NOW = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -31,7 +34,20 @@ def history_df() -> pd.DataFrame:
     df = pd.DataFrame(data)
     df.index = pd.to_datetime(df["Date"])
     df.drop(columns=["Date"], inplace=True)
-    return df
+    first_bar = pd.DataFrame(
+        [
+            {
+                "Open": 149.0,
+                "High": 151.0,
+                "Low": 148.0,
+                "Close": 150.0,
+                "Adj Close": 150.0,
+                "Volume": 950000,
+            }
+        ],
+        index=pd.to_datetime(["2026-08-13 00:00:00-04:00"]),
+    )
+    return pd.concat([first_bar, df])
 
 
 @pytest.fixture
@@ -58,9 +74,7 @@ def provider(mock_ticker: MagicMock) -> YFinanceSnapshotProvider:
 def test_provider_fetches_history_and_news_once(
     mock_ticker: MagicMock, provider: YFinanceSnapshotProvider, fixed_now: datetime
 ) -> None:
-    market = provider.fetch_daily_snapshot(
-        "AAPL", date(2026, 8, 14), date(2026, 9, 11), fixed_now
-    )
+    market = provider.fetch_daily_snapshot("AAPL", START, END, fixed_now)
     news = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
     assert mock_ticker.history.call_count == 1
     assert mock_ticker.get_news.call_count == 1
@@ -79,9 +93,7 @@ def test_provider_normalizes_price_bars_to_session_order(
     mock_ticker.history.return_value = history_df.sort_index(ascending=False)
     provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
 
-    market = provider.fetch_daily_snapshot(
-        "AAPL", date(2026, 8, 14), date(2026, 9, 11), fixed_now
-    )
+    market = provider.fetch_daily_snapshot("AAPL", START, END, fixed_now)
 
     sessions = [bar.session_date for bar in market.bars]
     assert sessions == sorted(sessions)
@@ -230,6 +242,107 @@ def test_wrong_currency_raises_market_failed(mock_ticker: MagicMock) -> None:
             datetime(2026, 9, 14, 21, 0, tzinfo=UTC),
         )
     assert exc_info.value.code == "UNSUPPORTED_INSTRUMENT"
+
+
+def test_missing_currency_is_unsupported(mock_ticker: MagicMock) -> None:
+    mock_ticker.fast_info = {}
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    with pytest.raises(VantageError) as exc_info:
+        provider.fetch_daily_snapshot("AAPL", START, END, NOW)
+
+    assert exc_info.value.code == "UNSUPPORTED_INSTRUMENT"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("Open", "bad"), ("Volume", None), ("High", float("nan"))],
+)
+def test_invalid_ohlcv_is_rejected(
+    mock_ticker: MagicMock, field: str, value: object
+) -> None:
+    frame = mock_ticker.history.return_value.copy()
+    frame[field] = frame[field].astype(object)
+    frame.loc[frame.index[-1], field] = value
+    mock_ticker.history.return_value = frame
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    with pytest.raises(VantageError) as exc_info:
+        provider.fetch_daily_snapshot("AAPL", START, END, NOW)
+
+    assert exc_info.value.code == "INVALID_PRICE_SERIES"
+    assert exc_info.value.missing_value_count == 1
+
+
+@pytest.mark.parametrize("volume", [-1, 1.5])
+def test_nonintegral_or_negative_volume_is_rejected(
+    mock_ticker: MagicMock, volume: float
+) -> None:
+    frame = mock_ticker.history.return_value.copy()
+    frame["Volume"] = frame["Volume"].astype(float)
+    frame.loc[frame.index[-1], "Volume"] = volume
+    mock_ticker.history.return_value = frame
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    with pytest.raises(VantageError) as exc_info:
+        provider.fetch_daily_snapshot("AAPL", START, END, NOW)
+
+    assert exc_info.value.code == "INVALID_PRICE_SERIES"
+    assert exc_info.value.missing_value_count == 1
+
+
+def test_zero_integral_volume_is_partial(mock_ticker: MagicMock) -> None:
+    mock_ticker.history.return_value.loc[
+        mock_ticker.history.return_value.index[-1], "Volume"
+    ] = 0
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    snapshot = provider.fetch_daily_snapshot("AAPL", START, END, NOW)
+
+    assert snapshot.volume_quality == ComponentQuality.PARTIAL
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("High", 168.0), ("Low", 171.0)],
+)
+def test_invalid_ohlc_geometry_is_rejected(
+    mock_ticker: MagicMock, field: str, value: float
+) -> None:
+    mock_ticker.history.return_value.loc[
+        mock_ticker.history.return_value.index[-1], field
+    ] = value
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    with pytest.raises(VantageError) as exc_info:
+        provider.fetch_daily_snapshot("AAPL", START, END, NOW)
+
+    assert exc_info.value.code == "INVALID_PRICE_SERIES"
+
+
+def test_missing_required_session_is_rejected(mock_ticker: MagicMock) -> None:
+    mock_ticker.history.return_value = mock_ticker.history.return_value.iloc[1:]
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    with pytest.raises(VantageError) as exc_info:
+        provider.fetch_daily_snapshot("AAPL", START, END, NOW)
+
+    assert exc_info.value.code == "INVALID_PRICE_SERIES"
+    assert exc_info.value.missing_value_count == 1
+
+
+def test_unexpected_session_is_rejected(mock_ticker: MagicMock) -> None:
+    unexpected = mock_ticker.history.return_value.iloc[[0]].copy()
+    unexpected.index = pd.to_datetime(["2026-08-12 00:00:00-04:00"])
+    mock_ticker.history.return_value = pd.concat(
+        [unexpected, mock_ticker.history.return_value]
+    )
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    with pytest.raises(VantageError) as exc_info:
+        provider.fetch_daily_snapshot("AAPL", date(2026, 8, 12), END, NOW)
+
+    assert exc_info.value.code == "INVALID_PRICE_SERIES"
 
 
 @pytest.mark.parametrize(

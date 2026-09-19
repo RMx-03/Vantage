@@ -141,6 +141,7 @@ class MarketSnapshot(StrictModel):
     latest_completed_session: date
     content_hash: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
     quality: ComponentQuality = ComponentQuality.FRESH
+    volume_quality: ComponentQuality = ComponentQuality.FRESH
     error_code: str | None = None
     missing_value_count: int = Field(default=0, ge=0)
     duplicate_session_count: int = Field(default=0, ge=0)

@@ -2,7 +2,8 @@ from datetime import UTC, date, datetime, timedelta
 import hashlib
 import json
 import math
-from typing import Any
+from numbers import Real
+from typing import Any, cast
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import exchange_calendars
@@ -130,19 +131,18 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                 safe_message="The symbol must identify a supported US-listed equity.",
             )
 
-        # Validate currency if fast_info is present
+        # Fail closed unless the provider positively identifies USD.
         fast_info = getattr(ticker, "fast_info", None)
-        if fast_info:
-            currency = (
-                fast_info.get("currency")
-                if isinstance(fast_info, dict)
-                else getattr(fast_info, "currency", "USD")
+        currency = (
+            fast_info.get("currency")
+            if isinstance(fast_info, dict)
+            else getattr(fast_info, "currency", None)
+        )
+        if not isinstance(currency, str) or currency.strip().upper() != "USD":
+            raise VantageError(
+                code="UNSUPPORTED_INSTRUMENT",
+                safe_message="The symbol must identify a USD-denominated US-listed equity.",
             )
-            if currency and currency.upper() != "USD":
-                raise VantageError(
-                    code="UNSUPPORTED_INSTRUMENT",
-                    safe_message="The symbol must identify a USD-denominated US-listed equity.",
-                )
 
         # End date in yfinance history is exclusive, so add 1 day
         query_start = start_session.isoformat()
@@ -175,35 +175,61 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                 duplicate_session_count=len(session_dates) - len(set(session_dates)),
             )
 
+        required_sessions = set(trailing_xnys_sessions(end_session))
+        actual_sessions = set(session_dates)
+        missing_sessions = required_sessions - actual_sessions
+        if missing_sessions or actual_sessions - required_sessions:
+            raise VantageError(
+                code="INVALID_PRICE_SERIES",
+                safe_message="Market price series does not contain the required sessions.",
+                missing_value_count=len(missing_sessions),
+            )
+
         bars: list[DailyBar] = []
+        has_zero_volume = False
         for ts, row in df.iterrows():
             session_d = ts.date() if hasattr(ts, "date") else ts
-            if not (start_session <= session_d <= end_session):
-                continue
-
-            open_val = float(row.get("Open", 0.0))
-            high_val = float(row.get("High", 0.0))
-            low_val = float(row.get("Low", 0.0))
-            close_val = float(row.get("Close", 0.0))
-            adj_close_val = float(row.get("Adj Close", close_val))
-            volume_val = int(row.get("Volume", 0))
-
+            raw_prices = (
+                row.get("Open"),
+                row.get("High"),
+                row.get("Low"),
+                row.get("Close"),
+                row.get("Adj Close"),
+            )
+            raw_volume = row.get("Volume")
             if (
-                not all(
-                    math.isfinite(value)
-                    for value in (open_val, high_val, low_val, close_val, adj_close_val)
+                any(
+                    not isinstance(value, Real)
+                    or isinstance(value, bool)
+                    or not math.isfinite(value)
+                    or value <= 0
+                    for value in raw_prices
                 )
-                or open_val <= 0
-                or high_val <= 0
-                or low_val <= 0
-                or close_val <= 0
-                or adj_close_val <= 0
+                or not isinstance(raw_volume, Real)
+                or isinstance(raw_volume, bool)
+                or not math.isfinite(raw_volume)
+                or raw_volume < 0
+                or not float(raw_volume).is_integer()
             ):
                 raise VantageError(
                     code="INVALID_PRICE_SERIES",
-                    safe_message="Price values must be positive and finite.",
+                    safe_message="OHLCV values must be valid and complete.",
                     missing_value_count=1,
                 )
+
+            open_val, high_val, low_val, close_val, adj_close_val = (
+                float(value) for value in raw_prices
+            )
+            volume_val = int(cast(Any, raw_volume))
+            if high_val < max(open_val, close_val, low_val) or low_val > min(
+                open_val, close_val, high_val
+            ):
+                raise VantageError(
+                    code="INVALID_PRICE_SERIES",
+                    safe_message="OHLC values have invalid price geometry.",
+                    missing_value_count=1,
+                )
+            has_zero_volume = has_zero_volume or volume_val == 0
 
             bars.append(
                 DailyBar(
@@ -249,6 +275,9 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
             latest_completed_session=latest_completed,
             content_hash=c_hash,
             quality=quality,
+            volume_quality=(
+                ComponentQuality.PARTIAL if has_zero_volume else ComponentQuality.FRESH
+            ),
         )
 
     def fetch_company_news(
