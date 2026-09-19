@@ -8,11 +8,25 @@ import * as api from '../../api/researchRuns';
 import { historicalRun, informationalRun } from '../../test/fixtures';
 
 import { renderWithRouter } from '../../test/renderWithRouter';
+import { Route, Routes } from 'react-router-dom';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router-dom')>();
-  return { ...actual, useNavigate: () => mockNavigate };
+  return {
+    ...actual,
+    useNavigate: () => {
+      const realNavigate = actual.useNavigate();
+      return (to: unknown, options?: unknown) => {
+        if (options !== undefined) {
+          mockNavigate(to, options);
+        } else {
+          mockNavigate(to);
+        }
+        return (realNavigate as (t: unknown, o?: unknown) => void)(to, options);
+      };
+    },
+  };
 });
 
 const authMock = vi.hoisted(() => ({
@@ -70,7 +84,7 @@ vi.mock('../../api/researchRuns', () => {
   };
 });
 
-function renderWorkspace() {
+function renderWorkspace({ route = '/app/research' }: { route?: string; path?: string } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -79,10 +93,13 @@ function renderWorkspace() {
   });
   const tree = () => (
     <QueryClientProvider client={queryClient}>
-      <ResearchWorkspace />
+      <Routes>
+        <Route path="/app/research" element={<ResearchWorkspace />} />
+        <Route path="/app/research/:runId" element={<ResearchWorkspace />} />
+      </Routes>
     </QueryClientProvider>
   );
-  const view = renderWithRouter(tree());
+  const view = renderWithRouter(tree(), { route });
   return { ...view, queryClient, rerenderWorkspace: () => view.rerender(tree()) };
 }
 
@@ -105,6 +122,7 @@ describe('ResearchWorkspace', () => {
       items: [],
       next_cursor: null,
     });
+    vi.mocked(api.getResearchRun).mockResolvedValue(historicalRun);
   });
 
   it('validates symbol input and triggers research mutation', async () => {
@@ -334,9 +352,13 @@ describe('ResearchWorkspace', () => {
     renderWithRouter(
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <ResearchWorkspace />
+          <Routes>
+            <Route path="/app/research" element={<ResearchWorkspace />} />
+            <Route path="/app/research/:runId" element={<ResearchWorkspace />} />
+          </Routes>
         </AuthProvider>
-      </QueryClientProvider>
+      </QueryClientProvider>,
+      { route: '/app/research' }
     );
 
     // The provider has hydrated once the owner-scoped history has resolved.
@@ -359,5 +381,47 @@ describe('ResearchWorkspace', () => {
     );
     expect(screen.getByText(/Enter a US equity symbol above/i)).toBeVisible();
     expect(screen.getByLabelText(/US equity symbol/i)).toHaveValue('');
+  });
+
+  it('hydrates a run from the url', async () => {
+    vi.mocked(api.getResearchRun).mockResolvedValue(informationalRun);
+
+    renderWorkspace({
+      route: `/app/research/${informationalRun.run_id}`,
+      path: '/app/research/:runId',
+    });
+
+    expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
+    expect(api.getResearchRun).toHaveBeenCalledWith(informationalRun.run_id);
+  });
+
+  it('marks a url-loaded run as historical', async () => {
+    vi.mocked(api.getResearchRun).mockResolvedValue(historicalRun);
+
+    renderWorkspace({
+      route: `/app/research/${historicalRun.run_id}`,
+      path: '/app/research/:runId',
+    });
+
+    expect(await screen.findByText(/historical/i)).toBeVisible();
+  });
+
+  it('navigates to the run url after creating one', async () => {
+    vi.mocked(api.createResearchRun).mockResolvedValue(informationalRun);
+
+    renderWorkspace({
+      route: '/app/research',
+      path: '/app/research',
+    });
+
+    await userEvent.type(screen.getByLabelText(/US equity symbol/i), 'aapl');
+    await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        `/app/research/${informationalRun.run_id}`,
+        { replace: true }
+      )
+    );
   });
 });

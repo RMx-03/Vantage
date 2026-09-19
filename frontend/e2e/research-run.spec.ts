@@ -43,6 +43,27 @@ async function installAuthAndApiMocks(page: Page) {
     });
   });
 
+  // Mock Individual Research Run API
+  await page.route('**/api/v1/research-runs/*', async (route) => {
+    const url = route.request().url();
+    if (url.includes('DEGRADED') || url.includes(reviewRun.run_id)) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...reviewRun,
+          symbol: 'DEGRADED',
+        }),
+      });
+    } else {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(informationalRun),
+      });
+    }
+  });
+
   // Mock Research Runs API
   await page.route('**/api/v1/research-runs*', async (route) => {
     const req = route.request();

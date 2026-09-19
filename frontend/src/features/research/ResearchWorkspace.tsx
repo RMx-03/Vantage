@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
-import { createResearchRun, listResearchRuns, ApiError } from '../../api/researchRuns';
+import { useNavigate, useParams } from 'react-router-dom';
+import { createResearchRun, listResearchRuns, getResearchRun, ApiError } from '../../api/researchRuns';
 import { useAuth } from '../../context/AuthContext';
 import type { ResearchRun } from '../../types/research';
 import ResearchResult from './ResearchResult';
@@ -13,6 +13,15 @@ const SYMBOL_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
 
 export default function ResearchWorkspace() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const prevOwnerRef = useRef(user?.id);
+
+  useEffect(() => {
+    if (prevOwnerRef.current !== undefined && prevOwnerRef.current !== user?.id) {
+      navigate('/app/research', { replace: true });
+    }
+    prevOwnerRef.current = user?.id;
+  }, [user?.id, navigate]);
 
   // Remounting on owner change is what guarantees that no run, error or input
   // a previous owner produced can survive into the next owner's session.
@@ -23,13 +32,22 @@ export default function ResearchWorkspace() {
 
 function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   const [symbolInput, setSymbolInput] = useState('');
-  const [selectedRun, setSelectedRun] = useState<ResearchRun | null>(null);
-  const [isHistorical, setIsHistorical] = useState(false);
+  const { runId } = useParams<{ runId?: string }>();
+  const [liveRunId, setLiveRunId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(true);
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { signOut } = useAuth();
+
+  const { data: routeRun } = useQuery({
+    queryKey: ['research-run', runId],
+    queryFn: () => getResearchRun(runId!),
+    enabled: Boolean(runId),
+  });
+
+  const selectedRun: ResearchRun | null = routeRun ?? null;
+  const isHistorical = Boolean(runId) && runId !== liveRunId;
 
   const { data: historyData } = useQuery({
     queryKey: ['research-runs', ownerId],
@@ -45,9 +63,10 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   const mutation = useMutation({
     mutationFn: (sym: string) => createResearchRun(sym),
     onSuccess: (data) => {
-      setSelectedRun(data);
-      setIsHistorical(false);
+      setLiveRunId(data.run_id);
+      queryClient.setQueryData(['research-run', data.run_id], data);
       queryClient.invalidateQueries({ queryKey: ['research-runs', ownerId] });
+      navigate(`/app/research/${data.run_id}`, { replace: true });
     },
   });
 
@@ -264,8 +283,9 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
             <div className="flex-1 overflow-y-auto px-6 py-4">
               <ResearchHistory
                 onSelectRun={(run) => {
-                  setSelectedRun(run);
-                  setIsHistorical(true);
+                  setLiveRunId(null);
+                  queryClient.setQueryData(['research-run', run.run_id], run);
+                  navigate(`/app/research/${run.run_id}`);
                   setShowHistory(false);
                 }}
                 selectedRunId={selectedRun?.run_id}
