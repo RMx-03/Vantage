@@ -36,6 +36,8 @@ npm run test:e2e -- --project=chromium
 
 Coverage is measured over the Phase 1 research feature and its API client with an 80% line/function gate.
 
+`npm run test:e2e` runs the browser journey with Supabase auth and the research API replaced by Playwright route mocks, so it verifies UI behaviour rather than a full stack. Setting `PLAYWRIGHT_EXTERNAL_SERVER=true` skips the development server and runs the same mocked journey against an already-running server, which is how CI replays it against the production Nginx container image.
+
 ## User-visible states
 
 The UI shows one current result or one selected historical result. Starting a request shows a bounded loading state; a failed newer request suppresses any older result so stale output cannot be mistaken for the latest run. Authentication failures offer “Sign in again”; retryable provider/server failures offer “Retry research.”

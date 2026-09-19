@@ -78,11 +78,21 @@ async function installAuthAndApiMocks(page: Page) {
   });
 }
 
-test.describe('Research Run User Journey', () => {
+test.describe('Research Run Browser Journey (Supabase and API route-mocked)', () => {
   test('creates, inspects, and reopens transparent research runs', async ({ page }) => {
     await installAuthAndApiMocks(page);
 
-    await page.goto('/app');
+    // Direct deep-link navigation, then a reload. Against the production
+    // frontend container both requests are served by the Nginx SPA fallback
+    // (`try_files ... /index.html`); against the dev server they are served by
+    // Vite. Supabase and the research API stay route-mocked either way, so this
+    // exercises static routing only — not the backend.
+    const directResponse = await page.goto('/app');
+    expect(directResponse?.status()).toBe(200);
+    await expect(page.getByLabel(/US equity symbol/i)).toBeVisible();
+
+    const reloadResponse = await page.reload();
+    expect(reloadResponse?.status()).toBe(200);
 
     // Verify workspace loaded
     await expect(page.getByLabel(/US equity symbol/i)).toBeVisible();

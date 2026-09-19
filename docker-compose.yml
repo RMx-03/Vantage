@@ -43,6 +43,9 @@ services:
       SUPABASE_KEY: ${SUPABASE_KEY:-local-development-anon-key}
       TRACE_EXPORT_ENABLED: ${TRACE_EXPORT_ENABLED:-false}
       TELEMETRY_USER_SALT: ${TELEMETRY_USER_SALT:-local-development-only}
+      # Immutable build identity reported as versions.code. CI supplies the
+      # commit SHA; local runs fall back to "development".
+      CODE_REVISION: ${CODE_REVISION:-development}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}

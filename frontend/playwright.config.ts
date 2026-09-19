@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// When true, the journey runs against an already-running server on baseURL —
+// the production Nginx container in the CI container gate — instead of the
+// Vite development server.
+const externalServer = process.env.PLAYWRIGHT_EXTERNAL_SERVER === 'true';
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -20,10 +25,12 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
-  },
+  webServer: externalServer
+    ? undefined
+    : {
+        command: 'npm run dev',
+        url: 'http://localhost:5173',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120000,
+      },
 });
