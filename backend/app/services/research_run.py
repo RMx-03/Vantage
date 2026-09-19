@@ -158,6 +158,7 @@ class ResearchRunService:
                         news = self.news.fetch_company_news(
                             norm_symbol,
                             analysis_cutoff,
+                            now,
                             settings.NEWS_LOOKBACK_DAYS,
                             10,
                         )

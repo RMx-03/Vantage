@@ -124,26 +124,29 @@ def mock_news():
     news.name = "mock_news"
 
     def fetch(
-        symbol: str, cutoff: datetime, lookback_days: int, limit: int
+        symbol: str,
+        cutoff: datetime,
+        retrieved_at: datetime,
+        lookback_days: int,
+        limit: int,
     ) -> NewsSnapshot:
-        now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
         item = NewsItem(
             evidence_id="news-1",
             provider="mock_news",
             publisher="Reuters",
             title="Apple quarterly progress",
             url="https://example.com/news-1",
-            event_time=now,
-            retrieved_at=now,
+            event_time=cutoff,
+            retrieved_at=retrieved_at,
             content_hash="b" * 64,
         )
         return NewsSnapshot(
             symbol=symbol,
             items=[item],
             provider="mock_news",
-            retrieved_at=now,
-            coverage_start=now,
-            coverage_end=now,
+            retrieved_at=retrieved_at,
+            coverage_start=cutoff,
+            coverage_end=cutoff,
             quality=ComponentQuality.FRESH,
         )
 

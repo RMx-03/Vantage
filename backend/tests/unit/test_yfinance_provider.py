@@ -61,7 +61,7 @@ def test_provider_fetches_history_and_news_once(
     market = provider.fetch_daily_snapshot(
         "AAPL", date(2026, 8, 14), date(2026, 9, 11), fixed_now
     )
-    news = provider.fetch_company_news("AAPL", fixed_now, 7, 10)
+    news = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
     assert mock_ticker.history.call_count == 1
     assert mock_ticker.get_news.call_count == 1
     assert market.as_of.date() == date(2026, 9, 11)
@@ -109,6 +109,25 @@ def test_black_friday_uses_early_close() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        (
+            datetime(2025, 1, 8, 21, 0, tzinfo=UTC),
+            datetime(2025, 1, 8, 21, 0, tzinfo=UTC),
+        ),
+        (
+            datetime(2025, 7, 8, 20, 0, tzinfo=UTC),
+            datetime(2025, 7, 8, 20, 0, tzinfo=UTC),
+        ),
+    ],
+)
+def test_regular_close_respects_dst_and_includes_exact_close(
+    now: datetime, expected: datetime
+) -> None:
+    assert yfinance_provider.latest_completed_xnys_close(now) == expected
+
+
 def test_exact_trailing_sessions() -> None:
     sessions = yfinance_provider.trailing_xnys_sessions(date(2025, 7, 8), 21)
 
@@ -120,7 +139,7 @@ def test_exact_trailing_sessions() -> None:
 def test_news_handles_both_legacy_and_content_schemas(
     provider: YFinanceSnapshotProvider, fixed_now: datetime
 ) -> None:
-    news = provider.fetch_company_news("AAPL", fixed_now, 7, 10)
+    news = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
     # Legacy story
     legacy = next(
         item
@@ -140,7 +159,7 @@ def test_news_handles_both_legacy_and_content_schemas(
 def test_news_deduplication_by_id_and_normalized_url(
     provider: YFinanceSnapshotProvider, fixed_now: datetime
 ) -> None:
-    news = provider.fetch_company_news("AAPL", fixed_now, 7, 10)
+    news = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
     # The fixture has:
     # 1. 43924729-1b5c-3f92-959c-851532152865 (first occurrence accepted)
     # 2. Duplicate ID 43924729-1b5c-3f92-959c-851532152865 (skipped by provider ID)
@@ -153,7 +172,7 @@ def test_news_deduplication_by_id_and_normalized_url(
 def test_news_missing_publisher_and_time_retained(
     provider: YFinanceSnapshotProvider, fixed_now: datetime
 ) -> None:
-    news = provider.fetch_company_news("AAPL", fixed_now, 7, 10)
+    news = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
     item = next(
         item for item in news.items if item.evidence_id == "missing-publisher-01"
     )
@@ -196,7 +215,7 @@ def test_provider_news_exception_raises_news_failed(
     mock_ticker.get_news.side_effect = RuntimeError("Yahoo API down")
     p = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
     with pytest.raises(VantageError) as exc_info:
-        p.fetch_company_news("AAPL", fixed_now, 7, 10)
+        p.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
     assert exc_info.value.code == "NEWS_PROVIDER_FAILED"
 
 
@@ -273,13 +292,15 @@ def test_news_filters_to_open_closed_lookback_window_and_retains_undated(
         },
     ]
     provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
-    result = provider.fetch_company_news("AAPL", fixed_now, 7, 10)
+    retrieved_at = datetime(2026, 9, 16, 9, 30, tzinfo=UTC)
+    result = provider.fetch_company_news("AAPL", fixed_now, retrieved_at, 7, 10)
     assert [item.evidence_id for item in result.items] == [
         "current-news",
         "inside-news",
         "undated-news",
     ]
-    assert result.retrieved_at == fixed_now
+    assert result.retrieved_at == retrieved_at
+    assert all(item.retrieved_at == retrieved_at for item in result.items)
     assert result.quality == ComponentQuality.PARTIAL
 
 

@@ -255,11 +255,13 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
         self,
         symbol: str,
         cutoff: datetime,
+        retrieved_at: datetime,
         lookback_days: int,
         limit: int = 10,
     ) -> NewsSnapshot:
         normalized_symbol = symbol.strip().upper()
         cutoff_utc = cutoff.astimezone(UTC)
+        retrieved_at_utc = retrieved_at.astimezone(UTC)
         window_start = cutoff_utc - timedelta(days=lookback_days)
 
         try:
@@ -276,7 +278,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                 symbol=normalized_symbol,
                 items=[],
                 provider=self.name,
-                retrieved_at=cutoff_utc,
+                retrieved_at=retrieved_at_utc,
                 quality=ComponentQuality.MISSING,
             )
 
@@ -375,7 +377,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                     title=clean_title,
                     url=norm_url or url,
                     event_time=event_time,
-                    retrieved_at=cutoff_utc,
+                    retrieved_at=retrieved_at_utc,
                     content_hash=norm_hash,
                 )
             )
@@ -414,7 +416,7 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
             symbol=normalized_symbol,
             items=capped_items,
             provider=self.name,
-            retrieved_at=cutoff_utc,
+            retrieved_at=retrieved_at_utc,
             coverage_start=coverage_start,
             coverage_end=coverage_end,
             quality=quality,
