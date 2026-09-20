@@ -30,7 +30,7 @@ def user_hash(user_id: UUID, salt: str) -> str:
     """
     Generate a pseudonymous, irreversible SHA-256 HMAC of a user ID using a secret salt.
     """
-    return hmac.new(salt.encode("utf-8"), user_id.bytes, hashlib.sha256).hexdigest()
+    return hmac.HMAC(salt.encode("utf-8"), user_id.bytes, hashlib.sha256).hexdigest()
 
 
 def safe_attributes(values: Mapping[str, Any]) -> dict[str, Any]:
