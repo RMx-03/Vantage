@@ -1,5 +1,6 @@
 import { useLocation, useMatch, Outlet } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
+import { getResearchRun } from '../api/researchRuns';
 import { useAuth } from '../context/AuthContext';
 import type { ResearchRun } from '../types/research';
 import { MicroLabel } from '../components/ui';
@@ -13,11 +14,11 @@ export default function Terminal() {
   const ownerId = user?.id ?? null;
   const match = useMatch('/app/research/:runId');
   const runId = match?.params.runId;
-  const run = useQueryClient().getQueryData<ResearchRun>([
-    'research-run',
-    ownerId,
-    runId,
-  ]);
+  const { data: run } = useQuery<ResearchRun>({
+    queryKey: ['research-run', ownerId, runId],
+    queryFn: () => getResearchRun(runId!),
+    enabled: ownerId !== null && Boolean(runId),
+  });
   const activeModel = run?.model_info?.model ?? null;
 
   return (
