@@ -45,10 +45,6 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   const { signOut } = useAuth();
 
   const [prevPathname, setPrevPathname] = useState(pathname);
-  if (prevPathname !== pathname) {
-    setPrevPathname(pathname);
-    setShowHistory(false);
-  }
 
   const { data: routeRun } = useQuery({
     queryKey: ['research-run', ownerId, runId],
@@ -83,6 +79,14 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
       navigate(`/app/research/${data.run_id}`, { replace: true });
     },
   });
+
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
+    setShowHistory(false);
+    if (mutation.isError) {
+      mutation.reset();
+    }
+  }
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();

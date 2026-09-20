@@ -262,6 +262,38 @@ describe('ResearchWorkspace', () => {
     expect(screen.queryByText(informationalRun.summary!)).not.toBeInTheDocument();
   });
 
+  it('clears a failed mutation when navigating to a historical run', async () => {
+    vi.mocked(api.createResearchRun).mockRejectedValueOnce(
+      new api.ApiError(503, {
+        code: 'MARKET_DATA_PROVIDER_FAILED',
+        message: 'Market data could not be retrieved.',
+        retryable: true,
+      })
+    );
+    vi.mocked(api.listResearchRuns).mockResolvedValue({
+      items: [historicalRun],
+      next_cursor: null,
+    });
+    vi.mocked(api.getResearchRun).mockResolvedValue(historicalRun);
+
+    renderWorkspace();
+    await userEvent.type(screen.getByLabelText(/US equity symbol/i), 'AAPL');
+    await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
+    expect(
+      await screen.findByText(/Market data could not be retrieved/i)
+    ).toBeVisible();
+
+    await userEvent.click(screen.getByRole('button', { name: /View History/i }));
+    await userEvent.click(
+      await screen.findByRole('link', { name: /AAPL.*Jul 31, 2026/i })
+    );
+
+    expect(await screen.findByText(/historical/i)).toBeVisible();
+    expect(
+      screen.queryByText(/Market data could not be retrieved/i)
+    ).not.toBeInTheDocument();
+  });
+
   it('shows correlation IDs and retries the failed symbol', async () => {
     vi.mocked(api.createResearchRun)
       .mockRejectedValueOnce(
