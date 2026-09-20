@@ -7,7 +7,7 @@ import httpx
 from groq import APIConnectionError
 from pydantic import ValidationError
 
-from app.core.config import Settings
+from app.core.config import GROQ_STRICT_JSON_SCHEMA_MODELS, Settings
 from app.domain.errors import VantageError
 from app.domain.research import (
     AIInterpretation,
@@ -274,11 +274,11 @@ class GroqInterpretationProvider(InterpretationProvider):
     ) -> None:
         self.api_key = api_key
         self.model = model
-        self.json_schema_models = json_schema_models or [
-            "llama-3.3-70b-versatile",
-            "llama-3.1-70b-versatile",
-            "llama-3.1-8b-instant",
-        ]
+        self.json_schema_models = (
+            list(GROQ_STRICT_JSON_SCHEMA_MODELS)
+            if json_schema_models is None
+            else json_schema_models
+        )
         self._client = client
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries

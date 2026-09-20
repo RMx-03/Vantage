@@ -7,6 +7,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 _REPO_ROOT = _BACKEND_DIR.parent
 
+GROQ_STRICT_JSON_SCHEMA_MODELS: tuple[str, ...] = (
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.8-27b",
+)
+
 
 class Settings(BaseSettings):
     """
@@ -80,11 +86,9 @@ class Settings(BaseSettings):
 
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
-    GROQ_JSON_SCHEMA_MODELS: list[str] = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-70b-versatile",
-        "llama-3.1-8b-instant",
-    ]
+    GROQ_JSON_SCHEMA_MODELS: list[str] = Field(
+        default_factory=lambda: list(GROQ_STRICT_JSON_SCHEMA_MODELS)
+    )
 
     # ------------------------------------------------------------------
     # Supabase Authentication

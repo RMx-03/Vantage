@@ -778,6 +778,33 @@ def test_every_provider_refusal_is_not_retried(factory, metrics, news):
 
 
 @pytest.mark.parametrize("adapter", ["groq"], indirect=True)
+def test_default_groq_llama_uses_json_object_mode(adapter, metrics, news):
+    _, build = adapter
+    provider, call, _ = build([valid_interpretation_json()])
+
+    provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+
+    assert call.call_args.kwargs["response_format"] == {"type": "json_object"}
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"],
+)
+def test_groq_uses_strict_schema_for_supported_models(model, metrics, news):
+    provider = groq_factory()
+    provider.model = model
+
+    provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+
+    response_format = provider._client.chat.completions.create.call_args.kwargs[
+        "response_format"
+    ]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["strict"] is True
+
+
+@pytest.mark.parametrize("adapter", ["groq"], indirect=True)
 def test_groq_no_choices_is_not_retried(adapter, metrics, news):
     _, build = adapter
     provider, call, _ = build(
