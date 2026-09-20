@@ -142,3 +142,41 @@ describe('Terminal active model', () => {
     );
   });
 });
+
+describe('Terminal sidebar collapse', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('toggles the sidebar via the toggle button', async () => {
+    renderTerminal('/app/research', new QueryClient());
+
+    const toggleButton = screen.getByRole('button', { name: /Collapse sidebar/i });
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'true');
+
+    await userEvent.click(toggleButton);
+
+    expect(toggleButton).toHaveAttribute('aria-label', 'Expand sidebar');
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
+    expect(localStorage.getItem('vantage:sidebar-open')).toBe('false');
+
+    await userEvent.click(toggleButton);
+    expect(toggleButton).toHaveAttribute('aria-label', 'Collapse sidebar');
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'true');
+    expect(localStorage.getItem('vantage:sidebar-open')).toBe('true');
+  });
+
+  it('toggles the sidebar with Ctrl+B shortcut', async () => {
+    renderTerminal('/app/research', new QueryClient());
+
+    const toggleButton = screen.getByRole('button', { name: /Collapse sidebar/i });
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'true');
+
+    await userEvent.keyboard('{Control>}b{/Control}');
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.keyboard('{Control>}b{/Control}');
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'true');
+  });
+});
+
