@@ -51,9 +51,9 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   }
 
   const { data: routeRun } = useQuery({
-    queryKey: ['research-run', runId],
+    queryKey: ['research-run', ownerId, runId],
     queryFn: () => getResearchRun(runId!),
-    enabled: Boolean(runId),
+    enabled: ownerId !== null && Boolean(runId),
   });
 
   const selectedRun: ResearchRun | null = routeRun ?? null;
@@ -78,7 +78,7 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
     mutationFn: (sym: string) => createResearchRun(sym),
     onSuccess: (data) => {
       setLiveRunId(data.run_id);
-      queryClient.setQueryData(['research-run', data.run_id], data);
+      queryClient.setQueryData(['research-run', ownerId, data.run_id], data);
       queryClient.invalidateQueries({ queryKey: ['research-runs', ownerId] });
       navigate(`/app/research/${data.run_id}`, { replace: true });
     },

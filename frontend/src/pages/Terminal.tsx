@@ -9,9 +9,14 @@ import BottomNav from '../components/nav/BottomNav';
 export default function Terminal() {
   const { pathname } = useLocation();
   const isSettings = pathname.startsWith('/app/settings');
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const ownerId = user?.id ?? null;
   const { runId } = useParams<{ runId?: string }>();
-  const run = useQueryClient().getQueryData<ResearchRun>(['research-run', runId]);
+  const run = useQueryClient().getQueryData<ResearchRun>([
+    'research-run',
+    ownerId,
+    runId,
+  ]);
   const activeModel = run?.model_info?.model ?? null;
 
   return (

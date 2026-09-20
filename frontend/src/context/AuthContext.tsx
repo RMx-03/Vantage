@@ -48,12 +48,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Drop every owner-scoped research query before the next owner can
         // render, so cached rows never outlive the session that fetched them.
         //
-        // INVARIANT: every owner-scoped query key root must be purged here.
-        // If you add a query whose data belongs to one user, add its root to
-        // this list — otherwise the next user signed into the same browser
-        // can render the previous user's rows from the cache.
-        void queryClient.cancelQueries({ queryKey: ['research-runs'] });
-        queryClient.removeQueries({ queryKey: ['research-runs'] });
+        // INVARIANT: these are all owner-scoped query key roots in the app.
+        // If another owner-scoped query is added, add its root here before it ships.
+        for (const root of [['research-runs'], ['research-run']]) {
+          void queryClient.cancelQueries({ queryKey: root });
+          queryClient.removeQueries({ queryKey: root });
+        }
         ownerIdRef.current = nextOwnerId;
       }
 

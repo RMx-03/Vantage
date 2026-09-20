@@ -127,8 +127,9 @@ describe('ResearchWorkspace', () => {
 
   it('validates symbol input and triggers research mutation', async () => {
     vi.mocked(api.createResearchRun).mockResolvedValueOnce(informationalRun);
+    vi.mocked(api.getResearchRun).mockResolvedValue(informationalRun);
 
-    renderWorkspace();
+    const { queryClient } = renderWorkspace();
 
     const input = screen.getByLabelText(/US equity symbol/i);
     const submitBtn = screen.getByRole('button', { name: /Run research/i });
@@ -143,6 +144,16 @@ describe('ResearchWorkspace', () => {
     expect(api.createResearchRun).toHaveBeenCalledWith('AAPL');
     expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
     expect(screen.queryByText(/approved|rejected/i)).not.toBeInTheDocument();
+    expect(
+      queryClient.getQueryData([
+        'research-run',
+        'user-a',
+        informationalRun.run_id,
+      ])
+    ).toEqual(informationalRun);
+    expect(
+      queryClient.getQueryData(['research-run', informationalRun.run_id])
+    ).toBeUndefined();
   });
 
   it.each([

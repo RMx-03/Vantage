@@ -97,4 +97,27 @@ describe('AuthProvider hydration race', () => {
 
     expect(screen.getByTestId('owner')).toHaveTextContent('owner-a');
   });
+
+  it('purges cached list and detail queries when the signed-in owner changes', async () => {
+    await waitFor(() => expect(authMock.listeners.length).toBeGreaterThan(0));
+
+    emit(OWNER_A);
+    queryClient.setQueryData(['research-run', 'owner-a', 'run-1'], {
+      run_id: 'run-1',
+    });
+    queryClient.setQueryData(['research-runs', 'owner-a'], {
+      pages: [],
+    });
+
+    emit(OWNER_B);
+
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryData(['research-run', 'owner-a', 'run-1'])
+      ).toBeUndefined();
+      expect(
+        queryClient.getQueryData(['research-runs', 'owner-a'])
+      ).toBeUndefined();
+    });
+  });
 });

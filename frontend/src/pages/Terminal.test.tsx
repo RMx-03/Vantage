@@ -22,7 +22,10 @@ describe('Terminal active model', () => {
 
   it('shows the model of the run named in the url', () => {
     const client = new QueryClient();
-    client.setQueryData(['research-run', informationalRun.run_id], informationalRun);
+    client.setQueryData(
+      ['research-run', 'u1', informationalRun.run_id],
+      informationalRun
+    );
 
     renderWithRouter(
       <QueryClientProvider client={client}>
