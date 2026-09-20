@@ -294,6 +294,41 @@ describe('ResearchWorkspace', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('keeps history open for pagination and closes it for run selection', async () => {
+    vi.mocked(api.listResearchRuns)
+      .mockResolvedValueOnce({
+        items: [informationalRun],
+        next_cursor: 'cursor-123',
+      })
+      .mockResolvedValueOnce({
+        items: [historicalRun],
+        next_cursor: null,
+      });
+    vi.mocked(api.getResearchRun).mockResolvedValue(historicalRun);
+
+    renderWorkspace();
+    await userEvent.click(screen.getByRole('button', { name: /View History/i }));
+    expect(
+      await screen.findByRole('heading', { name: /Research History/i })
+    ).toBeVisible();
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Load more/i })
+    );
+    expect(
+      screen.getByRole('heading', { name: /Research History/i })
+    ).toBeVisible();
+
+    const secondPageRun = await screen.findByRole('link', {
+      name: /AAPL.*Jul 31, 2026/i,
+    });
+    await userEvent.click(secondPageRun);
+
+    expect(
+      screen.queryByRole('heading', { name: /Research History/i })
+    ).not.toBeInTheDocument();
+  });
+
   it('shows correlation IDs and retries the failed symbol', async () => {
     vi.mocked(api.createResearchRun)
       .mockRejectedValueOnce(

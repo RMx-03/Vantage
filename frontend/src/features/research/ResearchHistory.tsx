@@ -5,7 +5,13 @@ import { useAuth } from '../../context/AuthContext';
 import { formatUtcDate } from './dateFormatters';
 import { StatusChip } from '../../components/ui';
 
-export default function ResearchHistory() {
+interface ResearchHistoryProps {
+  onNavigate?: () => void;
+}
+
+export default function ResearchHistory({
+  onNavigate,
+}: ResearchHistoryProps = {}) {
   const { runId } = useParams<{ runId?: string }>();
   const { user } = useAuth();
   const ownerId = user?.id ?? null;
@@ -77,6 +83,7 @@ export default function ResearchHistory() {
             <Link
               key={run.run_id}
               to={`/app/research/${run.run_id}`}
+              onClick={onNavigate}
               aria-label={accessibleName}
               aria-current={isSelected ? 'true' : undefined}
               className={`w-full text-left p-4 border transition-colors flex flex-col gap-1.5 ${

@@ -178,9 +178,7 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
 
       {/* Slide-over History Drawer */}
       <Drawer open={showHistory} onClose={() => setShowHistory(false)} title="Research History">
-        <div onClick={() => setShowHistory(false)}>
-          <ResearchHistory />
-        </div>
+        <ResearchHistory onNavigate={() => setShowHistory(false)} />
       </Drawer>
     </div>
   );
