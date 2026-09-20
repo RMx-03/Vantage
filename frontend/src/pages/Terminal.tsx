@@ -99,17 +99,21 @@ export default function Terminal() {
         {/* SideNavBar (Hidden on Mobile, Collapsible on Desktop) */}
         <aside
           aria-label="Sidebar navigation"
-          className={`hidden lg:flex flex-col bg-[#0e0e0e] border-r border-[#191a1a] z-40 shrink-0 transition-[width,border-color] duration-200 ease-in-out overflow-hidden ${
+          className={`hidden lg:flex flex-col bg-surface border-r border-outline-variant/30 z-40 shrink-0 transition-[width,border-color] duration-200 ease-in-out overflow-hidden ${
             sidebarOpen ? 'w-64' : 'w-0 border-r-0'
           }`}
           aria-hidden={!sidebarOpen}
           inert={!sidebarOpen}
         >
-          <div className="w-64 p-8 flex flex-col gap-12 h-full">
+          <div className="w-64 p-5 flex flex-col justify-between h-full">
             <SideNav />
-            <div className="mt-auto border-t border-[#191a1a] pt-6 flex flex-col gap-2">
-              <MicroLabel>Active Model</MicroLabel>
-              <span className="font-label text-xs text-primary">{activeModel ?? '—'}</span>
+            <div className="mt-auto border-t border-outline-variant/20 pt-4">
+              <div className="p-3 border border-outline-variant/40 bg-surface-container-low flex flex-col gap-1">
+                <MicroLabel className="text-[9px] tracking-[0.2em] text-outline">Active Model</MicroLabel>
+                <span className="font-label text-xs font-semibold text-primary tracking-wide">
+                  {activeModel ?? '—'}
+                </span>
+              </div>
             </div>
           </div>
         </aside>
