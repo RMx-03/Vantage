@@ -11,8 +11,11 @@ export default function CopyButton({ value, label }: { value: string; label: str
 
   const copy = async () => {
     try {
-      // Absent in insecure contexts and older browsers; never let it throw.
-      await navigator?.clipboard?.writeText(value);
+      if (!navigator.clipboard?.writeText) {
+        setCopied(false);
+        return;
+      }
+      await navigator.clipboard.writeText(value);
       setCopied(true);
     } catch {
       setCopied(false);

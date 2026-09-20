@@ -33,4 +33,13 @@ describe('CopyButton', () => {
 
     expect(screen.getByRole('button', { name: 'Copy run ID' })).toBeVisible();
   });
+
+  it('does not announce success when the clipboard api is unavailable', async () => {
+    vi.stubGlobal('navigator', {});
+
+    render(<CopyButton value="run-123" label="Copy run ID" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Copy run ID' }));
+
+    expect(screen.queryByText('Copied')).not.toBeInTheDocument();
+  });
 });
