@@ -40,8 +40,25 @@ export default function ResearchHistory({
 
   if (ownerId === null || isLoading) {
     return (
-      <div className="flex items-center justify-center p-8 text-sm text-outline font-label">
-        <span className="animate-pulse">Loading research history...</span>
+      <div className="space-y-3">
+        <div className="flex items-center justify-center p-4 text-sm text-outline font-label">
+          <span className="animate-pulse">Loading research history...</span>
+        </div>
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="p-4 border border-outline-variant/40 bg-surface-container-low space-y-3 animate-pulse"
+          >
+            <div className="flex items-center justify-between">
+              <div className="h-4 w-16 bg-surface-container-highest" />
+              <div className="h-3 w-20 bg-surface-container-high" />
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-outline-variant/30">
+              <div className="h-4 w-24 bg-surface-container-high" />
+              <div className="h-3 w-16 bg-surface-container-highest" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -65,7 +82,7 @@ export default function ResearchHistory({
 
   if (runs.length === 0) {
     return (
-      <div className="p-8 text-center text-sm text-outline font-label">
+      <div className="p-8 border border-dashed border-outline-variant bg-surface-container-low text-center text-sm text-outline font-label">
         No previous research runs found.
       </div>
     );
@@ -86,26 +103,28 @@ export default function ResearchHistory({
               onClick={onNavigate}
               aria-label={accessibleName}
               aria-current={isSelected ? 'true' : undefined}
-              className={`w-full text-left p-4 border transition-colors flex flex-col gap-1.5 ${
+              className={`group w-full text-left p-3.5 border transition-colors flex flex-col gap-2 ${
                 isSelected
-                  ? 'border-primary bg-surface-container-highest text-on-surface'
-                  : 'border-outline-variant/30 bg-surface-container-low hover:border-outline-variant hover:bg-surface-container text-on-surface-variant'
+                  ? 'border-primary border-l-2 bg-surface-container-highest text-on-surface'
+                  : 'border-outline-variant bg-surface-container-low hover:border-outline hover:bg-surface-container text-on-surface-variant'
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-label font-bold text-base tracking-tight text-on-surface">
-                  {run.symbol}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-label font-bold text-base tracking-tight text-on-surface group-hover:text-primary transition-colors">
+                    {run.symbol}
+                  </span>
+                </div>
                 <span className="text-xs text-outline font-label">{formattedDate}</span>
               </div>
 
-              <div className="flex items-center justify-between text-xs gap-2 pt-1 border-t border-outline-variant/30">
+              <div className="flex items-center justify-between text-xs gap-2 pt-2 border-t border-outline-variant/40">
                 <StatusChip
                   status={run.research_status ?? (run.workflow_status === 'failed' ? 'failed' : 'unknown')}
                   label={run.research_status ?? run.workflow_status}
                 />
 
-                <span className="text-[10px] font-label text-outline">
+                <span className="text-[10px] font-label text-outline bg-surface-container-highest px-1.5 py-0.5 border border-outline-variant/40">
                   {run.run_id.slice(0, 8)}...
                 </span>
               </div>
@@ -118,7 +137,7 @@ export default function ResearchHistory({
         <button
           onClick={() => fetchNextPage()}
           disabled={isFetchingNextPage}
-          className="w-full py-2.5 px-4 text-xs font-medium text-on-surface-variant bg-surface-container-low hover:bg-surface-container border border-outline-variant/30 hover:border-outline-variant transition-colors disabled:opacity-50 font-label uppercase tracking-widest"
+          className="w-full py-2.5 px-4 text-xs font-medium text-on-surface-variant hover:text-on-surface bg-surface-container-low hover:bg-surface-container border border-outline-variant hover:border-outline transition-colors disabled:opacity-50 font-label uppercase tracking-widest"
         >
           {isFetchingNextPage ? 'Loading more...' : 'Load more'}
         </button>
