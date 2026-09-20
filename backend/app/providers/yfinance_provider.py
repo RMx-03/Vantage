@@ -311,7 +311,10 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
 
         try:
             ticker = self._ticker_factory(normalized_symbol)
-            raw_news = ticker.get_news()
+            try:
+                raw_news = ticker.get_news(count=max(limit * 10, 100))
+            except TypeError:
+                raw_news = ticker.get_news()
         except Exception as e:
             raise VantageError(
                 code="NEWS_PROVIDER_FAILED",
@@ -450,11 +453,23 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
             ) from e
 
         # Sort items by event_time descending (None at end)
-        items = [
+        eod_items = [
             item
             for item in items
             if item.event_time is None or window_start < item.event_time <= cutoff_utc
         ]
+        if eod_items:
+            items = eod_items
+        else:
+            # When weekend/after-hours news floods the provider buffer and leaves no
+            # pre-cutoff articles, fall back to recent news up to retrieved_at_utc so
+            # live research runs are not left with zero evidence.
+            items = [
+                item
+                for item in items
+                if item.event_time is None
+                or window_start < item.event_time <= retrieved_at_utc
+            ]
         items.sort(
             key=lambda x: (
                 x.event_time is not None,

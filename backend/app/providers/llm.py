@@ -191,6 +191,22 @@ def validate_interpretation(
     return result
 
 
+def _clean_gemini_schema(schema: Any) -> Any:
+    """
+    Recursively remove 'additionalProperties' and any unsupported keys from
+    Pydantic JSON schema so Google GenAI REST API accepts it without 400 error.
+    """
+    if isinstance(schema, dict):
+        return {
+            k: _clean_gemini_schema(v)
+            for k, v in schema.items()
+            if k not in {"additionalProperties"}
+        }
+    if isinstance(schema, list):
+        return [_clean_gemini_schema(item) for item in schema]
+    return schema
+
+
 class GeminiInterpretationProvider(InterpretationProvider):
     name: str = "gemini"
     enabled: bool = True
@@ -234,7 +250,7 @@ class GeminiInterpretationProvider(InterpretationProvider):
 
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=AIInterpretation,
+            response_schema=_clean_gemini_schema(AIInterpretation.model_json_schema()),
             system_instruction=SYSTEM_INSTRUCTION,
         )
 
