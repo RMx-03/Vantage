@@ -148,6 +148,10 @@ class ResearchRunRepository:
 
                 quality_dict: dict[str, Any] = {
                     "prices": snapshot.quality.value,
+                    "volume": snapshot.volume_quality.value,
+                    "market_error_code": snapshot.error_code,
+                    "market_missing_value_count": snapshot.missing_value_count,
+                    "market_duplicate_session_count": snapshot.duplicate_session_count,
                     "news": news.quality.value,
                 }
                 content_hash = combined_snapshot_hash(snapshot, news)

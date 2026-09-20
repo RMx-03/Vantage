@@ -243,6 +243,47 @@ def test_snapshot_write_is_owner_scoped(
     assert exc_info.value.code == "RUN_NOT_FOUND"
 
 
+def test_snapshot_preserves_market_diagnostics(
+    repo: ResearchRunRepository, running_run, valid_snapshot
+) -> None:
+    market, news, sources = valid_snapshot
+    degraded_market = market.model_copy(
+        update={
+            "quality": ComponentQuality.FAILED,
+            "volume_quality": ComponentQuality.PARTIAL,
+            "error_code": "INVALID_PRICE_SERIES",
+            "missing_value_count": 2,
+            "duplicate_session_count": 1,
+        }
+    )
+
+    repo.save_snapshot(
+        running_run.id,
+        running_run.user_id,
+        degraded_market,
+        news,
+        sources,
+    )
+
+    with SessionFactory() as session:
+        quality = session.execute(
+            text(
+                "SELECT quality FROM vantage_app.research_snapshots "
+                "WHERE run_id = :run_id"
+            ),
+            {"run_id": running_run.id},
+        ).scalar_one()
+
+    assert quality == {
+        "prices": "failed",
+        "volume": "partial",
+        "market_error_code": "INVALID_PRICE_SERIES",
+        "market_missing_value_count": 2,
+        "market_duplicate_session_count": 1,
+        "news": "fresh",
+    }
+
+
 def test_snapshot_preserves_news_provenance_and_nulls(
     repo: ResearchRunRepository, running_run, valid_snapshot
 ) -> None:
