@@ -403,8 +403,7 @@ def test_history_paginates_tied_timestamps_exactly_once(
 
     returned = [run.run_id for run in first.items + second.items]
     expected = [
-        run.public_id
-        for run in sorted(runs, key=lambda run: run.id, reverse=True)
+        run.public_id for run in sorted(runs, key=lambda run: run.id, reverse=True)
     ]
     assert returned == expected
     assert len(returned) == 25
