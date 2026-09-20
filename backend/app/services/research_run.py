@@ -1,4 +1,5 @@
 from datetime import datetime
+from functools import lru_cache
 import logging
 from typing import Any, Literal
 from uuid import UUID
@@ -334,5 +335,12 @@ class ResearchRunService:
             ) from exc
 
 
+@lru_cache(maxsize=1)
 def get_research_service() -> ResearchRunService:
+    """Build the process-local stateless research service once.
+
+    Per-run data is passed to ``create`` and graph invocation state; the cached
+    service contains only reusable providers, repository behavior, versions,
+    and the compiled workflow.
+    """
     return ResearchRunService()
