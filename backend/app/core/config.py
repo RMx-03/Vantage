@@ -1,11 +1,17 @@
 from pathlib import Path
 from typing import List, Union, Any
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Root of the repository (two levels up from this file: core/ → app/ → backend/)
 _BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 _REPO_ROOT = _BACKEND_DIR.parent
+
+GROQ_STRICT_JSON_SCHEMA_MODELS: tuple[str, ...] = (
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.8-27b",
+)
 
 
 class Settings(BaseSettings):
@@ -21,7 +27,12 @@ class Settings(BaseSettings):
     # Application metadata
     # ------------------------------------------------------------------
     APP_NAME: str = "Vantage"
+    # Semantic product version used for API display and package identity.
     APP_VERSION: str = "0.1.0"
+    # Immutable revision of the running artifact (Git SHA or image/build digest).
+    # Recorded on every research run so a persisted result identifies the exact
+    # code that produced it. Defaults to "development" outside a built artifact.
+    CODE_REVISION: str = "development"
 
     # ------------------------------------------------------------------
     # Local model store
@@ -34,6 +45,7 @@ class Settings(BaseSettings):
     # API
     # ------------------------------------------------------------------
     API_V1_PREFIX: str = "/api/v1"
+    NEWS_LOOKBACK_DAYS: int = 7
 
     # ------------------------------------------------------------------
     # CORS — origins allowed to call the API
@@ -49,6 +61,7 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             if v.startswith("[") and v.endswith("]"):
                 import json
+
                 try:
                     return json.loads(v)
                 except Exception:
@@ -56,36 +69,50 @@ class Settings(BaseSettings):
             return [i.strip() for i in v.split(",") if i.strip()]
         return v
 
-
     # ------------------------------------------------------------------
     # Ollama — local LLM server (used from Phase 3 onwards)
     # ------------------------------------------------------------------
     LLM_PROVIDER: str = "ollama"
+    LLM_TIMEOUT_SECONDS: int = Field(default=30, gt=0)
+    LLM_MAX_RETRIES: int = Field(default=1, ge=0)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "vantage-fin"
-    OLLAMA_TIMEOUT_SECONDS: int = 60
-    OLLAMA_MAX_RETRIES: int = 2
 
     # ------------------------------------------------------------------
     # Multi-Provider Cloud LLMs (Phase 3 Architecture Shift)
     # ------------------------------------------------------------------
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3-flash-preview"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama3-8b-8192"
-
-    # ------------------------------------------------------------------
-    # Risk thresholds (used from Phase 2 onwards)
-    # ------------------------------------------------------------------
-    VOLATILITY_THRESHOLD: float = 0.40  # annualised vol ceiling
-    SENTIMENT_REJECTION_THRESHOLD: float = 0.2  # sentiment floor
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_JSON_SCHEMA_MODELS: list[str] = Field(
+        default_factory=lambda: list(GROQ_STRICT_JSON_SCHEMA_MODELS)
+    )
 
     # ------------------------------------------------------------------
     # Supabase Authentication
     # ------------------------------------------------------------------
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
+
+    # ------------------------------------------------------------------
+    # Database (PostgreSQL)
+    # ------------------------------------------------------------------
+    DATABASE_URL: str = "postgresql+psycopg://vantage_runtime:vantage_runtime@localhost:5433/vantage_test"
+    MIGRATION_DATABASE_URL: str = (
+        "postgresql+psycopg://vantage_owner:vantage_owner@localhost:5433/vantage_test"
+    )
+
+    # ------------------------------------------------------------------
+    # Telemetry and Observability (Phase 1 Task 8)
+    # ------------------------------------------------------------------
+    TRACE_EXPORT_ENABLED: bool = False
+    TELEMETRY_USER_SALT: str = "vantage-telemetry-salt"
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+    LANGFUSE_TIMEOUT_SECONDS: int = Field(default=5, gt=0)
 
     # ------------------------------------------------------------------
     # Logging

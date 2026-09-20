@@ -1,0 +1,293 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend Tests & Quality Gates
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: vantage_owner
+          POSTGRES_PASSWORD: vantage_owner
+          POSTGRES_DB: vantage_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql+psycopg://vantage_runtime:vantage_runtime@localhost:5432/vantage_test
+      MIGRATION_DATABASE_URL: postgresql+psycopg://vantage_owner:vantage_owner@localhost:5432/vantage_test
+      VANTAGE_RUNTIME_DB_ROLE: vantage_runtime
+      TRACE_EXPORT_ENABLED: "false"
+      SUPABASE_JWT_SECRET: "ci-dummy-jwt-secret-not-for-production-use"
+      CODE_REVISION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.2"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies (frozen)
+        run: uv sync --frozen
+
+      - name: Create least-privilege runtime role
+        env:
+          PGPASSWORD: vantage_owner
+        run: >-
+          psql -h localhost -U vantage_owner -d vantage_test
+          -c "CREATE ROLE vantage_runtime LOGIN PASSWORD 'vantage_runtime'"
+
+      - name: Run database migrations
+        run: uv run alembic upgrade head
+
+      - name: Verify PUBLIC has no application privileges
+        env:
+          PGPASSWORD: vantage_owner
+        run: |
+          public_grants="$(psql -h localhost -U vantage_owner -d vantage_test -tAc "SELECT count(*) FROM information_schema.role_table_grants WHERE table_schema='vantage_app' AND grantee='PUBLIC'")"
+          test "$public_grants" = "0"
+
+      - name: Run Ruff linter
+        run: uv run ruff check app tests migrations
+
+      - name: Verify Ruff formatting
+        run: uv run ruff format --check app tests migrations
+
+      - name: Run Mypy type checker
+        run: uv run mypy app/domain app/services app/providers app/repositories app/telemetry app/api
+
+      - name: Run Pytest with coverage gate (>=85%)
+        run: uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=85
+
+  frontend:
+    name: Frontend Tests, Lint & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      VITE_SUPABASE_URL: https://keusiyiyupmnskmlztmb.supabase.co
+      VITE_SUPABASE_ANON_KEY: ci-public-anon-key-not-for-production
+      VITE_API_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.x"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies (ci)
+        run: npm ci
+
+      - name: Audit dependency vulnerabilities
+        run: npm audit --audit-level=high
+
+      - name: Run Vitest unit tests with coverage
+        run: npm test -- --run --coverage
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Design system drift gate
+        run: npm run check:design
+
+      - name: Run Production Build
+        run: npm run build
+
+  browser:
+    name: Mocked Browser Journey (Playwright, dev server)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      VITE_SUPABASE_URL: https://keusiyiyupmnskmlztmb.supabase.co
+      VITE_SUPABASE_ANON_KEY: ci-public-anon-key-not-for-production
+      VITE_API_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.x"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies (ci)
+        run: npm ci
+
+      - name: Install Playwright Chromium with system dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright journey against the dev server
+        run: npm run test:e2e -- --project=chromium
+
+  containers:
+    name: Production Container Smoke Test
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    env:
+      # Non-secret CI-only values. The gate deliberately runs without Supabase,
+      # market-data, model-provider, or Langfuse credentials.
+      POSTGRES_OWNER_PASSWORD: ci-container-owner-not-for-production
+      POSTGRES_RUNTIME_PASSWORD: ci-container-runtime-not-for-production
+      LLM_PROVIDER: disabled
+      TRACE_EXPORT_ENABLED: "false"
+      CODE_REVISION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.x"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build production backend and frontend images
+        run: docker compose build backend frontend
+
+      - name: Start PostgreSQL on a fresh volume
+        run: docker compose up -d postgres
+
+      # Migrations also run as a dependency of the app containers below
+      # (`depends_on: migrate: service_completed_successfully`). Running them
+      # here as well is deliberate and harmless — Alembic is idempotent — and it
+      # is what makes a migration failure a separately-named failing step
+      # instead of an opaque container-startup error. Do not delete this step.
+      - name: Apply Alembic migrations in a container
+        run: docker compose run --rm migrate
+
+      - name: Verify container database privilege separation
+        run: |
+          public_grants="$(docker compose exec -T -e PGPASSWORD="$POSTGRES_OWNER_PASSWORD" postgres \
+            psql -U vantage_owner -d vantage -tAc \
+            "SELECT count(*) FROM information_schema.role_table_grants WHERE table_schema='vantage_app' AND grantee='PUBLIC'" \
+            | tr -d '[:space:]')"
+          test "$public_grants" = "0"
+
+          docker compose exec -T -e PGPASSWORD="$POSTGRES_RUNTIME_PASSWORD" postgres \
+            psql -U vantage_runtime -d vantage -v ON_ERROR_STOP=1 -tAc \
+            "SELECT count(*) FROM vantage_app.research_runs"
+
+          # A failed statement is not enough: it must fail *because the runtime
+          # role lacks the privilege*, not because a schema, table, or container
+          # went missing.
+          assert_ddl_rejected() {
+            local description="$1"
+            local statement="$2"
+            local out
+            if out="$(docker compose exec -T -e PGPASSWORD="$POSTGRES_RUNTIME_PASSWORD" postgres \
+              psql -U vantage_runtime -d vantage -v ON_ERROR_STOP=1 -c "$statement" 2>&1)"; then
+              echo "runtime role was allowed to $description; schema privileges are not restricted" >&2
+              echo "$out" >&2
+              exit 1
+            fi
+            if ! printf '%s' "$out" | grep -qE 'permission denied|must be owner'; then
+              echo "$description failed, but not with a privilege rejection:" >&2
+              echo "$out" >&2
+              exit 1
+            fi
+            echo "$description correctly rejected: $(printf '%s' "$out" | grep -m1 -E 'permission denied|must be owner')"
+          }
+
+          assert_ddl_rejected "create a table" \
+            "CREATE TABLE vantage_app.ci_privilege_probe (id int)"
+          assert_ddl_rejected "alter a table" \
+            "ALTER TABLE vantage_app.research_runs ADD COLUMN ci_privilege_probe int"
+
+      - name: Start backend and frontend containers
+        run: docker compose up -d backend frontend
+
+      - name: Wait for containerised backend health
+        run: |
+          for attempt in $(seq 1 30); do
+            body="$(curl --silent --fail --max-time 5 http://localhost:8000/ || true)"
+            if printf '%s' "$body" | grep -q '"status":"ok"'; then
+              echo "backend healthy: $body"
+              exit 0
+            fi
+            echo "attempt $attempt: backend not ready yet"
+            sleep 2
+          done
+          echo "backend never became healthy" >&2
+          docker compose ps
+          exit 1
+
+      - name: Verify frontend container serves / and the /app SPA route
+        run: |
+          check_route() {
+            local route="$1"
+            local out="/tmp/frontend-$2.html"
+            rm -f "$out"
+            for attempt in $(seq 1 30); do
+              if curl --silent --fail --max-time 5 "http://localhost:5173${route}" -o "$out"; then
+                if grep -q '<div id="root">' "$out"; then
+                  echo "frontend served ${route} with the SPA document"
+                  return 0
+                fi
+                echo "frontend served ${route} but the response is not the SPA document" >&2
+                head -c 500 "$out" >&2
+                exit 1
+              fi
+              echo "attempt $attempt: frontend did not serve ${route} yet"
+              sleep 2
+            done
+            echo "frontend never served ${route}" >&2
+            docker compose ps
+            exit 1
+          }
+
+          # "/" is a direct file match against the Nginx root and index
+          # directives; "/app" has no matching file and exercises the try_files
+          # SPA fallback. The two fail in different ways, so check both.
+          check_route "/" root
+          check_route "/app" app
+
+      - name: Install frontend dependencies (ci)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install bundled Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser journey against the production containers
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_EXTERNAL_SERVER: "true"
+        run: npm run test:e2e -- --project=chromium
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+
+      - name: Tear down containers and volumes
+        if: always()
+        run: docker compose down --volumes --remove-orphans

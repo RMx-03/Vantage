@@ -1,0 +1,45 @@
+[
+  {
+    "uuid": "43924729-1b5c-3f92-959c-851532152865",
+    "title": "Apple Stock Rises After Product Launch",
+    "publisher": "Reuters",
+    "link": "https://finance.yahoo.com/news/apple-stock-rises-1234.html?utm_source=yahoo&utm_medium=rss",
+    "providerPublishTime": 1789128000,
+    "type": "STORY"
+  },
+  {
+    "id": "43924729-1b5c-3f92-959c-851532152865",
+    "title": "Duplicate ID Story",
+    "publisher": "Reuters",
+    "link": "https://finance.yahoo.com/news/other.html",
+    "providerPublishTime": 1789128000
+  },
+  {
+    "uuid": "99999999-1b5c-3f92-959c-851532152866",
+    "title": "Apple iPhone Demand Strong",
+    "publisher": "Bloomberg",
+    "link": "https://finance.yahoo.com/news/apple-stock-rises-1234.html",
+    "providerPublishTime": 1789128100
+  },
+  {
+    "id": "new-format-item-01",
+    "content": {
+      "id": "new-format-item-01",
+      "title": "Tech Sector Leads Rally",
+      "pubDate": "2026-09-11T16:00:00Z",
+      "provider": {
+        "displayName": "Wall Street Journal"
+      },
+      "canonicalUrl": {
+        "url": "https://wsj.com/articles/tech-sector-rally"
+      }
+    }
+  },
+  {
+    "uuid": "missing-publisher-01",
+    "title": "Unattributed Apple Filing",
+    "publisher": "",
+    "link": "https://sec.gov/edgar/aapl",
+    "providerPublishTime": null
+  }
+]

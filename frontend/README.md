@@ -1,73 +1,72 @@
-# React + TypeScript + Vite
+# Vantage Frontend — Transparent Research Workspace
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The React workspace creates and inspects synchronous US-equity end-of-day research runs. It shows deterministic metrics, data/model quality, registered reasons, evidence sources, version information, owner-scoped history, and safe actionable error states.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 19 and TypeScript 6
+- Vite 8 and Tailwind CSS 4
+- TanStack Query for server state
+- Supabase Auth for the browser session
+- Vitest, Testing Library, and Playwright
+- Node.js `>=22.22 <23`
 
-## React Compiler
+## Configuration
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Copy `.env.example` to `.env` and set:
 
-## Expanding the ESLint configuration
+| Variable | Purpose |
+|---|---|
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Public Supabase anon/publishable key |
+| `VITE_API_URL` | Backend origin, such as `http://localhost:8000` |
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Vite values are build-time configuration. The Docker image accepts the same three values as build arguments through Docker Compose.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Run and verify
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm ci
+npm run dev
+npm test -- --run --coverage
+npm run lint
+npm run build
+npm run test:e2e -- --project=chromium
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Coverage is measured over the Phase 1 research feature and its API client with an 80% line/function gate.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+`npm run test:e2e` runs the browser journey with Supabase auth and the research API replaced by Playwright route mocks, so it verifies UI behaviour rather than a full stack. Setting `PLAYWRIGHT_EXTERNAL_SERVER=true` skips the development server and runs the same mocked journey against an already-running server, which is how CI replays it against the production Nginx container image.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## User-visible states
+
+The UI shows one current result or one selected historical result. Starting a request shows a bounded loading state; a failed newer request suppresses any older result so stale output cannot be mistaken for the latest run. Authentication failures offer “Sign in again”; retryable provider/server failures offer “Retry research.”
+
+Results use only the backend contract states: `informational`, `review`, `insufficient_data`, and `failed`, with model quality `healthy`, `degraded`, `failed`, or `not_run`. The Phase 1 UI does not claim real-time progress, latency, node counts, valuation metrics, SMA/RSI indicators, forecasts, confidence scores, or trade approval.
+
+## Routes
+
+| Path | View |
+|---|---|
+| `/` | Landing |
+| `/auth` | Sign in / register |
+| `/app` | redirects to `/app/research` |
+| `/app/research` | Research terminal, empty |
+| `/app/research/:runId` | A specific run — shareable |
+| `/app/settings` | redirects to `/app/settings/profile` |
+| `/app/settings/profile` | Operator profile |
+| `/app/settings/runs` | Durable research run log |
+
+Navigation destinations live in one place: `src/components/nav/navItems.ts`.
+Add a destination there and both the sidebar and the mobile bottom bar pick it
+up. Items with `to: null` render as disabled `PHASE 2` placeholders.
+
+## Design system
+
+All UI uses the `@theme` tokens defined in `src/index.css` — never stock
+Tailwind palette classes (`slate-*`, `indigo-*`, `rose-*`, …), never a border
+radius, never a shadow or blur, and `font-label` (Space Grotesk) rather than
+`font-mono`.
+
+`npm run check:design` enforces this and runs in CI. See
+`.planning/specs/2026-09-20-frontend-design-system-restoration-design.md`.

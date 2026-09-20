@@ -2,10 +2,12 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
 interface AuthContextValue {
@@ -26,12 +28,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const ownerIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // The initial getSession() promise races the auth-state subscription: it
+    // can resolve after a newer event has already switched owners. Applying it
+    // then would switch the app back to the previous owner and purge the
+    // current owner's cache, so once any auth event has been applied the
+    // hydration result is stale by definition and must be dropped.
+    let authEventApplied = false;
+    let disposed = false;
+
+    const applySession = (nextSession: Session | null) => {
+      const nextOwnerId = nextSession?.user?.id ?? null;
+
+      if (nextOwnerId !== ownerIdRef.current) {
+        // The signed-in owner changed (sign-in, sign-out, account switch).
+        // Drop every owner-scoped research query before the next owner can
+        // render, so cached rows never outlive the session that fetched them.
+        //
+        // INVARIANT: these are all owner-scoped query key roots in the app.
+        // If another owner-scoped query is added, add its root here before it ships.
+        for (const root of [['research-runs'], ['research-run']]) {
+          void queryClient.cancelQueries({ queryKey: root });
+          queryClient.removeQueries({ queryKey: root });
+        }
+        ownerIdRef.current = nextOwnerId;
+      }
+
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+    };
+
     // Hydrate from an existing persisted session on first mount.
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
+      if (disposed) return;
+      if (!authEventApplied) {
+        applySession(data.session);
+      }
       setLoading(false);
     });
 
@@ -39,12 +74,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
+      authEventApplied = true;
+      applySession(newSession);
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      disposed = true;
+      subscription.unsubscribe();
+    };
+  }, [queryClient]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -58,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 // Convenience hook — import this instead of useContext(AuthContext) directly.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   return useContext(AuthContext);
 }

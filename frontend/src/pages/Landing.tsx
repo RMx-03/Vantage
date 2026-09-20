@@ -25,7 +25,7 @@ export default function Landing() {
                         Wall Street Intelligence. Local Architecture.
                     </h1>
                     <p className="text-on-surface-variant font-label text-lg leading-relaxed max-w-lg mb-12">
-                        A fully localized, multi-agent AI platform for event-driven quantitative financial research. Zero cloud costs. Total privacy.
+                        Traceable end-of-day US-equity research with deterministic metrics, source provenance, and explicit quality states.
                     </p>
                     {/* Hero CTAs */}
                     <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
@@ -50,9 +50,9 @@ export default function Landing() {
                         <div className="flex flex-col gap-4">
                             <span className="material-symbols-outlined text-primary text-3xl">hub</span>
                             <div>
-                                <h3 className="text-primary font-headline font-bold text-xl mb-2">Multi-Agent Orchestration</h3>
+                                <h3 className="text-primary font-headline font-bold text-xl mb-2">Deterministic Research Workflow</h3>
                                 <p className="text-on-surface-variant text-sm font-label leading-relaxed">
-                                    Autonomous LangGraph workflow that scales from news scraping to deep sentiment analysis and risk calculation.
+                                    A bounded LangGraph workflow separates metric calculation, optional interpretation, and versioned research policy.
                                 </p>
                             </div>
                         </div>
@@ -62,9 +62,9 @@ export default function Landing() {
                         <div className="flex flex-col gap-4">
                             <span className="material-symbols-outlined text-primary text-3xl">memory</span>
                             <div>
-                                <h3 className="text-primary font-headline font-bold text-xl mb-2">Local LLM Inference</h3>
+                                <h3 className="text-primary font-headline font-bold text-xl mb-2">Flexible Model Interpretation</h3>
                                 <p className="text-on-surface-variant text-sm font-label leading-relaxed">
-                                    Leverage fine-tuned Small Language Models (SLM) served via Ollama. Institutional intelligence without the cloud subscription.
+                                    Use a configured local or cloud model for bounded qualitative interpretation while metrics remain deterministic.
                                 </p>
                             </div>
                         </div>
@@ -74,9 +74,9 @@ export default function Landing() {
                         <div className="flex flex-col gap-4">
                             <span className="material-symbols-outlined text-primary text-3xl">analytics</span>
                             <div>
-                                <h3 className="text-primary font-headline font-bold text-xl mb-2">QuantRisk Guardrails</h3>
+                                <h3 className="text-primary font-headline font-bold text-xl mb-2">Quality Guardrails</h3>
                                 <p className="text-on-surface-variant text-sm font-label leading-relaxed">
-                                    Real-time sentiment-to-volatility mapping ensuring trade approvals only trigger when signal-to-noise ratios are peak.
+                                    Freshness, integrity, evidence, and model states are surfaced with registered reasons instead of opaque decisions.
                                 </p>
                             </div>
                         </div>
@@ -85,7 +85,7 @@ export default function Landing() {
                 {/* Product Preview (Contextual Decorative) */}
                 <section className="mb-32">
                     <div className="bg-surface-container-low border border-outline-variant/20 p-1">
-                        <img className="w-full grayscale contrast-125 opacity-80" alt="Vantage Terminal interface showing real-time LangGraph agent state transitions and financial analysis memos" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCbJMr9N71GEdkiGPBkXwp7tyI_23YpO9ChnoPGNydYuZQ1osXdzVoYXUYzyDTn89szN15duSPVQBs-7_Nnaq5LqnlG-1_zlN_ySoNtX28Wd9N_gf08C8qVTiSXms1P7lVOHpqaml_ReerCVsU39UYo6zwlWvnNJgMq3LiGpP3uS7QWfNA_WWbQV7wW0mn86Tthh3qFS5ie4h8FfvKEu1KYX3Y5GHidXiqDOV_9WRxIfcDCfJ4Zsi8frTgBIKko5voQFz-5YlPZhS1O"/>
+                        <img className="w-full grayscale contrast-125 opacity-80" alt="Vantage research workspace displaying transparent equity metrics and evidence" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCbJMr9N71GEdkiGPBkXwp7tyI_23YpO9ChnoPGNydYuZQ1osXdzVoYXUYzyDTn89szN15duSPVQBs-7_Nnaq5LqnlG-1_zlN_ySoNtX28Wd9N_gf08C8qVTiSXms1P7lVOHpqaml_ReerCVsU39UYo6zwlWvnNJgMq3LiGpP3uS7QWfNA_WWbQV7wW0mn86Tthh3qFS5ie4h8FfvKEu1KYX3Y5GHidXiqDOV_9WRxIfcDCfJ4Zsi8frTgBIKko5voQFz-5YlPZhS1O"/>
                     </div>
                 </section>
             </main>

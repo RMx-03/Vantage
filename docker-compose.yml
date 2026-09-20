@@ -1,21 +1,74 @@
-version: '3.8'
-
 services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: vantage_owner
+      POSTGRES_PASSWORD: ${POSTGRES_OWNER_PASSWORD:-vantage_owner}
+      POSTGRES_DB: vantage
+      # Development-only default. Deployed environments must supply this
+      # from a managed secret store, not this fallback.
+      POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:-vantage_runtime}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/docker/postgres/init-runtime-role.sh:/docker-entrypoint-initdb.d/10-runtime-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vantage_owner -d vantage"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+psycopg://vantage_owner:${POSTGRES_OWNER_PASSWORD:-vantage_owner}@postgres:5432/vantage
+      VANTAGE_RUNTIME_DB_ROLE: vantage_runtime
+      SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
+      SUPABASE_KEY: ${SUPABASE_KEY:-local-development-anon-key}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build: ./backend
-    container_name: vantage-backend
     ports:
       - "8000:8000"
     environment:
-      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - OLLAMA_BASE_URL=http://ollama:11434
+      DATABASE_URL: postgresql+psycopg://vantage_runtime:${POSTGRES_RUNTIME_PASSWORD:-vantage_runtime}@postgres:5432/vantage
+      SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
+      SUPABASE_KEY: ${SUPABASE_KEY:-local-development-anon-key}
+      TRACE_EXPORT_ENABLED: ${TRACE_EXPORT_ENABLED:-false}
+      TELEMETRY_USER_SALT: ${TELEMETRY_USER_SALT:-local-development-only}
+      # Immutable build identity reported as versions.code. CI supplies the
+      # commit SHA; local runs fall back to "development".
+      CODE_REVISION: ${CODE_REVISION:-development}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
+      # Disabled by default: no model runs unless an operator opts in. The
+      # `local` profile starts Ollama but does not select it — set
+      # LLM_PROVIDER=ollama explicitly to use it.
+      LLM_PROVIDER: ${LLM_PROVIDER:-disabled}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OLLAMA_BASE_URL: http://ollama:11434
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
-    container_name: vantage-frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
+        VITE_SUPABASE_ANON_KEY: ${SUPABASE_KEY:-local-development-anon-key}
+        VITE_API_URL: ${VITE_API_URL:-${VITE_API_BASE_URL:-http://localhost:8000}}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     ports:
       - "5173:80"
     depends_on:
@@ -24,7 +77,6 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    container_name: vantage-ollama
     profiles:
       - local
     ports:
@@ -32,14 +84,7 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
-    # If the host has an NVIDIA GPU, uncomment the lines below to enable GPU passthrough
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
 
 volumes:
+  postgres_data:
   ollama_data:

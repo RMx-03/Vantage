@@ -1,0 +1,1912 @@
+[
+  {
+    "case_id": "positive-aligned-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e1"
+    ],
+    "payload": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.75,
+      "summary": "Revenue growth surpassed expectations alongside positive price trend.",
+      "evidence_ids": [
+        "e1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "positive-aligned-02",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e2"
+    ],
+    "payload": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.6,
+      "summary": "Enterprise partnership provides positive expansion context with positive momentum.",
+      "evidence_ids": [
+        "e2"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "negative-aligned-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e3"
+    ],
+    "payload": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.8,
+      "summary": "Supply chain headwinds and reduced shipment forecasts reflect downward price trends.",
+      "evidence_ids": [
+        "e3"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "negative-aligned-02",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e4"
+    ],
+    "payload": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.7,
+      "summary": "Margin compression and elevated volatility underscore downward market pressure.",
+      "evidence_ids": [
+        "e4"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "conflicting-news-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e5",
+      "e6"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": -0.05,
+      "summary": "Current earnings beat offset by reduced forward guidance creates mixed outlook.",
+      "evidence_ids": [
+        "e5",
+        "e6"
+      ],
+      "warnings": [
+        "Mixed sentiment across earnings beat and reduced forward guidance."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "conflicting-news-02",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e7",
+      "e8"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.02,
+      "summary": "Customer product reception is positive while regulatory questions introduce uncertainty.",
+      "evidence_ids": [
+        "e7",
+        "e8"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "neutral-market-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e9"
+    ],
+    "payload": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0,
+      "summary": "Routine conference presentation with stable, flat trading range.",
+      "evidence_ids": [
+        "e9"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "neutral-market-02",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e10"
+    ],
+    "payload": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0,
+      "summary": "Regular dividend distribution announced with unchanged price movement.",
+      "evidence_ids": [
+        "e10"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "no-news-01",
+    "category": "accepted_abstention",
+    "accepted": true,
+    "allowed_evidence_ids": [],
+    "payload": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": null,
+      "summary": "No verified news headlines available during the research evaluation window.",
+      "evidence_ids": [],
+      "warnings": [
+        "News coverage missing or unavailable."
+      ],
+      "abstained": true,
+      "abstention_reason": "MODEL_UNAVAILABLE"
+    }
+  },
+  {
+    "case_id": "abstention-low-confidence-01",
+    "category": "accepted_abstention",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e11"
+    ],
+    "payload": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": null,
+      "summary": "Abstained from interpretation due to unverified rumors alongside high volatility.",
+      "evidence_ids": [],
+      "warnings": [
+        "Abstained from directional interpretation."
+      ],
+      "abstained": true,
+      "abstention_reason": "MODEL_UNAVAILABLE"
+    }
+  },
+  {
+    "case_id": "multi-source-positive-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e12",
+      "e13"
+    ],
+    "payload": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.85,
+      "summary": "Cloud growth and international infrastructure expansion corroborate strong metrics.",
+      "evidence_ids": [
+        "e12",
+        "e13"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "multi-source-negative-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e14",
+      "e15"
+    ],
+    "payload": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.88,
+      "summary": "Settlement expenses and negative credit outlook correspond to heavy price decline.",
+      "evidence_ids": [
+        "e14",
+        "e15"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "high-volatility-mixed-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e16"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.05,
+      "summary": "Elevated single-security volatility paired with mixed trial outcomes requires review.",
+      "evidence_ids": [
+        "e16"
+      ],
+      "warnings": [
+        "High volatility observed across trading window."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "low-volatility-steady-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e17"
+    ],
+    "payload": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.4,
+      "summary": "Regulated rate approval supports stability in low volatility environment.",
+      "evidence_ids": [
+        "e17"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "divergent-price-news-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e18"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.1,
+      "summary": "Favorable patent recognition contrasts with downward price action.",
+      "evidence_ids": [
+        "e18"
+      ],
+      "warnings": [
+        "Divergence between news sentiment and negative price trend."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "divergent-price-news-02",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e19"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": -0.15,
+      "summary": "Competitive release noted, but security has sustained positive gains.",
+      "evidence_ids": [
+        "e19"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "complex-macro-impact-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e20",
+      "e21"
+    ],
+    "payload": {
+      "sentiment_label": "neutral",
+      "sentiment_score": -0.02,
+      "summary": "Sector sales and central bank rate signals indicate stable macroeconomic backdrop.",
+      "evidence_ids": [
+        "e20",
+        "e21"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "negative-severe-drawdown-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e22"
+    ],
+    "payload": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.95,
+      "summary": "Audit qualification and extreme volatility indicate severe operational and price distress.",
+      "evidence_ids": [
+        "e22"
+      ],
+      "warnings": [
+        "Significant price drawdown and internal control concerns noted."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "abstention-contradictory-01",
+    "category": "accepted_abstention",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e23",
+      "e24"
+    ],
+    "payload": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": null,
+      "summary": "Interpretation abstained due to conflicting and retracted reporting.",
+      "evidence_ids": [],
+      "warnings": [
+        "Contradictory information identified in evidence stream."
+      ],
+      "abstained": true,
+      "abstention_reason": "MODEL_UNAVAILABLE"
+    }
+  },
+  {
+    "case_id": "flat-session-neutral-01",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "e25"
+    ],
+    "payload": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0,
+      "summary": "Routine regulatory filing with completely flat trading performance.",
+      "evidence_ids": [
+        "e25"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-abstention-label",
+    "category": "contradiction",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "positive",
+      "sentiment_score": null,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [],
+      "warnings": [],
+      "abstained": true,
+      "abstention_reason": "MODEL_UNAVAILABLE"
+    }
+  },
+  {
+    "case_id": "reject-abstention-score",
+    "category": "contradiction",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": 0,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [],
+      "warnings": [],
+      "abstained": true,
+      "abstention_reason": "MODEL_UNAVAILABLE"
+    }
+  },
+  {
+    "case_id": "reject-abstention-evidence",
+    "category": "contradiction",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": null,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": true,
+      "abstention_reason": "MODEL_UNAVAILABLE"
+    }
+  },
+  {
+    "case_id": "reject-abstention-missing-reason",
+    "category": "contradiction",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": null,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [],
+      "warnings": [],
+      "abstained": true,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-abstention-invented-reason",
+    "category": "contradiction",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": null,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [],
+      "warnings": [],
+      "abstained": true,
+      "abstention_reason": "INSUFFICIENT_EVIDENCE"
+    }
+  },
+  {
+    "case_id": "reject-cited-label",
+    "category": "contradiction",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": 0.15,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-cited-no-evidence",
+    "category": "contradiction",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-cited-reason",
+    "category": "contradiction",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": "MODEL_NOT_RUN"
+    }
+  },
+  {
+    "case_id": "reject-unsupported-evidence",
+    "category": "unsupported_evidence",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [
+        "news-1",
+        "invented"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-numeric-summary",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Revenue grew 25 percent.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-numeric-warning",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Revenue grew 25 percent."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-numeric-reason",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": "Confidence is 80 percent."
+    }
+  },
+  {
+    "case_id": "reject-numeric-words",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Confidence is eighty percent.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-advisory-buy",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Buy this stock.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-advisory-sell",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Investors should sell their shares.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-advisory-hold",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Hold this security.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-advisory-warning",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Consider buying this security."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-suitability",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "This investment is suitable for retirees.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-personalization",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "This stock fits your risk tolerance.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-target-price",
+    "category": "target_price",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "The target price is above the current market price.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-price-target-warning",
+    "category": "target_price",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Our price target remains unchanged."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-guarantee",
+    "category": "predictive",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "These returns are guaranteed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-future-rise",
+    "category": "predictive",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "The stock will rise soon.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-future-warning",
+    "category": "predictive",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "The stock is certain to outperform."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-model_not_run-from-provider",
+    "category": "contradiction",
+    "accepted": false,
+    "allowed_evidence_ids": [],
+    "payload": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": null,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [],
+      "warnings": [],
+      "abstained": true,
+      "abstention_reason": "MODEL_NOT_RUN"
+    }
+  },
+  {
+    "case_id": "accepted-model_output_invalid",
+    "category": "accepted_abstention",
+    "accepted": true,
+    "allowed_evidence_ids": [],
+    "payload": {
+      "sentiment_label": "unavailable",
+      "sentiment_score": null,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [],
+      "warnings": [],
+      "abstained": true,
+      "abstention_reason": "MODEL_OUTPUT_INVALID"
+    }
+  },
+  {
+    "case_id": "accepted-shareholder-substring",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Shareholder concerns reflected a household spending slowdown.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "The company sells software through resellers."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-historical-hold",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "The company put its expansion plans on hold.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-null-score",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": null,
+      "summary": "Recent revenue growth is offset by elevated market volatility.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-ticker-command-summary",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Buy AAPL.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-ticker-command-warnings",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Buy AAPL."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-pronoun-command-summary",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Sell it now.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-pronoun-command-warnings",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Sell it now."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-hold-onto-summary",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Hold onto these shares.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-hold-onto-warnings",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Hold onto these shares."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-leading-space-summary",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "  Buy now.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-leading-space-warnings",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "  Buy now."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-unicode-dash-summary",
+    "category": "predictive",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "This is a risk‑free investment.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-unicode-dash-warnings",
+    "category": "predictive",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "This is a risk‑free investment."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-curly-apostrophe-summary",
+    "category": "predictive",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "The shares can’t lose value.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-curly-apostrophe-warnings",
+    "category": "predictive",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "The shares can’t lose value."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-markdown-command-summary",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Recommendation: **BUY**",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-markdown-command-warnings",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Recommendation: **BUY**"
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-markdown-underscore-summary",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Recommendation: __SELL__",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-markdown-underscore-warnings",
+    "category": "advisory",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Recommendation: __SELL__"
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-unicode-fraction-summary",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Revenue grew ½ percent.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-unicode-fraction-warnings",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Revenue grew ½ percent."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-unicode-roman-summary",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Revenue grew Ⅻ percent.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-unicode-roman-warnings",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Revenue grew Ⅻ percent."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-word-fraction-summary",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Revenue increased by half.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-word-fraction-warnings",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Revenue increased by half."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-quarter-fraction-summary",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Costs decreased by a quarter.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-quarter-fraction-warnings",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Costs decreased by a quarter."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-fraction-total-summary",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Revenue was half of the previous total.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-fraction-total-warnings",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Revenue was half of the previous total."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-fraction-idiom",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "The statement was half-hearted and the outlook remains uncertain.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "The statement was half-hearted and the outlook remains uncertain."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-quarter-period",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "The company reported mixed quarter results.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "The company reported mixed quarter results."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-buy-orders",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Buy orders were processed through the exchange.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Buy orders were processed through the exchange."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-preserved-typography",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "The company’s **historical** outlook remains uncertain—coverage is limited.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "The company’s **historical** outlook remains uncertain—coverage is limited."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-fiscal-quarter",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "End of quarter results were mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "End of quarter results were mixed."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-third-party-statements",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "The report relied on statements of third parties.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "The report relied on statements of third parties."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-third-party-author",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "The report was prepared by a third party.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "The report was prepared by a third party."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-half-of-revenue",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Half of revenue came from services.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-one-third-of-revenue",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "One third of revenue came from services.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-gained",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Revenue gained by half.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-gains",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Revenue gains by a quarter.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-climbed",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Margins climbed by a third.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-slid",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Shipments slid by a quarter.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-slipped",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Bookings slipped by half.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-surged",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Traffic surged by a third.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-plunged",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Backlog plunged by half.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-jumped",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Headcount jumped by a quarter.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-halved",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Guidance halved by half.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-doubled",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Capacity doubled by a third.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "reject-change-verb-warning-gained",
+    "category": "numeric",
+    "accepted": false,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Historical evidence is mixed.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [
+        "Historical evidence is limited.",
+        "Revenue gained by half."
+      ],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-change-verb-no-fraction",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Shares climbed during the reported session.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  },
+  {
+    "case_id": "accepted-change-verb-qualitative",
+    "category": "accepted_cited",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "news-1"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.15,
+      "summary": "Bookings slipped amid softer demand.",
+      "evidence_ids": [
+        "news-1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null
+    }
+  }
+]
