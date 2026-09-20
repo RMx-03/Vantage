@@ -319,7 +319,7 @@ export const failedMarketRun: ResearchRun = {
   interpretation: null,
   snapshot: null,
   versions: baseVersions,
-  error_code: 'MARKET_DATA_FAILED',
+  error_code: 'MARKET_DATA_PROVIDER_FAILED',
   error_message_safe: 'Market data provider returned an error.',
 };
 

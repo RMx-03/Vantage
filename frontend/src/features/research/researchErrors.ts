@@ -33,7 +33,10 @@ export function mapResearchError(err: unknown): ResearchErrorView {
       };
     }
 
-    if (err.status === 503 || err.error.code === 'MARKET_DATA_FAILED') {
+    if (
+      err.status === 503 ||
+      err.error.code === 'MARKET_DATA_PROVIDER_FAILED'
+    ) {
       return {
         message:
           'Market data could not be retrieved. Please check the symbol and market hours, then retry.',

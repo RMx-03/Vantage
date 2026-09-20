@@ -13,17 +13,30 @@ describe('mapResearchError', () => {
 
   it('explains a 503 market-data failure', () => {
     const view = mapResearchError(
-      new ApiError(503, { code: 'MARKET_DATA_FAILED', message: 'upstream' })
+      new ApiError(503, { code: 'MARKET_DATA_PROVIDER_FAILED', message: 'upstream' })
     );
     expect(view.isAuthError).toBe(false);
     expect(view.message).toMatch(/market data could not be retrieved/i);
   });
 
-  it('maps MARKET_DATA_FAILED regardless of status', () => {
+  it('maps MARKET_DATA_PROVIDER_FAILED regardless of status', () => {
     const view = mapResearchError(
-      new ApiError(500, { code: 'MARKET_DATA_FAILED', message: 'upstream' })
+      new ApiError(500, {
+        code: 'MARKET_DATA_PROVIDER_FAILED',
+        message: 'upstream',
+      })
     );
     expect(view.message).toMatch(/market data could not be retrieved/i);
+  });
+
+  it('does not special-case the obsolete MARKET_DATA_FAILED code', () => {
+    const view = mapResearchError(
+      new ApiError(500, {
+        code: 'MARKET_DATA_FAILED',
+        message: 'backend message',
+      })
+    );
+    expect(view.message).toBe('backend message');
   });
 
   it('surfaces correlation ids when present', () => {
@@ -53,7 +66,7 @@ describe('mapResearchError', () => {
 
   it('keeps a retryable error retryable', () => {
     const view = mapResearchError(
-      new ApiError(503, { code: 'MARKET_DATA_FAILED', message: 'x', retryable: true })
+      new ApiError(503, { code: 'MARKET_DATA_PROVIDER_FAILED', message: 'x', retryable: true })
     );
     expect(view.canRetry).toBe(true);
   });

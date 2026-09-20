@@ -163,7 +163,7 @@ describe('ResearchWorkspace', () => {
   ])('renders typed API failure %s', async (status, message) => {
     vi.mocked(api.createResearchRun).mockRejectedValueOnce(
       new api.ApiError(status, {
-        code: status === 401 ? 'AUTH_REQUIRED' : status === 503 ? 'MARKET_DATA_FAILED' : 'INTERNAL_ERROR',
+        code: status === 401 ? 'AUTH_REQUIRED' : status === 503 ? 'MARKET_DATA_PROVIDER_FAILED' : 'INTERNAL_ERROR',
         message: status === 401 ? 'Your session has expired.' : status === 503 ? 'Market data could not be retrieved.' : 'Research run could not be completed.',
         retryable: status !== 401,
       })
