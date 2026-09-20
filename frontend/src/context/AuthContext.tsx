@@ -32,6 +32,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const ownerIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // The initial getSession() promise races the auth-state subscription: it
+    // can resolve after a newer event has already switched owners. Applying it
+    // then would switch the app back to the previous owner and purge the
+    // current owner's cache, so once any auth event has been applied the
+    // hydration result is stale by definition and must be dropped.
+    let authEventApplied = false;
+    let disposed = false;
+
     const applySession = (nextSession: Session | null) => {
       const nextOwnerId = nextSession?.user?.id ?? null;
 
@@ -55,7 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Hydrate from an existing persisted session on first mount.
     supabase.auth.getSession().then(({ data }) => {
-      applySession(data.session);
+      if (disposed) return;
+      if (!authEventApplied) {
+        applySession(data.session);
+      }
       setLoading(false);
     });
 
@@ -63,10 +74,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      authEventApplied = true;
       applySession(newSession);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      disposed = true;
+      subscription.unsubscribe();
+    };
   }, [queryClient]);
 
   const signOut = async () => {
