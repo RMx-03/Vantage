@@ -584,3 +584,109 @@ def test_normalize_url_fails_closed_when_canonicalization_raises(monkeypatch) ->
         shared_urls.safe_stored_url("https://example.com/a?b=1")
         == "https://example.com/a?b=1"
     )
+
+
+def test_naive_pub_date_is_treated_as_missing_not_internal_error(
+    mock_ticker: MagicMock, fixed_now: datetime
+) -> None:
+    """A timezone-less pubDate must degrade, not escape as an untyped error.
+
+    `datetime.fromisoformat` accepts a naive string, but `NewsItem` rejects a
+    naive `event_time`. Without normalization that ValidationError leaves the
+    provider untyped and fails the whole run.
+    """
+    mock_ticker.get_news.return_value = [
+        {
+            "id": "naive-time-01",
+            "content": {
+                "id": "naive-time-01",
+                "title": "Apple Files Annual Report",
+                "provider": {"displayName": "Reuters"},
+                "canonicalUrl": {"url": "https://example.com/naive-time"},
+                "pubDate": "2026-09-14T12:00:00",
+            },
+        }
+    ]
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    news = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
+
+    item = next(item for item in news.items if item.evidence_id == "naive-time-01")
+    assert item.event_time is None
+    assert item.title == "Apple Files Annual Report"
+    assert news.quality is ComponentQuality.PARTIAL
+
+
+def test_date_only_pub_date_is_treated_as_missing(
+    mock_ticker: MagicMock, fixed_now: datetime
+) -> None:
+    mock_ticker.get_news.return_value = [
+        {
+            "id": "date-only-01",
+            "content": {
+                "id": "date-only-01",
+                "title": "Apple Announces Buyback",
+                "provider": {"displayName": "Reuters"},
+                "canonicalUrl": {"url": "https://example.com/date-only"},
+                "pubDate": "2026-09-14",
+            },
+        }
+    ]
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    news = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
+
+    assert news.items[0].event_time is None
+
+
+def test_aware_pub_date_is_still_retained(
+    mock_ticker: MagicMock, fixed_now: datetime
+) -> None:
+    """The naive-timestamp guard must not discard legitimate aware values."""
+    mock_ticker.get_news.return_value = [
+        {
+            "id": "aware-time-01",
+            "content": {
+                "id": "aware-time-01",
+                "title": "Apple Beats Estimates",
+                "provider": {"displayName": "Reuters"},
+                "canonicalUrl": {"url": "https://example.com/aware-time"},
+                "pubDate": "2026-09-14T12:00:00Z",
+            },
+        }
+    ]
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    news = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
+
+    assert news.items[0].event_time == datetime(2026, 9, 14, 12, 0, tzinfo=UTC)
+    assert news.quality is ComponentQuality.FRESH
+
+
+def test_unexpected_parse_failure_becomes_a_typed_news_error(
+    mock_ticker: MagicMock, fixed_now: datetime
+) -> None:
+    """Article parsing must sit inside the provider's typed-failure boundary.
+
+    Only the upstream fetch was wrapped, so anything raising while an item was
+    being built reached the service as INTERNAL_ERROR instead of degrading.
+    """
+    mock_ticker.get_news.return_value = [
+        {
+            "uuid": "good-01",
+            "title": "Apple Holds Steady",
+            "publisher": "Reuters",
+            "link": "https://example.com/good",
+            "providerPublishTime": int(fixed_now.timestamp()) - 3600,
+        }
+    ]
+    provider = YFinanceSnapshotProvider(ticker_factory=lambda _: mock_ticker)
+
+    with patch.object(
+        yfinance_provider, "normalize_url", side_effect=RuntimeError("boom")
+    ):
+        with pytest.raises(VantageError) as exc_info:
+            provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
+
+    assert exc_info.value.code == "NEWS_PROVIDER_FAILED"
+    assert "boom" not in exc_info.value.safe_message

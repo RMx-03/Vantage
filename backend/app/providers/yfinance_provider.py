@@ -332,102 +332,122 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
         seen_hashes: set[str] = set()
         items: list[NewsItem] = []
 
-        for raw in raw_news:
-            if not isinstance(raw, dict):
-                continue
+        # Item construction is part of the provider boundary: a malformed
+        # upstream article must degrade into a typed provider failure, not
+        # escape as an untyped error the service reports as INTERNAL_ERROR.
+        try:
+            for raw in raw_news:
+                if not isinstance(raw, dict):
+                    continue
 
-            raw_id: str | None = None
-            title: str | None = None
-            publisher: str | None = None
-            url: str | None = None
-            event_time: datetime | None = None
+                raw_id: str | None = None
+                title: str | None = None
+                publisher: str | None = None
+                url: str | None = None
+                event_time: datetime | None = None
 
-            if "content" in raw and isinstance(raw["content"], dict):
-                content = raw["content"]
-                raw_id = raw.get("id") or content.get("id")
-                title = content.get("title")
-                prov = content.get("provider")
-                if isinstance(prov, dict):
-                    publisher = prov.get("displayName")
-                canonical = content.get("canonicalUrl")
-                if isinstance(canonical, dict):
-                    url = canonical.get("url")
-                if not url:
-                    click = content.get("clickThroughUrl")
-                    if isinstance(click, dict):
-                        url = click.get("url")
-                pub_date = content.get("pubDate")
-                if pub_date:
-                    try:
-                        event_time = datetime.fromisoformat(
-                            str(pub_date).replace("Z", "+00:00")
-                        )
-                    except Exception:
-                        event_time = None
-            else:
-                raw_id = raw.get("uuid") or raw.get("id")
-                title = raw.get("title")
-                publisher = raw.get("publisher")
-                url = raw.get("link")
-                pub_time = raw.get("providerPublishTime")
-                if pub_time and isinstance(pub_time, (int, float)):
-                    try:
-                        event_time = datetime.fromtimestamp(pub_time, tz=UTC)
-                    except Exception:
-                        event_time = None
+                if "content" in raw and isinstance(raw["content"], dict):
+                    content = raw["content"]
+                    raw_id = raw.get("id") or content.get("id")
+                    title = content.get("title")
+                    prov = content.get("provider")
+                    if isinstance(prov, dict):
+                        publisher = prov.get("displayName")
+                    canonical = content.get("canonicalUrl")
+                    if isinstance(canonical, dict):
+                        url = canonical.get("url")
+                    if not url:
+                        click = content.get("clickThroughUrl")
+                        if isinstance(click, dict):
+                            url = click.get("url")
+                    pub_date = content.get("pubDate")
+                    if pub_date:
+                        try:
+                            event_time = datetime.fromisoformat(
+                                str(pub_date).replace("Z", "+00:00")
+                            )
+                        except Exception:
+                            event_time = None
+                        # fromisoformat accepts a timezone-less value, but an
+                        # unanchored instant cannot be placed in the run window.
+                        # Assuming a zone would fabricate provenance, so treat it
+                        # as missing -- a state the snapshot already models.
+                        if event_time is not None and event_time.tzinfo is None:
+                            event_time = None
+                else:
+                    raw_id = raw.get("uuid") or raw.get("id")
+                    title = raw.get("title")
+                    publisher = raw.get("publisher")
+                    url = raw.get("link")
+                    pub_time = raw.get("providerPublishTime")
+                    if pub_time and isinstance(pub_time, (int, float)):
+                        try:
+                            event_time = datetime.fromtimestamp(pub_time, tz=UTC)
+                        except Exception:
+                            event_time = None
 
-            if not title or not str(title).strip():
-                continue
+                if not title or not str(title).strip():
+                    continue
 
-            clean_title = str(title).strip()
-            norm_url = normalize_url(url)
-            clean_pub = (
-                str(publisher).strip() if publisher and str(publisher).strip() else None
-            )
-
-            # Calculate deterministic content hash
-            time_str = event_time.isoformat() if event_time else ""
-            pub_key = (clean_pub or "").lower()
-            norm_hash = hashlib.sha256(
-                f"{pub_key}|{clean_title.lower()}|{time_str}".encode("utf-8")
-            ).hexdigest()
-
-            ev_id = (
-                str(raw_id).strip()
-                if raw_id and str(raw_id).strip()
-                else f"news-{norm_hash[:16]}"
-            )
-
-            # Deduplication rules:
-            # 1. Provider ID
-            if ev_id in seen_ids:
-                continue
-            # 2. Normalized URL
-            if norm_url and norm_url in seen_urls:
-                continue
-            # 3. Content hash
-            if norm_hash in seen_hashes:
-                continue
-
-            seen_ids.add(ev_id)
-            if norm_url:
-                seen_urls.add(norm_url)
-            seen_hashes.add(norm_hash)
-
-            items.append(
-                NewsItem(
-                    evidence_id=ev_id,
-                    provider=self.name,
-                    publisher=clean_pub,
-                    title=clean_title,
-                    # Never fall back to the raw provider value: that would
-                    # re-admit exactly the schemes normalization rejected.
-                    url=norm_url,
-                    event_time=event_time,
-                    retrieved_at=retrieved_at_utc,
-                    content_hash=norm_hash,
+                clean_title = str(title).strip()
+                norm_url = normalize_url(url)
+                clean_pub = (
+                    str(publisher).strip()
+                    if publisher and str(publisher).strip()
+                    else None
                 )
-            )
+
+                # Calculate deterministic content hash
+                time_str = event_time.isoformat() if event_time else ""
+                pub_key = (clean_pub or "").lower()
+                norm_hash = hashlib.sha256(
+                    f"{pub_key}|{clean_title.lower()}|{time_str}".encode("utf-8")
+                ).hexdigest()
+
+                ev_id = (
+                    str(raw_id).strip()
+                    if raw_id and str(raw_id).strip()
+                    else f"news-{norm_hash[:16]}"
+                )
+
+                # Deduplication rules:
+                # 1. Provider ID
+                if ev_id in seen_ids:
+                    continue
+                # 2. Normalized URL
+                if norm_url and norm_url in seen_urls:
+                    continue
+                # 3. Content hash
+                if norm_hash in seen_hashes:
+                    continue
+
+                seen_ids.add(ev_id)
+                if norm_url:
+                    seen_urls.add(norm_url)
+                seen_hashes.add(norm_hash)
+
+                items.append(
+                    NewsItem(
+                        evidence_id=ev_id,
+                        provider=self.name,
+                        publisher=clean_pub,
+                        title=clean_title,
+                        # Never fall back to the raw provider value: that would
+                        # re-admit exactly the schemes normalization rejected.
+                        url=norm_url,
+                        event_time=event_time,
+                        retrieved_at=retrieved_at_utc,
+                        content_hash=norm_hash,
+                    )
+                )
+        except VantageError:
+            # Already typed and already safe -- do not relabel it.
+            raise
+        except Exception as e:
+            raise VantageError(
+                code="NEWS_PROVIDER_FAILED",
+                safe_message="Company news could not be retrieved.",
+            ) from e
 
         # Sort items by event_time descending (None at end)
         items = [
