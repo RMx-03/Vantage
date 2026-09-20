@@ -39,6 +39,35 @@ describe('mapResearchError', () => {
     expect(view.requestId).toBe('req-1');
   });
 
+  it('marks an explicitly non-retryable error as not retryable', () => {
+    const view = mapResearchError(
+      new ApiError(400, {
+        code: 'UNSUPPORTED_INSTRUMENT',
+        message: 'Only US equities are supported.',
+        retryable: false,
+      })
+    );
+    expect(view.isAuthError).toBe(false);
+    expect(view.canRetry).toBe(false);
+  });
+
+  it('keeps a retryable error retryable', () => {
+    const view = mapResearchError(
+      new ApiError(503, { code: 'MARKET_DATA_FAILED', message: 'x', retryable: true })
+    );
+    expect(view.canRetry).toBe(true);
+  });
+
+  it('allows retry when the server states no retryability', () => {
+    const view = mapResearchError(new ApiError(500, { code: 'X', message: 'boom' }));
+    expect(view.canRetry).toBe(true);
+  });
+
+  it('allows retry for a transport error with no typed payload', () => {
+    expect(mapResearchError(new Error('socket hang up')).canRetry).toBe(true);
+    expect(mapResearchError('weird').canRetry).toBe(true);
+  });
+
   it('falls back safely for a non-ApiError', () => {
     const view = mapResearchError(new Error('socket hang up'));
     expect(view.message).toBe('socket hang up');

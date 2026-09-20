@@ -210,6 +210,25 @@ describe('ResearchWorkspace', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/auth');
   });
 
+  it('offers no retry for a permanently failed run', async () => {
+    vi.mocked(api.createResearchRun).mockRejectedValueOnce(
+      new api.ApiError(400, {
+        code: 'UNSUPPORTED_INSTRUMENT',
+        message: 'Only US equities are supported.',
+        retryable: false,
+      })
+    );
+
+    renderWorkspace();
+    await userEvent.type(screen.getByLabelText(/US equity symbol/i), 'AAPL');
+    await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
+
+    expect(await screen.findByText(/Only US equities are supported/i)).toBeVisible();
+    expect(
+      screen.queryByRole('button', { name: /Retry research/i })
+    ).not.toBeInTheDocument();
+  });
+
   it('does not show an older result after a newer run fails', async () => {
     vi.mocked(api.createResearchRun)
       .mockResolvedValueOnce(informationalRun)

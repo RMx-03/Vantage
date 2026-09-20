@@ -14,7 +14,8 @@ export default function ResearchError({
   onReauth,
   retrying,
 }: ResearchErrorProps) {
-  const { message, isAuthError, runId, requestId } = mapResearchError(error);
+  const { message, isAuthError, canRetry, runId, requestId } =
+    mapResearchError(error);
 
   return (
     <div className="border border-error-container bg-error-container/30 p-6 text-error">
@@ -40,26 +41,30 @@ export default function ResearchError({
         </div>
       )}
 
-      <div className="mt-4 flex items-center gap-3">
-        {isAuthError ? (
-          <button
-            type="button"
-            onClick={onReauth}
-            className="px-4 py-2 bg-error text-on-error text-xs font-bold font-label uppercase tracking-widest transition-opacity hover:opacity-90"
-          >
-            Sign in again
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onRetry}
-            disabled={retrying}
-            className="px-4 py-2 bg-surface-container hover:bg-surface-container-highest text-on-surface text-xs font-bold font-label uppercase tracking-widest border border-outline-variant transition-colors disabled:opacity-50"
-          >
-            Retry research
-          </button>
-        )}
-      </div>
+      {/* A permanent failure offers no action: re-running it cannot succeed,
+          so the row is omitted rather than rendered empty. */}
+      {(isAuthError || canRetry) && (
+        <div className="mt-4 flex items-center gap-3">
+          {isAuthError ? (
+            <button
+              type="button"
+              onClick={onReauth}
+              className="px-4 py-2 bg-error text-on-error text-xs font-bold font-label uppercase tracking-widest transition-opacity hover:opacity-90"
+            >
+              Sign in again
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={retrying}
+              className="px-4 py-2 bg-surface-container hover:bg-surface-container-highest text-on-surface text-xs font-bold font-label uppercase tracking-widest border border-outline-variant transition-colors disabled:opacity-50"
+            >
+              Retry research
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
