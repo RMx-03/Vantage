@@ -513,6 +513,28 @@ def test_snapshot_hash_reproducible_under_reordered_input(fixed_now: datetime) -
     assert len(hash_asc) == 64
 
 
+def test_snapshot_hash_preserves_exact_accepted_price_values(
+    fixed_now: datetime,
+) -> None:
+    common = {
+        "symbol": "AAPL",
+        "session_date": date(2026, 9, 11),
+        "open": 100.0,
+        "high": 105.0,
+        "low": 99.0,
+        "close": 102.0,
+        "volume": 1_000_000,
+        "currency": "USD",
+        "provider": "yfinance",
+        "retrieved_at": fixed_now,
+        "adjustment_state": "split_adjusted",
+    }
+    first = DailyBar(adjusted_close=102.0000001, **common)
+    second = DailyBar(adjusted_close=102.0000002, **common)
+
+    assert snapshot_hash("AAPL", [first]) != snapshot_hash("AAPL", [second])
+
+
 def test_normalize_url_removes_utm_and_fragments() -> None:
     url1 = (
         "https://example.com/news/article-1?utm_source=twitter&utm_medium=social#header"

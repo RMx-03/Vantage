@@ -53,11 +53,11 @@ def snapshot_hash(symbol: str, bars: list[DailyBar]) -> str:
     canonical_bars = [
         {
             "session_date": bar.session_date.isoformat(),
-            "open": round(bar.open, 6),
-            "high": round(bar.high, 6),
-            "low": round(bar.low, 6),
-            "close": round(bar.close, 6),
-            "adjusted_close": round(bar.adjusted_close, 6),
+            "open": bar.open,
+            "high": bar.high,
+            "low": bar.low,
+            "close": bar.close,
+            "adjusted_close": bar.adjusted_close,
             "volume": bar.volume,
             "currency": bar.currency,
             "adjustment_state": bar.adjustment_state,

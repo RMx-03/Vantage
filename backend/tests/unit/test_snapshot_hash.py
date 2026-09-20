@@ -1,5 +1,7 @@
 from datetime import UTC, date, datetime
 
+import pytest
+
 from app.domain.research import (
     ComponentQuality,
     DailyBar,
@@ -78,3 +80,25 @@ def test_combined_snapshot_hash_is_order_independent_and_content_sensitive() -> 
     )
     assert combined_snapshot_hash(market, reordered) == expected
     assert combined_snapshot_hash(market, mutated) != expected
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("quality", ComponentQuality.PARTIAL),
+        ("volume_quality", ComponentQuality.PARTIAL),
+        ("error_code", "INVALID_PRICE_SERIES"),
+        ("missing_value_count", 1),
+        ("duplicate_session_count", 1),
+    ],
+)
+def test_combined_snapshot_hash_includes_market_diagnostics(
+    field: str, value: ComponentQuality | str | int
+) -> None:
+    market, news = _snapshots()
+
+    degraded = market.model_copy(update={field: value})
+
+    assert combined_snapshot_hash(degraded, news) != combined_snapshot_hash(
+        market, news
+    )

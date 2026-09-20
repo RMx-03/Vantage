@@ -13,7 +13,10 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || '';
+const API_BASE_URL =
+  (import.meta.env.VITE_API_URL as string) ||
+  (import.meta.env.VITE_API_BASE_URL as string) ||
+  '';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const {

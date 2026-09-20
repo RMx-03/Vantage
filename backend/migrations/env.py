@@ -6,6 +6,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import settings
 from app.db.base import Base
+from app.db.urls import normalize_database_url
 import app.db.models  # noqa: F401
 
 config = context.config
@@ -17,13 +18,14 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    return (
+    url = (
         os.environ.get("MIGRATION_DATABASE_URL")
         or os.environ.get("DATABASE_URL")
         or getattr(settings, "MIGRATION_DATABASE_URL", None)
         or getattr(settings, "DATABASE_URL", None)
         or config.get_main_option("sqlalchemy.url", "")
     )
+    return normalize_database_url(url)
 
 
 def run_migrations_offline() -> None:

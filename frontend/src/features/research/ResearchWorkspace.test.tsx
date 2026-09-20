@@ -349,6 +349,9 @@ describe('ResearchWorkspace', () => {
     expect(await screen.findByText('Run ID: failed-run-id')).toBeVisible();
     expect(screen.getByText('Request ID: request-correlation-id')).toBeVisible();
 
+    const input = screen.getByLabelText(/US equity symbol/i);
+    await userEvent.clear(input);
+    await userEvent.type(input, 'MSFT');
     await userEvent.click(screen.getByRole('button', { name: /Retry research/i }));
 
     expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
@@ -361,13 +364,18 @@ describe('ResearchWorkspace', () => {
     vi.mocked(api.createResearchRun).mockReturnValueOnce(pendingRun.promise);
 
     renderWorkspace();
-    await userEvent.type(screen.getByLabelText(/US equity symbol/i), 'AAPL');
+    const input = screen.getByLabelText(/US equity symbol/i);
+    await userEvent.type(input, 'AAPL');
     await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Running research analysis for AAPL'
-    );
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('Running research analysis for AAPL');
     expect(screen.getByRole('button', { name: /Run research/i })).toBeDisabled();
+
+    await userEvent.clear(input);
+    await userEvent.type(input, 'MSFT');
+    expect(status).toHaveTextContent('Running research analysis for AAPL');
+    expect(status).not.toHaveTextContent('MSFT');
 
     pendingRun.resolve(informationalRun);
     expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
@@ -483,6 +491,77 @@ describe('ResearchWorkspace', () => {
     );
     expect(screen.getByText(/Enter a US equity symbol above/i)).toBeVisible();
     expect(screen.getByLabelText(/US equity symbol/i)).toHaveValue('');
+  });
+
+  it('drops a pending run result after the real provider switches owner', async () => {
+    const pendingRun = deferred<typeof informationalRun>();
+    authMock.useRealProvider = true;
+    authMock.session = { user: { id: 'user-a' } };
+    vi.mocked(api.createResearchRun).mockReturnValueOnce(pendingRun.promise);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    renderWithRouter(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/app/research" element={<ResearchWorkspace />} />
+            <Route path="/app/research/:runId" element={<ResearchWorkspace />} />
+          </Routes>
+        </AuthProvider>
+      </QueryClientProvider>,
+      { route: '/app/research' }
+    );
+
+    await waitFor(() => expect(api.listResearchRuns).toHaveBeenCalled());
+    const input = screen.getByLabelText(/US equity symbol/i);
+    await userEvent.type(input, 'AAPL');
+    await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Running research analysis for AAPL'
+    );
+
+    mockNavigate.mockClear();
+    authMock.session = { user: { id: 'user-b' } };
+    await act(async () => {
+      authMock.listeners.forEach((listener) =>
+        listener('SIGNED_IN', authMock.session)
+      );
+    });
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/US equity symbol/i)).toHaveValue('')
+    );
+    expect(
+      queryClient.getQueryCache().findAll({
+        predicate: (query) => query.queryKey.includes('user-a'),
+      })
+    ).toHaveLength(0);
+
+    await act(async () => {
+      pendingRun.resolve(informationalRun);
+      await pendingRun.promise;
+    });
+
+    expect(
+      queryClient.getQueryData([
+        'research-run',
+        'user-a',
+        informationalRun.run_id,
+      ])
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryCache().findAll({
+        predicate: (query) => query.queryKey.includes('user-a'),
+      })
+    ).toHaveLength(0);
+    expect(mockNavigate).not.toHaveBeenCalledWith(
+      `/app/research/${informationalRun.run_id}`,
+      { replace: true }
+    );
+    expect(screen.queryByText(informationalRun.summary!)).not.toBeInTheDocument();
+    expect(screen.getByText(/Enter a US equity symbol above/i)).toBeVisible();
   });
 
   it('hydrates a run from the url', async () => {

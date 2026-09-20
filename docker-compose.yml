@@ -67,7 +67,8 @@ services:
       args:
         VITE_SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
         VITE_SUPABASE_ANON_KEY: ${SUPABASE_KEY:-local-development-anon-key}
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        VITE_API_URL: ${VITE_API_URL:-${VITE_API_BASE_URL:-http://localhost:8000}}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     ports:
       - "5173:80"
     depends_on:

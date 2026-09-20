@@ -35,9 +35,11 @@ Copy `.env.example` to `.env`. Required production values include Supabase crede
 
 The database split is intentional:
 
-- `MIGRATION_DATABASE_URL` connects as the DDL owner.
-- `DATABASE_URL` connects as the runtime role.
+- `MIGRATION_DATABASE_URL` connects as the DDL owner and is preferred for migrations.
+- `DATABASE_URL` connects as the runtime role and remains the migration fallback when a separate owner URL is unavailable.
 - `VANTAGE_RUNTIME_DB_ROLE` names the existing role that receives schema usage, table `SELECT`/`INSERT`/`UPDATE`, and sequence usage during migration.
+
+Heroku's `postgres://` database URLs are normalized to SQLAlchemy's `postgresql+psycopg://` dialect. Heroku deployments run `alembic upgrade head` in a release phase using the built web image, before the new web process starts. Configure `MIGRATION_DATABASE_URL` with the DDL owner whenever possible; fallback migrations using `DATABASE_URL` require that role to have the necessary DDL privileges.
 
 The initial migration revokes `PUBLIC` access. Its downgrade deliberately raises an error because research history is immutable. Roll back application code by deploying the prior application version; use a reviewed forward migration for schema corrections.
 

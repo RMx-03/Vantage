@@ -6,10 +6,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
+from app.db.urls import normalize_database_url
 
 
 def get_database_url() -> str:
-    return os.environ.get("DATABASE_URL") or settings.DATABASE_URL
+    url = os.environ.get("DATABASE_URL") or settings.DATABASE_URL
+    return normalize_database_url(url)
 
 
 engine = create_engine(get_database_url(), pool_pre_ping=True)

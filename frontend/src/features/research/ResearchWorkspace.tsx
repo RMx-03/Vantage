@@ -1,4 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type RefObject,
+} from 'react';
 import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { createResearchRun, listResearchRuns, getResearchRun } from '../../api/researchRuns';
@@ -17,7 +23,16 @@ const SYMBOL_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
 export default function ResearchWorkspace() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const ownerId = user?.id ?? null;
   const prevOwnerRef = useRef(user?.id);
+  const currentOwnerIdRef = useRef(ownerId);
+
+  useLayoutEffect(() => {
+    currentOwnerIdRef.current = ownerId;
+    return () => {
+      currentOwnerIdRef.current = null;
+    };
+  }, [ownerId]);
 
   useEffect(() => {
     if (prevOwnerRef.current !== undefined && prevOwnerRef.current !== user?.id) {
@@ -29,11 +44,21 @@ export default function ResearchWorkspace() {
   // Remounting on owner change is what guarantees that no run, error or input
   // a previous owner produced can survive into the next owner's session.
   return (
-    <OwnerWorkspace key={user?.id ?? 'signed-out'} ownerId={user?.id ?? null} />
+    <OwnerWorkspace
+      key={ownerId ?? 'signed-out'}
+      ownerId={ownerId}
+      currentOwnerIdRef={currentOwnerIdRef}
+    />
   );
 }
 
-function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
+function OwnerWorkspace({
+  ownerId,
+  currentOwnerIdRef,
+}: {
+  ownerId: string | null;
+  currentOwnerIdRef: RefObject<string | null>;
+}) {
   const [symbolInput, setSymbolInput] = useState('');
   const { runId } = useParams<{ runId?: string }>();
   const [liveRunId, setLiveRunId] = useState<string | null>(null);
@@ -79,6 +104,8 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   const mutation = useMutation({
     mutationFn: (sym: string) => createResearchRun(sym),
     onSuccess: (data) => {
+      if (currentOwnerIdRef.current !== ownerId) return;
+
       setLiveRunId(data.run_id);
       queryClient.setQueryData(['research-run', ownerId, data.run_id], data);
       queryClient.invalidateQueries({ queryKey: ['research-runs', ownerId] });
@@ -101,8 +128,8 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
   };
 
   const handleRetry = () => {
-    if (isValidSymbol) {
-      mutation.mutate(normalizedSymbol);
+    if (mutation.variables) {
+      mutation.mutate(mutation.variables);
     }
   };
 
@@ -151,7 +178,7 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
             <div className="flex items-center gap-4">
               <div className="w-2 h-2 bg-primary animate-pulse" />
               <p className="text-outline text-xs font-label uppercase tracking-[0.2em] animate-pulse">
-                Running research analysis for {normalizedSymbol}...
+                Running research analysis for {mutation.variables}...
               </p>
             </div>
             <span className="text-xs font-label text-outline pl-6">
