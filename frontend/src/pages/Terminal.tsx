@@ -54,8 +54,9 @@ export default function Terminal() {
   return (
     <div className="dark font-body text-on-background selection:bg-primary selection:text-on-primary h-screen overflow-hidden flex flex-col bg-[#0e0e0e]">
       {/* TopAppBar Shell */}
-      <header className="bg-[#0e0e0e] text-[#c6c6c7] font-['Inter'] font-normal border-b border-[#191a1a] w-full z-50 shrink-0">
-        <div className="w-full max-w-7xl mx-auto px-6 relative flex items-center justify-between h-16">
+      <header className="bg-surface-dim text-on-surface font-headline border-b border-outline-variant/30 w-full z-50 shrink-0">
+        <div className="w-full px-5 relative flex items-center justify-between h-14">
+          {/* Left: Sidebar Toggle + Brand */}
           <div className="flex items-center gap-3 z-10">
             <button
               type="button"
@@ -63,7 +64,7 @@ export default function Terminal() {
               aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
               aria-expanded={sidebarOpen}
               title={sidebarOpen ? 'Collapse sidebar (Ctrl+B)' : 'Expand sidebar (Ctrl+B)'}
-              className="hidden lg:flex p-1.5 text-outline hover:text-on-surface hover:bg-surface-container-highest border border-transparent hover:border-outline-variant transition-colors focus:outline-none focus:ring-1 focus:ring-primary"
+              className="hidden lg:flex p-1.5 text-outline hover:text-on-surface bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/30 hover:border-outline-variant transition-colors focus:outline-none focus:ring-1 focus:ring-primary"
             >
               {sidebarOpen ? (
                 <PanelLeftClose className="w-4 h-4" />
@@ -72,26 +73,39 @@ export default function Terminal() {
               )}
             </button>
             <div className="flex items-center gap-2">
-              <span className="text-xl font-bold tracking-tighter text-[#c6c6c7]">Vantage</span>
-              <span className="text-[10px] font-label uppercase tracking-widest text-outline hidden sm:block">
+              <span className="text-base font-bold tracking-tight text-on-surface">Vantage</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-label font-bold uppercase tracking-[0.15em] text-primary bg-surface-container-high border border-outline-variant/40 hidden sm:inline-block">
                 Quant AI
               </span>
             </div>
           </div>
 
-          <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none">
-            <span className="text-[10px] font-label uppercase tracking-[0.3em] text-primary animate-pulse">
+          {/* Center: Anchored Terminal Status Capsule */}
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1 bg-surface-container-low border border-outline-variant/30 pointer-events-none">
+            <span className="w-1.5 h-1.5 bg-primary animate-pulse shrink-0" />
+            <span className="text-[10px] font-label uppercase tracking-[0.25em] text-on-surface font-semibold">
               {isSettings ? 'SYSTEM SETTINGS' : 'ANALYTICAL TERMINAL'}
             </span>
           </div>
 
-          <button
-            onClick={() => signOut()}
-            className="flex items-center gap-2 text-[#484848] hover:text-error transition-colors font-label text-[10px] uppercase tracking-widest z-10 group"
-          >
-            <span className="hidden sm:block">Sign Out</span>
-            <span className="material-symbols-outlined text-sm group-hover:translate-x-0.5 transition-transform">logout</span>
-          </button>
+          {/* Right: Operator Identity & Sign Out */}
+          <div className="flex items-center gap-2.5 z-10">
+            {user?.email && (
+              <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-surface-container-low border border-outline-variant/30 text-[10px] font-label text-outline">
+                <span className="w-1.5 h-1.5 bg-primary/70 shrink-0" />
+                <span className="truncate max-w-[150px] text-on-surface-variant font-medium">
+                  {user.email}
+                </span>
+              </div>
+            )}
+            <button
+              onClick={() => signOut()}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-outline hover:text-error hover:bg-error-container/20 border border-outline-variant/30 hover:border-error/40 transition-colors font-label text-[10px] uppercase tracking-widest group"
+            >
+              <span className="hidden sm:block">Sign Out</span>
+              <span className="material-symbols-outlined text-sm group-hover:translate-x-0.5 transition-transform">logout</span>
+            </button>
+          </div>
         </div>
       </header>
 
