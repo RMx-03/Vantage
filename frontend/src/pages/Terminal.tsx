@@ -1,4 +1,4 @@
-import { useLocation, useParams, Outlet } from 'react-router-dom';
+import { useLocation, useMatch, Outlet } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import type { ResearchRun } from '../types/research';
@@ -11,7 +11,8 @@ export default function Terminal() {
   const isSettings = pathname.startsWith('/app/settings');
   const { signOut, user } = useAuth();
   const ownerId = user?.id ?? null;
-  const { runId } = useParams<{ runId?: string }>();
+  const match = useMatch('/app/research/:runId');
+  const runId = match?.params.runId;
   const run = useQueryClient().getQueryData<ResearchRun>([
     'research-run',
     ownerId,
