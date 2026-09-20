@@ -25,15 +25,15 @@ export default function Terminal() {
     <div className="dark font-body text-on-background selection:bg-primary selection:text-on-primary h-screen overflow-hidden flex flex-col bg-[#0e0e0e]">
       {/* TopAppBar Shell */}
       <header className="bg-[#0e0e0e] text-[#c6c6c7] font-['Inter'] font-normal border-b border-[#191a1a] w-full z-50 shrink-0">
-        <div className="w-full max-w-7xl mx-auto px-6 flex items-center justify-between h-16">
-          <div className="flex items-center gap-2">
+        <div className="w-full max-w-7xl mx-auto px-6 relative flex items-center justify-between h-16">
+          <div className="flex items-center gap-2 z-10">
             <span className="text-xl font-bold tracking-tighter text-[#c6c6c7]">Vantage</span>
             <span className="text-[10px] font-label uppercase tracking-widest text-outline hidden sm:block">
               Quant AI
             </span>
           </div>
 
-          <div className="flex flex-col items-center">
+          <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none">
             <span className="text-[10px] font-label uppercase tracking-[0.3em] text-primary animate-pulse">
               {isSettings ? 'SYSTEM SETTINGS' : 'ANALYTICAL TERMINAL'}
             </span>
@@ -41,10 +41,10 @@ export default function Terminal() {
 
           <button
             onClick={() => signOut()}
-            className="flex items-center gap-2 text-[#484848] hover:text-error transition-colors font-label text-[10px] uppercase tracking-widest group"
+            className="flex items-center gap-2 text-[#484848] hover:text-error transition-colors font-label text-[10px] uppercase tracking-widest z-10 group"
           >
-            <span className="hidden sm:block group-hover:pr-1 transition-all">Sign Out</span>
-            <span className="material-symbols-outlined text-sm">logout</span>
+            <span className="hidden sm:block">Sign Out</span>
+            <span className="material-symbols-outlined text-sm group-hover:translate-x-0.5 transition-transform">logout</span>
           </button>
         </div>
       </header>
