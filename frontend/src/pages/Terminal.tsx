@@ -133,7 +133,7 @@ export default function Terminal() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto w-full">
+        <main className="flex-1 overflow-y-auto [scrollbar-gutter:stable] w-full">
           <div className="py-12 md:py-24">
             <Outlet />
           </div>
