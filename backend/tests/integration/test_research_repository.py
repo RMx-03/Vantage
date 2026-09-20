@@ -690,6 +690,25 @@ def test_compose_has_no_embedded_runtime_password(project_root: Path) -> None:
     assert "LLM_PROVIDER: ${LLM_PROVIDER:-disabled}" in compose
 
 
+def test_preload_script_targets_names_compose_actually_creates(
+    project_root: Path,
+) -> None:
+    """Helper scripts must address Compose services, not fixed container names.
+
+    Fixed `container_name` entries were dropped so several checkouts can run
+    side by side. A script that still hard-codes one silently reports the
+    service as stopped forever.
+    """
+    compose = (project_root / "docker-compose.yml").read_text()
+    script = (project_root / "backend/scripts/preload_model.sh").read_text()
+
+    assert "container_name" not in compose
+    assert "vantage-ollama" not in script
+    # It must go through Compose, which resolves the project-scoped name.
+    assert "compose" in script
+    assert "ollama" in script
+
+
 def test_history_cursor_does_not_expose_internal_row_id(
     repo: ResearchRunRepository, user_id: UUID, three_runs
 ) -> None:
