@@ -497,6 +497,50 @@ describe('ResearchWorkspace', () => {
     expect(api.getResearchRun).toHaveBeenCalledWith(informationalRun.run_id);
   });
 
+  it('shows a loading state instead of the empty workspace while a url run loads', async () => {
+    const pendingRun = deferred<typeof informationalRun>();
+    vi.mocked(api.getResearchRun).mockReturnValueOnce(pendingRun.promise);
+
+    renderWorkspace({
+      route: `/app/research/${informationalRun.run_id}`,
+      path: '/app/research/:runId',
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading research run');
+    expect(
+      screen.queryByText(/Enter a US equity symbol above/i)
+    ).not.toBeInTheDocument();
+
+    pendingRun.resolve(informationalRun);
+    expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
+  });
+
+  it('shows a retryable error instead of the empty workspace when a url run fails', async () => {
+    vi.mocked(api.getResearchRun)
+      .mockRejectedValueOnce(
+        new api.ApiError(500, {
+          code: 'INTERNAL_ERROR',
+          message: 'Research run could not be loaded.',
+          retryable: true,
+        })
+      )
+      .mockResolvedValueOnce(informationalRun);
+
+    renderWorkspace({
+      route: `/app/research/${informationalRun.run_id}`,
+      path: '/app/research/:runId',
+    });
+
+    expect(await screen.findByText('Failed to load research run.')).toBeVisible();
+    expect(screen.getByText('Research run could not be loaded.')).toBeVisible();
+    expect(
+      screen.queryByText(/Enter a US equity symbol above/i)
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Try again/i }));
+    expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
+  });
+
   it('marks a url-loaded run as historical', async () => {
     vi.mocked(api.getResearchRun).mockResolvedValue(historicalRun);
 

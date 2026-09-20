@@ -46,7 +46,13 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
 
   const [prevPathname, setPrevPathname] = useState(pathname);
 
-  const { data: routeRun } = useQuery({
+  const {
+    data: routeRun,
+    isLoading: isRouteRunLoading,
+    isError: isRouteRunError,
+    error: routeRunError,
+    refetch: refetchRouteRun,
+  } = useQuery({
     queryKey: ['research-run', ownerId, runId],
     queryFn: () => getResearchRun(runId!),
     enabled: ownerId !== null && Boolean(runId),
@@ -163,11 +169,46 @@ function OwnerWorkspace({ ownerId }: { ownerId: string | null }) {
           />
         )}
 
-        {!mutation.isPending && !mutation.isError && selectedRun && (
+        {!mutation.isPending && !mutation.isError && isRouteRunLoading && (
+          <div role="status" className="flex items-center gap-4 py-4">
+            <div className="w-2 h-2 bg-primary animate-pulse" />
+            <p className="text-outline text-xs font-label uppercase tracking-[0.2em] animate-pulse">
+              Loading research run...
+            </p>
+          </div>
+        )}
+
+        {!mutation.isPending && !mutation.isError && isRouteRunError && (
+          <div className="border border-error-container bg-error-container/30 p-6 text-error">
+            <p className="font-medium font-label">Failed to load research run.</p>
+            <p className="mt-1 text-sm font-body">
+              {routeRunError instanceof Error
+                ? routeRunError.message
+                : 'An error occurred while fetching the run.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => void refetchRouteRun()}
+              className="mt-4 px-4 py-2 bg-surface-container hover:bg-surface-container-highest text-on-surface text-xs font-bold font-label uppercase tracking-widest border border-outline-variant transition-colors"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {!mutation.isPending &&
+          !mutation.isError &&
+          !isRouteRunLoading &&
+          !isRouteRunError &&
+          selectedRun && (
           <ResearchResult run={selectedRun} historical={isHistorical} />
         )}
 
-        {!mutation.isPending && !mutation.isError && !selectedRun && (
+        {!mutation.isPending &&
+          !mutation.isError &&
+          !isRouteRunLoading &&
+          !isRouteRunError &&
+          !selectedRun && (
           <div className="border border-outline-variant/30 bg-surface-container-low p-12 text-center text-outline font-label">
             <p className="text-sm">Enter a US equity symbol above to begin an EOD research run.</p>
           </div>
