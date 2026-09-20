@@ -328,32 +328,42 @@ class ResearchRunRepository:
         before: str | None = None,
     ) -> ResearchRunPage:
         capped_limit = min(max(1, limit), 50)
-        cursor_filter = None
+        cursor_public_id: UUID | None = None
+        decoded_created_at: datetime | None = None
         if before is not None:
             try:
                 decoded_bytes = base64.urlsafe_b64decode(before.encode("utf-8"))
                 payload = json.loads(decoded_bytes.decode("utf-8"))
-                cursor_created_at = datetime.fromisoformat(payload["created_at"])
+                decoded_created_at = datetime.fromisoformat(payload["created_at"])
                 cursor_public_id = UUID(str(payload["public_id"]))
-            except Exception as e:
+            except Exception as exc:
                 raise VantageError(
                     code="INVALID_CURSOR",
                     safe_message="The history cursor is invalid.",
-                ) from e
-
-            # The tiebreaker is the public UUID, never the internal row id: a
-            # cursor is base64-encoded, not opaque, and base64 is not privacy.
-            # The comparison below and the ORDER BY must use the same column so
-            # a page boundary neither skips nor repeats rows sharing created_at.
-            cursor_filter = or_(
-                ResearchRunRow.created_at < cursor_created_at,
-                and_(
-                    ResearchRunRow.created_at == cursor_created_at,
-                    ResearchRunRow.public_id < cursor_public_id,
-                ),
-            )
+                ) from exc
 
         with SessionFactory() as session:
+            cursor_filter = None
+            if cursor_public_id is not None and decoded_created_at is not None:
+                cursor_row = session.execute(
+                    select(ResearchRunRow.id, ResearchRunRow.created_at).where(
+                        ResearchRunRow.user_id == user_id,
+                        ResearchRunRow.public_id == cursor_public_id,
+                    )
+                ).one_or_none()
+                if cursor_row is None or cursor_row.created_at != decoded_created_at:
+                    raise VantageError(
+                        code="INVALID_CURSOR",
+                        safe_message="The history cursor is invalid.",
+                    )
+                cursor_filter = or_(
+                    ResearchRunRow.created_at < cursor_row.created_at,
+                    and_(
+                        ResearchRunRow.created_at == cursor_row.created_at,
+                        ResearchRunRow.id < cursor_row.id,
+                    ),
+                )
+
             stmt = (
                 select(ResearchRunRow)
                 .options(
@@ -367,7 +377,7 @@ class ResearchRunRepository:
                 stmt = stmt.where(cursor_filter)
             stmt = stmt.order_by(
                 ResearchRunRow.created_at.desc(),
-                ResearchRunRow.public_id.desc(),
+                ResearchRunRow.id.desc(),
             ).limit(capped_limit + 1)
             rows = list(session.scalars(stmt).all())
 

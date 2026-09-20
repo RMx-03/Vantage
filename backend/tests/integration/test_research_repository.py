@@ -369,6 +369,49 @@ def test_history_cursor_is_stable(
     assert all_ids == [r.run_id for r in unpaged.items]
 
 
+def test_history_paginates_tied_timestamps_exactly_once(
+    repo: ResearchRunRepository,
+    user_id: UUID,
+    versions: VersionInfo,
+) -> None:
+    runs = [
+        repo.create_running(
+            user_id=user_id,
+            symbol=f"T{i:02d}",
+            versions=versions,
+        )
+        for i in range(25)
+    ]
+    tied_at = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
+    with SessionFactory() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE vantage_app.research_runs "
+                "SET created_at = :created_at "
+                "WHERE user_id = :user_id"
+            ),
+            {"created_at": tied_at, "user_id": user_id},
+        )
+
+    first = repo.list_owned(user_id=user_id, limit=20, before=None)
+    assert first.next_cursor is not None
+    second = repo.list_owned(
+        user_id=user_id,
+        limit=20,
+        before=first.next_cursor,
+    )
+
+    returned = [run.run_id for run in first.items + second.items]
+    expected = [
+        run.public_id
+        for run in sorted(runs, key=lambda run: run.id, reverse=True)
+    ]
+    assert returned == expected
+    assert len(returned) == 25
+    assert len(set(returned)) == 25
+    assert second.next_cursor is None
+
+
 def test_invalid_cursor_raises_vantage_error(
     repo: ResearchRunRepository, user_id: UUID
 ) -> None:
@@ -760,7 +803,7 @@ def test_history_pagination_visits_tied_rows_exactly_once(
     assert cursor is None
     assert len(seen) == len(created)
     assert set(seen) == {r.public_id for r in created}
-    assert seen == sorted(seen, key=lambda run_id: run_id.bytes, reverse=True)
+    assert seen == [r.public_id for r in reversed(created)]
 
 
 def test_read_path_drops_a_hostile_stored_url(
