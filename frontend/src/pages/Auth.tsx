@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 type Mode = 'login' | 'register';
 
 export default function Auth() {
   const navigate = useNavigate();
+  const prefersReducedMotion = useReducedMotion();
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -38,8 +40,30 @@ export default function Auth() {
   };
 
   return (
-    <div className="dark font-body antialiased min-h-screen flex items-center justify-center p-6 bg-background text-on-surface selection:bg-primary selection:text-on-primary">
+    <motion.div
+      initial={prefersReducedMotion ? false : { opacity: 0, x: 8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      className="dark font-body antialiased min-h-screen flex items-center justify-center p-6 bg-background text-on-surface selection:bg-primary selection:text-on-primary"
+    >
       <div className="w-full max-w-md relative z-10">
+
+        <Link
+          to="/"
+          className="group/home mb-5 inline-flex items-center gap-2 font-label text-xs text-on-surface-variant transition-colors duration-150 hover:text-on-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-4 focus-visible:ring-offset-background"
+        >
+          <span
+            aria-hidden="true"
+            className={`material-symbols-outlined text-[16px] ${
+              prefersReducedMotion
+                ? ''
+                : 'transition-transform duration-150 group-hover/home:-translate-x-1'
+            }`}
+          >
+            arrow_back
+          </span>
+          <span>Return to overview</span>
+        </Link>
 
         {/* Glassmorphic Card */}
         <div className="bg-surface-container/80 backdrop-blur-2xl border border-surface-variant p-8 md:p-12 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.8)] relative overflow-hidden group">
@@ -200,6 +224,6 @@ export default function Auth() {
           SYS.AUTH.REQ // 0x0001
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

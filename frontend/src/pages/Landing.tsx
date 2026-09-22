@@ -1,10 +1,17 @@
+import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
 export default function Landing() {
     const navigate = useNavigate();
+    const prefersReducedMotion = useReducedMotion();
 
     return (
-        <div className="dark bg-background text-on-background font-body antialiased min-h-screen">
+        <motion.div
+            initial={prefersReducedMotion ? false : { opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="dark bg-background text-on-background font-body antialiased min-h-screen"
+        >
             {/* TopNavBar */}
             <nav className="bg-[#0e0e0e] border-b border-[#191a1a] fixed top-0 left-0 right-0 z-50">
                 <div className="flex justify-between items-center py-6 w-full max-w-2xl mx-auto px-6">
@@ -100,6 +107,6 @@ export default function Landing() {
                     </div>
                 </div>
             </footer>
-        </div>
+        </motion.div>
     );
 }
