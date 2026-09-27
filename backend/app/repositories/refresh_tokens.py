@@ -12,6 +12,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security.tokens import hash_opaque_token, mint_opaque_token
@@ -77,6 +78,12 @@ class RefreshTokenRepository:
                 return RotationResult(outcome="not_found")
 
             if row.revoked_at is not None:
+                if self._within_reuse_grace(session, row, now):
+                    # A lost rotation response, not theft. Honour it once.
+                    row.revoked_reason = "rotated_grace_used"
+                    return self._rotate_into_successor(
+                        session, row, now, user_agent, ip_hash
+                    )
                 # Already consumed or revoked. Treat as theft and burn the family.
                 self._revoke_family_in_session(
                     session, row.family_id, now, "reuse_detected"
@@ -88,30 +95,59 @@ class RefreshTokenRepository:
                 row.revoked_reason = "expired"
                 return RotationResult(outcome="expired")
 
-            successor_raw, successor_digest = mint_opaque_token()
-            successor = RefreshTokenRow(
-                token_hash=successor_digest,
-                user_id=row.user_id,
-                family_id=row.family_id,
-                issued_at=now,
-                expires_at=now
-                + timedelta(seconds=settings.AUTH_REFRESH_TOKEN_TTL_SECONDS),
-                user_agent=(user_agent or None) and user_agent[:_MAX_USER_AGENT],
-                ip_hash=ip_hash,
-            )
-            session.add(successor)
-            session.flush()
-
             row.revoked_at = now
             row.revoked_reason = "rotated"
-            row.replaced_by_id = successor.id
+            return self._rotate_into_successor(session, row, now, user_agent, ip_hash)
 
-            return RotationResult(
-                outcome="rotated",
-                raw_token=successor_raw,
-                user_id=row.user_id,
-                family_id=row.family_id,
-            )
+    @staticmethod
+    def _rotate_into_successor(
+        session: Session,
+        row: RefreshTokenRow,
+        now: datetime,
+        user_agent: str | None,
+        ip_hash: str | None,
+    ) -> RotationResult:
+        successor_raw, successor_digest = mint_opaque_token()
+        successor = RefreshTokenRow(
+            token_hash=successor_digest,
+            user_id=row.user_id,
+            family_id=row.family_id,
+            issued_at=now,
+            expires_at=now + timedelta(seconds=settings.AUTH_REFRESH_TOKEN_TTL_SECONDS),
+            user_agent=(user_agent or None) and user_agent[:_MAX_USER_AGENT],
+            ip_hash=ip_hash,
+        )
+        session.add(successor)
+        session.flush()
+        row.replaced_by_id = successor.id
+        return RotationResult(
+            outcome="rotated",
+            raw_token=successor_raw,
+            user_id=row.user_id,
+            family_id=row.family_id,
+        )
+
+    @staticmethod
+    def _within_reuse_grace(
+        session: Session, row: RefreshTokenRow, now: datetime
+    ) -> bool:
+        """Whether a revoked token is a lost rotation rather than a replay.
+
+        All must hold: it was revoked by an ordinary rotation (never logout,
+        password change or detected reuse); it is being presented within the
+        grace window; its successor has never been used; and grace has not
+        already been spent on it. Once the real client has moved on, the old
+        token reappearing is theft regardless of timing.
+        """
+        grace = settings.AUTH_REFRESH_REUSE_GRACE_SECONDS
+        if grace <= 0 or row.revoked_reason != "rotated" or row.revoked_at is None:
+            return False
+        if now - row.revoked_at > timedelta(seconds=grace):
+            return False
+        if row.replaced_by_id is None:
+            return False
+        successor = session.get(RefreshTokenRow, row.replaced_by_id)
+        return successor is not None and successor.revoked_at is None
 
     def revoke(self, raw_token: str, *, reason: str) -> None:
         digest = hash_opaque_token(raw_token)

@@ -6,6 +6,9 @@ import pytest
 os.environ.setdefault("TRACE_EXPORT_ENABLED", "false")
 os.environ.setdefault("AUTH_JWT_SECRET", "test-only-secret-that-is-long-enough-32b")
 os.environ.setdefault("AUTH_COOKIE_SECURE", "false")
+# Reuse-detection tests replay a token immediately and expect theft to be
+# detected. The grace window is exercised explicitly in test_refresh_grace.py.
+os.environ.setdefault("AUTH_REFRESH_REUSE_GRACE_SECONDS", "0")
 os.environ.setdefault(
     "TELEMETRY_USER_SALT", "test-only-salt-that-is-at-least-32-bytes-long"
 )

@@ -113,6 +113,12 @@ class Settings(BaseSettings):
     AUTH_JWT_AUDIENCE: str = "vantage-api"
     AUTH_ACCESS_TOKEN_TTL_SECONDS: int = Field(default=900, gt=0)
     AUTH_REFRESH_TOKEN_TTL_SECONDS: int = Field(default=2592000, gt=0)
+    # How long a just-rotated refresh token may be presented again without being
+    # treated as theft. Covers a page reload landing after the server rotated
+    # but before the browser stored the new cookie. Honoured once per token and
+    # only while its successor is unused, so it never helps a thief who replays
+    # after the real client has moved on. 0 disables it.
+    AUTH_REFRESH_REUSE_GRACE_SECONDS: int = Field(default=10, ge=0)
     AUTH_COOKIE_NAME: str = "vantage_refresh"
     # Only ever false for local plain-HTTP development.
     AUTH_COOKIE_SECURE: bool = True
