@@ -97,6 +97,32 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str = ""
 
     # ------------------------------------------------------------------
+    # First-party authentication (Phase 2)
+    # ------------------------------------------------------------------
+    # HS256 signing secret for access tokens. There is deliberately no
+    # usable default: an application that signs tokens with a shipped
+    # default is an application with no authentication at all.
+    AUTH_JWT_SECRET: str = ""
+    AUTH_JWT_ISSUER: str = "vantage"
+    AUTH_JWT_AUDIENCE: str = "vantage-api"
+    AUTH_ACCESS_TOKEN_TTL_SECONDS: int = Field(default=900, gt=0)
+    AUTH_REFRESH_TOKEN_TTL_SECONDS: int = Field(default=2592000, gt=0)
+    AUTH_COOKIE_NAME: str = "vantage_refresh"
+    # Only ever false for local plain-HTTP development.
+    AUTH_COOKIE_SECURE: bool = True
+    # Configuration rather than constants so topology changes never need a code
+    # change. "lax" is correct for every current deployment: local development
+    # (localhost:5173 to localhost:8000 is same-site — SameSite ignores port) and
+    # production, where a Vercel rewrite proxies /api to Heroku so the browser
+    # sees one origin.
+    AUTH_COOKIE_SAMESITE: str = "lax"
+    # Empty means host-only, which is what production uses. `vercel.app` is on the
+    # Public Suffix List, so a Domain-scoped cookie cannot be set there anyway.
+    AUTH_COOKIE_DOMAIN: str = ""
+    AUTH_LOGIN_MAX_ATTEMPTS: int = Field(default=10, gt=0)
+    AUTH_LOGIN_WINDOW_SECONDS: int = Field(default=900, gt=0)
+
+    # ------------------------------------------------------------------
     # Database (PostgreSQL)
     # ------------------------------------------------------------------
     DATABASE_URL: str = "postgresql+psycopg://vantage_runtime:vantage_runtime@localhost:5433/vantage_test"
@@ -131,3 +157,25 @@ class Settings(BaseSettings):
 # Singleton — import this everywhere, never instantiate Settings directly.
 # ---------------------------------------------------------------------------
 settings = Settings()
+
+# Substrings that mark a secret as a non-secret example value. A deployment
+# that ships one of these is misconfigured, and failing to start is the only
+# safe response.
+_PLACEHOLDER_MARKERS = ("change-me", "changeme", "placeholder", "example", "your-secret")
+
+
+def validate_auth_settings(active: Settings) -> None:
+    """Fail fast when authentication is misconfigured.
+
+    Called during application startup. Raising here stops the process; the
+    alternative is a running API that issues forgeable tokens.
+    """
+    secret = active.AUTH_JWT_SECRET
+    if not secret:
+        raise RuntimeError("AUTH_JWT_SECRET must be set; refusing to start.")
+    if len(secret.encode("utf-8")) < 32:
+        raise RuntimeError("AUTH_JWT_SECRET must be at least 32 bytes; refusing to start.")
+    lowered = secret.lower()
+    if any(marker in lowered for marker in _PLACEHOLDER_MARKERS):
+        raise RuntimeError("AUTH_JWT_SECRET looks like a placeholder; refusing to start.")
+
