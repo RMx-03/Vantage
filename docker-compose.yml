@@ -41,6 +41,8 @@ services:
       DATABASE_URL: postgresql+psycopg://vantage_runtime:${POSTGRES_RUNTIME_PASSWORD:-vantage_runtime}@postgres:5432/vantage
       SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
       SUPABASE_KEY: ${SUPABASE_KEY:-local-development-anon-key}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       TRACE_EXPORT_ENABLED: ${TRACE_EXPORT_ENABLED:-false}
       TELEMETRY_USER_SALT: ${TELEMETRY_USER_SALT:-local-development-only}
       # Immutable build identity reported as versions.code. CI supplies the
