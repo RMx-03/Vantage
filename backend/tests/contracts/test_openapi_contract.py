@@ -4,19 +4,51 @@ from typing import Any
 from app.main import app
 
 
-def canonicalize(
-    openapi_doc: dict[str, Any],
-    paths: list[str],
-    schema_keys: list[str] | None = None,
-) -> dict[str, Any]:
+_REF_PREFIX = "#/components/schemas/"
+
+
+def _refs_in(node: Any) -> set[str]:
+    """Every component schema name referenced anywhere inside `node`."""
+    found: set[str] = set()
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith(_REF_PREFIX):
+            found.add(ref[len(_REF_PREFIX) :])
+        for value in node.values():
+            found |= _refs_in(value)
+    elif isinstance(node, list):
+        for value in node:
+            found |= _refs_in(value)
+    return found
+
+
+def reachable_schemas(openapi_doc: dict[str, Any], paths: list[str]) -> set[str]:
+    """The transitive closure of schemas the given paths reference.
+
+    Derived from the document rather than from the snapshot, so a newly
+    referenced schema fails the comparison and a dropped one is noticed.
+    """
+    all_schemas = openapi_doc.get("components", {}).get("schemas", {})
+    frontier = _refs_in([openapi_doc.get("paths", {}).get(p) for p in paths])
+    reached: set[str] = set()
+    while frontier:
+        name = frontier.pop()
+        if name in reached or name not in all_schemas:
+            continue
+        reached.add(name)
+        frontier |= _refs_in(all_schemas[name]) - reached
+    return reached
+
+
+def canonicalize(openapi_doc: dict[str, Any], paths: list[str]) -> dict[str, Any]:
     extracted_paths = {
         p: openapi_doc.get("paths", {}).get(p)
         for p in sorted(paths)
         if p in openapi_doc.get("paths", {})
     }
-    schemas = openapi_doc.get("components", {}).get("schemas", {})
-    if schema_keys is not None:
-        schemas = {k: v for k, v in schemas.items() if k in schema_keys}
+    all_schemas = openapi_doc.get("components", {}).get("schemas", {})
+    keep = reachable_schemas(openapi_doc, paths)
+    schemas = {k: v for k, v in all_schemas.items() if k in keep}
     return {
         "openapi": openapi_doc.get("openapi", "3.1.0"),
         "info": {
@@ -37,7 +69,6 @@ def test_research_run_contract_matches_snapshot() -> None:
     actual = canonicalize(
         app.openapi(),
         paths=["/api/v1/research-runs", "/api/v1/research-runs/{run_id}"],
-        schema_keys=list(expected.get("components", {}).get("schemas", {}).keys()),
     )
     assert actual == expected
 
@@ -67,3 +98,41 @@ def test_research_run_contract_exposes_v2_interpretation_and_provenance() -> Non
         "news_coverage_end",
         "news_quality",
     }
+
+
+def _ref(name: str) -> dict[str, str]:
+    return {"$ref": f"#/components/schemas/{name}"}
+
+
+def test_contract_compares_exactly_the_schemas_the_paths_reach() -> None:
+    """The compared schema set must come from the paths, not from the snapshot.
+
+    Filtering by the snapshot's own keys meant a newly referenced schema was
+    dropped from the comparison instead of failing it, and its shape was never
+    checked; a schema that stopped being referenced was never noticed either.
+    """
+    doc = {
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {
+            "/x": {
+                "get": {
+                    "responses": {
+                        "200": {"content": {"application/json": {"schema": _ref("A")}}}
+                    }
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "A": {"properties": {"b": _ref("B")}},
+                "B": {"properties": {"items": {"items": _ref("C")}}},
+                "C": {"type": "object"},
+                "Unrelated": {"type": "object"},
+            }
+        },
+    }
+
+    result = canonicalize(doc, paths=["/x"])
+
+    assert set(result["components"]["schemas"]) == {"A", "B", "C"}
