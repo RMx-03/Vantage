@@ -108,3 +108,24 @@ def test_settings_repr_still_shows_non_secret_fields() -> None:
     rendered = repr(Settings(AUTH_JWT_SECRET="j" * 40))  # type: ignore[call-arg]
     assert "APP_NAME" in rendered
     assert "Vantage" in rendered
+
+
+def test_the_shipped_telemetry_salt_default_is_refused() -> None:
+    """The salt is what keeps hashed emails and IPs irreversible.
+
+    IPv4 has roughly 4.3 billion addresses. With a publicly known salt, every
+    ip_hash in auth_attempts and refresh_tokens can be reversed in seconds, so
+    a deployment still carrying the shipped default does not in fact keep raw
+    addresses out of the database.
+    """
+    with pytest.raises(RuntimeError, match="TELEMETRY_USER_SALT"):
+        validate_auth_settings(_settings(TELEMETRY_USER_SALT="vantage-telemetry-salt"))
+
+
+def test_an_empty_telemetry_salt_is_refused() -> None:
+    with pytest.raises(RuntimeError, match="TELEMETRY_USER_SALT"):
+        validate_auth_settings(_settings(TELEMETRY_USER_SALT=""))
+
+
+def test_a_strong_telemetry_salt_is_accepted() -> None:
+    validate_auth_settings(_settings(TELEMETRY_USER_SALT="s" * 32))

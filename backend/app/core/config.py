@@ -151,7 +151,10 @@ class Settings(BaseSettings):
     # Telemetry and Observability (Phase 1 Task 8)
     # ------------------------------------------------------------------
     TRACE_EXPORT_ENABLED: bool = False
-    TELEMETRY_USER_SALT: str = "vantage-telemetry-salt"
+    # Keeps hashed emails and IP addresses irreversible. No usable default: a
+    # publicly known salt lets the ~4.3 billion IPv4 addresses be brute-forced
+    # back out of every stored ip_hash in seconds.
+    TELEMETRY_USER_SALT: str = ""
     LANGFUSE_PUBLIC_KEY: str = ""
     LANGFUSE_SECRET_KEY: str = ""
     LANGFUSE_HOST: str = "https://cloud.langfuse.com"
@@ -217,4 +220,14 @@ def validate_auth_settings(active: Settings) -> None:
     if any(marker in lowered for marker in _PLACEHOLDER_MARKERS):
         raise RuntimeError(
             "AUTH_JWT_SECRET looks like a placeholder; refusing to start."
+        )
+
+    salt = active.TELEMETRY_USER_SALT
+    if len(salt.encode("utf-8")) < 32:
+        raise RuntimeError(
+            "TELEMETRY_USER_SALT must be at least 32 bytes; refusing to start."
+        )
+    if any(marker in salt.lower() for marker in _PLACEHOLDER_MARKERS):
+        raise RuntimeError(
+            "TELEMETRY_USER_SALT looks like a placeholder; refusing to start."
         )

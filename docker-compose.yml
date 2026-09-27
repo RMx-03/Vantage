@@ -44,7 +44,7 @@ services:
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       TRACE_EXPORT_ENABLED: ${TRACE_EXPORT_ENABLED:-false}
-      TELEMETRY_USER_SALT: ${TELEMETRY_USER_SALT:-local-development-only}
+      TELEMETRY_USER_SALT: ${TELEMETRY_USER_SALT:-}
       # Immutable build identity reported as versions.code. CI supplies the
       # commit SHA; local runs fall back to "development".
       CODE_REVISION: ${CODE_REVISION:-development}

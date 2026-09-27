@@ -167,11 +167,14 @@ jobs:
       # PyJWT accepts a zero-length HS256 key. Generate a fresh one per run and
       # mask it, rather than committing a fixed value that would become a known
       # secret the moment anyone copied it into a real environment.
-      - name: Generate a per-run JWT signing secret
+      - name: Generate per-run signing secret and hashing salt
         run: |
           secret="$(openssl rand -hex 48)"
           echo "::add-mask::$secret"
           echo "AUTH_JWT_SECRET=$secret" >> "$GITHUB_ENV"
+          salt="$(openssl rand -hex 32)"
+          echo "::add-mask::$salt"
+          echo "TELEMETRY_USER_SALT=$salt" >> "$GITHUB_ENV"
 
       - name: Set up Node.js 22.22.x
         uses: actions/setup-node@v4
