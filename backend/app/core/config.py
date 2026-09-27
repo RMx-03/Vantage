@@ -222,6 +222,19 @@ def validate_auth_settings(active: Settings) -> None:
             "AUTH_JWT_SECRET looks like a placeholder; refusing to start."
         )
 
+    samesite = active.AUTH_COOKIE_SAMESITE.strip().lower()
+    if samesite not in {"lax", "strict", "none"}:
+        raise RuntimeError(
+            "AUTH_COOKIE_SAMESITE must be lax, strict or none; refusing to start."
+        )
+    if samesite == "none" and not active.AUTH_COOKIE_SECURE:
+        # Browsers silently discard a SameSite=None cookie without Secure, so the
+        # session would fail with no error anywhere.
+        raise RuntimeError(
+            "AUTH_COOKIE_SAMESITE=none requires AUTH_COOKIE_SECURE=true; "
+            "refusing to start."
+        )
+
     salt = active.TELEMETRY_USER_SALT
     if len(salt.encode("utf-8")) < 32:
         raise RuntimeError(

@@ -74,6 +74,22 @@ def _cookie_kwargs() -> dict[str, object]:
     return kwargs
 
 
+def reject_cross_site(request: Request) -> None:
+    """Refuse cookie-authenticated actions initiated from another site.
+
+    SameSite=Lax already withholds the cookie from cross-site POSTs, but the
+    cookie's SameSite is configuration. Sec-Fetch-Site is computed by the
+    browser, cannot be set by page script, and survives the Vercel proxy as
+    "same-origin", so this holds regardless of topology. Non-browser clients
+    omit the header and are not CSRF vectors, so its absence is allowed.
+    """
+    if request.headers.get("sec-fetch-site", "").lower() == "cross-site":
+        raise VantageError(
+            code="CROSS_SITE_REQUEST_REJECTED",
+            safe_message="This request must come from the Vantage application.",
+        )
+
+
 def _set_refresh_cookie(response: Response, raw_token: str) -> None:
     response.set_cookie(
         value=raw_token,
@@ -120,7 +136,11 @@ def login(
     return TokenResponse(access_token=issued.access_token, expires_in=issued.expires_in)
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    dependencies=[Depends(reject_cross_site)],
+)
 def refresh(
     request: Request,
     response: Response,
@@ -150,7 +170,11 @@ def refresh(
     return TokenResponse(access_token=issued.access_token, expires_in=issued.expires_in)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(reject_cross_site)],
+)
 def logout(
     request: Request,
     response: Response,

@@ -129,3 +129,20 @@ def test_an_empty_telemetry_salt_is_refused() -> None:
 
 def test_a_strong_telemetry_salt_is_accepted() -> None:
     validate_auth_settings(_settings(TELEMETRY_USER_SALT="s" * 32))
+
+
+def test_samesite_none_without_secure_is_refused() -> None:
+    """Browsers silently drop SameSite=None cookies that lack Secure.
+
+    The session would fail with no error anywhere, so this combination must
+    stop startup rather than ship.
+    """
+    with pytest.raises(RuntimeError, match="AUTH_COOKIE_SAMESITE"):
+        validate_auth_settings(
+            _settings(AUTH_COOKIE_SAMESITE="none", AUTH_COOKIE_SECURE=False)
+        )
+
+
+def test_an_unknown_samesite_value_is_refused() -> None:
+    with pytest.raises(RuntimeError, match="AUTH_COOKIE_SAMESITE"):
+        validate_auth_settings(_settings(AUTH_COOKIE_SAMESITE="relaxed"))

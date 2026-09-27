@@ -148,3 +148,49 @@ def test_a_rejected_refresh_cookie_is_cleared(client: TestClient) -> None:
     assert "vantage_refresh=" in set_cookie, "no Set-Cookie clearing the dead cookie"
     assert "Max-Age=0" in set_cookie or "expires=Thu, 01 Jan 1970" in set_cookie
     assert "Path=/api/v1/auth" in set_cookie
+
+
+def _signed_in(client: TestClient) -> None:
+    email = _email()
+    client.post("/api/v1/auth/register", json={"email": email, "password": PASSWORD})
+    client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+
+
+def test_a_cross_site_refresh_is_rejected_and_leaves_the_cookie(
+    client: TestClient,
+) -> None:
+    """Cookie-authenticated endpoints must not act on cross-site requests.
+
+    SameSite=Lax is the only thing stopping a forged refresh today, and the
+    cookie's SameSite is configurable. Rejecting on Sec-Fetch-Site holds whatever
+    it is set to. The rejection must not clear the cookie, or a forged request
+    becomes a way to sign the victim out.
+    """
+    _signed_in(client)
+
+    response = client.post(
+        "/api/v1/auth/refresh", headers={"Sec-Fetch-Site": "cross-site"}
+    )
+
+    assert response.status_code == 403
+    assert "vantage_refresh=" not in response.headers.get("set-cookie", "")
+    assert client.post("/api/v1/auth/refresh").status_code == 200
+
+
+def test_a_cross_site_logout_is_rejected(client: TestClient) -> None:
+    _signed_in(client)
+
+    response = client.post(
+        "/api/v1/auth/logout", headers={"Sec-Fetch-Site": "cross-site"}
+    )
+
+    assert response.status_code == 403
+    assert client.post("/api/v1/auth/refresh").status_code == 200
+
+
+def test_same_origin_refresh_is_allowed(client: TestClient) -> None:
+    _signed_in(client)
+    response = client.post(
+        "/api/v1/auth/refresh", headers={"Sec-Fetch-Site": "same-origin"}
+    )
+    assert response.status_code == 200
