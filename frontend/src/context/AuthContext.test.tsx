@@ -60,7 +60,7 @@ describe('hydration', () => {
 
 describe('owner-change cache purge', () => {
   it('drops research queries when the signed-in owner changes', async () => {
-    // Preserved from the Supabase implementation. Without it, the next user
+    // Preserved invariant. Without it, the next user
     // signed into the same browser can render the previous user's rows.
     const client = new QueryClient();
     client.setQueryData(['research-runs', 'list'], [{ id: 'run-from-previous-user' }]);

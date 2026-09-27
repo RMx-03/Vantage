@@ -77,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applyUser]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void hydrate().finally(() => {
       if (mountedRef.current) {
         setLoading(false);
