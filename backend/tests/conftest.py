@@ -3,8 +3,6 @@ from pathlib import Path
 
 import pytest
 
-os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
-os.environ.setdefault("SUPABASE_KEY", "test-anon-key")
 os.environ.setdefault("TRACE_EXPORT_ENABLED", "false")
 os.environ.setdefault("AUTH_JWT_SECRET", "test-only-secret-that-is-long-enough-32b")
 os.environ.setdefault("AUTH_COOKIE_SECURE", "false")

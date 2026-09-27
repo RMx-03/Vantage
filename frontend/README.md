@@ -7,7 +7,7 @@ The React workspace creates and inspects synchronous US-equity end-of-day resear
 - React 19 and TypeScript 6
 - Vite 8 and Tailwind CSS 4
 - TanStack Query for server state
-- Supabase Auth for the browser session
+- First-party auth with in-memory tokens and HttpOnly refresh cookies
 - Vitest, Testing Library, and Playwright
 - Node.js `>=22.22 <23`
 
@@ -17,11 +17,9 @@ Copy `.env.example` to `.env` and set:
 
 | Variable | Purpose |
 |---|---|
-| `VITE_SUPABASE_URL` | Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | Public Supabase anon/publishable key |
-| `VITE_API_URL` | Backend origin, such as `http://localhost:8000` |
+| `VITE_API_URL` | Backend origin, such as `http://localhost:8000` (local dev only) |
 
-Vite values are build-time configuration. The Docker image accepts the same three values as build arguments through Docker Compose.
+Vite values are build-time configuration. The Docker image accepts `VITE_API_URL` as a build argument through Docker Compose.
 
 ## Run and verify
 
@@ -36,7 +34,7 @@ npm run test:e2e -- --project=chromium
 
 Coverage is measured over the Phase 1 research feature and its API client with an 80% line/function gate.
 
-`npm run test:e2e` runs the browser journey with Supabase auth and the research API replaced by Playwright route mocks, so it verifies UI behaviour rather than a full stack. Setting `PLAYWRIGHT_EXTERNAL_SERVER=true` skips the development server and runs the same mocked journey against an already-running server, which is how CI replays it against the production Nginx container image.
+`npm run test:e2e` runs the browser journey with the auth and research APIs replaced by Playwright route mocks, so it verifies UI behaviour rather than a full stack. Setting `PLAYWRIGHT_EXTERNAL_SERVER=true` skips the development server and runs the same mocked journey against an already-running server, which is how CI replays it against the production Nginx container image.
 
 ## User-visible states
 

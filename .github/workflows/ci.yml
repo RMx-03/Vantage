@@ -35,7 +35,7 @@ jobs:
       MIGRATION_DATABASE_URL: postgresql+psycopg://vantage_owner:vantage_owner@localhost:5432/vantage_test
       VANTAGE_RUNTIME_DB_ROLE: vantage_runtime
       TRACE_EXPORT_ENABLED: "false"
-      SUPABASE_JWT_SECRET: "ci-dummy-jwt-secret-not-for-production-use"
+      AUTH_JWT_SECRET: "ci-dummy-jwt-secret-not-for-production-use"
       CODE_REVISION: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -88,8 +88,6 @@ jobs:
       run:
         working-directory: frontend
     env:
-      VITE_SUPABASE_URL: https://keusiyiyupmnskmlztmb.supabase.co
-      VITE_SUPABASE_ANON_KEY: ci-public-anon-key-not-for-production
       VITE_API_URL: http://localhost:8000
     steps:
       - uses: actions/checkout@v4
@@ -126,8 +124,6 @@ jobs:
       run:
         working-directory: frontend
     env:
-      VITE_SUPABASE_URL: https://keusiyiyupmnskmlztmb.supabase.co
-      VITE_SUPABASE_ANON_KEY: ci-public-anon-key-not-for-production
       VITE_API_URL: http://localhost:8000
     steps:
       - uses: actions/checkout@v4
@@ -153,7 +149,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     env:
-      # Non-secret CI-only values. The gate deliberately runs without Supabase,
+      # Non-secret CI-only values. The gate deliberately runs without external
       # market-data, model-provider, or Langfuse credentials.
       POSTGRES_OWNER_PASSWORD: ci-container-owner-not-for-production
       POSTGRES_RUNTIME_PASSWORD: ci-container-runtime-not-for-production

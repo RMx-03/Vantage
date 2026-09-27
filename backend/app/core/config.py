@@ -103,12 +103,6 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
-    # Supabase Authentication
-    # ------------------------------------------------------------------
-    SUPABASE_URL: str = ""
-    SUPABASE_KEY: str = ""
-
-    # ------------------------------------------------------------------
     # First-party authentication (Phase 2)
     # ------------------------------------------------------------------
     # HS256 signing secret for access tokens. There is deliberately no
