@@ -43,6 +43,16 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# Unknown markers fail collection rather than warn. An unregistered marker is
+# silently inert, so a typo such as asyncio for anyio would otherwise skip the
+# behaviour the test author intended without anyone noticing.
+addopts = "--strict-markers"
+markers = [
+    # Applied to the Phase 2 auth persistence tests only. Some earlier
+    # database-backed tests are unmarked, so `-m "not integration"` does not
+    # guarantee a run that needs no database.
+    "integration: auth persistence tests run against PostgreSQL",
+]
 
 [tool.coverage.run]
 source = ["app"]
