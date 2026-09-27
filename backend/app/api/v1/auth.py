@@ -3,6 +3,7 @@ import hashlib
 from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict
 
+from app.api.errors import vantage_error_response
 from app.api.deps import AuthenticatedUser, get_current_user
 from app.core.config import settings
 from app.domain.auth import AUTH_REQUIRED, GENERIC_ACCEPTED_MESSAGE
@@ -137,10 +138,13 @@ def refresh(
             user_agent=request.headers.get("user-agent"),
             ip_hash=_client_ip_hash(request),
         )
-    except VantageError:
-        # A dead cookie must not linger: the browser would retry with it forever.
-        _clear_refresh_cookie(response)
-        raise
+    except VantageError as exc:
+        # A dead cookie must not linger: the browser would retry it forever.
+        # Build the error response here rather than re-raising — the exception
+        # handler constructs a fresh response and would discard the deletion.
+        failure = vantage_error_response(exc)
+        _clear_refresh_cookie(failure)
+        return failure  # type: ignore[return-value]
 
     _set_refresh_cookie(response, issued.refresh_token)
     return TokenResponse(access_token=issued.access_token, expires_in=issued.expires_in)

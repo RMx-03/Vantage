@@ -129,3 +129,22 @@ def test_me_returns_the_account(client: TestClient) -> None:
     body = response.json()
     assert body["email"] == email
     assert body["email_verified"] is False
+
+
+def test_a_rejected_refresh_cookie_is_cleared(client: TestClient) -> None:
+    """A dead refresh cookie must be deleted on the way out.
+
+    The route cleared the cookie on the injected Response and then re-raised,
+    but the VantageError handler builds a fresh JSONResponse, discarding those
+    headers. The browser kept the dead cookie and retried it on every load.
+    """
+    response = client.post(
+        "/api/v1/auth/refresh",
+        headers={"Cookie": "vantage_refresh=not-a-real-token"},
+    )
+
+    assert response.status_code == 401
+    set_cookie = response.headers.get("set-cookie", "")
+    assert "vantage_refresh=" in set_cookie, "no Set-Cookie clearing the dead cookie"
+    assert "Max-Age=0" in set_cookie or "expires=Thu, 01 Jan 1970" in set_cookie
+    assert "Path=/api/v1/auth" in set_cookie
