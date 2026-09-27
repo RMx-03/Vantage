@@ -19,6 +19,17 @@ from app.db.auth_models import AuthAttemptRow
 from app.db.session import SessionFactory
 
 
+def retention_seconds() -> int:
+    """How long an attempt must be kept.
+
+    The longest window any rate limit reads. Deleting sooner would erase the
+    evidence a live limit depends on and silently re-open it.
+    """
+    return max(
+        settings.AUTH_LOGIN_WINDOW_SECONDS, settings.AUTH_REGISTER_WINDOW_SECONDS
+    )
+
+
 def attempt_key(kind: str, value: str) -> str:
     """Build a rate-limit key from a kind and a sensitive value."""
     salted = f"{settings.TELEMETRY_USER_SALT}:{value.strip().lower()}"
@@ -28,8 +39,20 @@ def attempt_key(kind: str, value: str) -> str:
 
 class AuthAttemptRepository:
     def record(self, key: str) -> None:
+        now = datetime.now(UTC)
         with SessionFactory() as session, session.begin():
-            session.add(AuthAttemptRow(key=key, occurred_at=datetime.now(UTC)))
+            # Reclaim this key's expired rows on every write. Scoped to the one
+            # key so the (key, occurred_at) index serves it; a table-wide delete
+            # here would scan on the hot path. Keys never written again are
+            # reclaimed by scripts/purge_auth_attempts.py.
+            session.execute(
+                delete(AuthAttemptRow).where(
+                    AuthAttemptRow.key == key,
+                    AuthAttemptRow.occurred_at
+                    <= now - timedelta(seconds=retention_seconds()),
+                )
+            )
+            session.add(AuthAttemptRow(key=key, occurred_at=now))
 
     def count_within(self, key: str, *, window_seconds: int) -> int:
         cutoff = datetime.now(UTC) - timedelta(seconds=window_seconds)
