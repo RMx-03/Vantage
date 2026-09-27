@@ -4,9 +4,11 @@ import threading
 from types import SimpleNamespace
 from uuid import uuid4
 
+from fastapi.security import HTTPAuthorizationCredentials
 import pytest
 
 from app.api import deps
+from app.core.security.tokens import issue_access_token
 from app.domain.errors import VantageError
 from app.repositories.research_runs import ResearchRunRepository
 
@@ -117,3 +119,31 @@ async def test_supabase_verification_leaves_the_event_loop_thread(monkeypatch) -
 
     assert authenticated.id == user_id
     assert verification_threads and threading.get_ident() not in verification_threads
+
+
+@pytest.mark.anyio
+async def test_native_access_token_authenticates() -> None:
+    user_id = uuid4()
+    token, _ = issue_access_token(user_public_id=user_id, email_verified=True)
+    user = await deps.get_current_user(
+        HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+    )
+    assert user.id == user_id
+
+
+@pytest.mark.anyio
+async def test_tampered_native_token_is_rejected() -> None:
+    token, _ = issue_access_token(user_public_id=uuid4(), email_verified=True)
+    tampered = token[:-4] + ("aaaa" if not token.endswith("aaaa") else "bbbb")
+    with pytest.raises(VantageError):
+        await deps.get_current_user(
+            HTTPAuthorizationCredentials(scheme="Bearer", credentials=tampered)
+        )
+
+
+@pytest.mark.anyio
+async def test_missing_credentials_are_rejected() -> None:
+    with pytest.raises(VantageError) as excinfo:
+        await deps.get_current_user(None)
+    assert excinfo.value.code == "AUTH_REQUIRED"
+

@@ -52,4 +52,4 @@ class AuthAttemptRepository:
             result = session.execute(
                 delete(AuthAttemptRow).where(AuthAttemptRow.occurred_at <= cutoff)
             )
-            return int(result.rowcount or 0)
+            return int(getattr(result, "rowcount", 0) or 0)

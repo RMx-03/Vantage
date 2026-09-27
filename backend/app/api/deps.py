@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 from starlette.concurrency import run_in_threadpool
 
 from app.core.database import supabase_client
+from app.core.security.tokens import decode_access_token
 from app.domain.errors import VantageError
 from app.repositories.research_runs import ResearchRunRepository
 from app.services.research_run import (
@@ -25,8 +26,14 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> AuthenticatedUser:
-    """
-    FastAPI dependency that validates a Supabase JWT and returns an AuthenticatedUser.
+    """Resolve the caller from a bearer token.
+
+    Vantage-issued JWTs are verified locally — no network call. During Phase 2A
+    only, a token this backend did not issue falls through to Supabase so the
+    deployed application keeps working while the frontend has not yet cut over.
+
+    PHASE 2B MUST DELETE THE SUPABASE FALLBACK. Leaving it in place would be a
+    standing authentication bypass through a third party we no longer use.
     """
     tracer = get_tracer()
     with tracer.start_as_current_span("authenticate_request"):
@@ -39,11 +46,13 @@ async def get_current_user(
         token = credentials.credentials
 
         try:
-            # The Supabase SDK verifies tokens synchronously; keep that blocking
-            # call off the event loop so concurrent requests are not stalled.
+            claims = decode_access_token(token)
+            return AuthenticatedUser(id=claims.subject)
+        except VantageError:
+            pass  # Not a Vantage token; try the legacy path.
+
+        try:
             response = await run_in_threadpool(supabase_client.auth.get_user, token)
-            # The SDK may return no response at all; an absent response is an
-            # unverified token, so it fails closed exactly like an absent user.
             user = response.user if response is not None else None
             if user is None or not hasattr(user, "id"):
                 raise ValueError("No user returned from authentication service")

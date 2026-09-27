@@ -32,7 +32,7 @@ from app.domain.auth import (
 from app.domain.errors import VantageError
 from app.repositories.auth_attempts import AuthAttemptRepository, attempt_key
 from app.repositories.refresh_tokens import RefreshTokenRepository
-from app.repositories.users import UserRepository
+from app.repositories.users import StoredUser, UserRepository
 
 # Account lockout escalates beyond the per-key rate limit; it survives an
 # attacker rotating source addresses.
@@ -195,7 +195,7 @@ class AuthService:
             return
         self._refresh.revoke_all_for_user(user.id, reason="logout_all")
 
-    def _users_by_internal_id(self, user_id: int):  # type: ignore[no-untyped-def]
+    def _users_by_internal_id(self, user_id: int) -> StoredUser:
         from app.db.auth_models import UserRow
         from app.db.session import SessionFactory
         from app.repositories.users import _to_stored
