@@ -16,6 +16,7 @@ os.environ.setdefault(
     "MIGRATION_DATABASE_URL",
     "postgresql+psycopg://vantage_owner:vantage_owner@localhost:5433/vantage_test",
 )
+os.environ.setdefault("VANTAGE_RUNTIME_DB_ROLE", "vantage_runtime")
 
 
 @pytest.fixture(scope="session")
