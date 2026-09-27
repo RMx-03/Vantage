@@ -2,12 +2,13 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 
 type Mode = 'login' | 'register';
 
 export default function Auth() {
   const navigate = useNavigate();
+  const { signIn, signUp } = useAuth();
   const prefersReducedMotion = useReducedMotion();
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
@@ -24,13 +25,14 @@ export default function Auth() {
 
     try {
       if (mode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        await signIn(email, password);
         navigate('/app', { replace: true });
       } else {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        setInfo('Account created. Check your email to confirm before logging in.');
+        await signUp(email, password);
+        // Deliberately generic: the same message appears whether or not this
+        // address was already registered, so the form cannot be used to
+        // discover who has an account.
+        setInfo('If that address can receive mail, a message is on its way.');
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
@@ -96,6 +98,7 @@ export default function Auth() {
             </button>
             <button
               type="button"
+              aria-label="Create Account mode"
               onClick={() => { setMode('register'); setError(null); setInfo(null); }}
               className={`flex-1 py-3 text-sm font-headline font-medium transition-colors duration-200 ${
                 mode === 'register'
@@ -167,6 +170,11 @@ export default function Auth() {
                   className="w-full bg-[#131313] border-0 border-b border-[#484848] text-[#c6c6c7] focus:ring-0 focus:border-primary px-4 pl-10 py-4 text-sm font-body transition-all duration-200 placeholder:text-[#484848] outline-none"
                 />
               </div>
+              {mode === 'register' && (
+                <p className="font-label text-[10px] uppercase tracking-wider text-on-surface-variant mt-2 opacity-70">
+                  At least 12 characters. Avoid common passwords and your own address.
+                </p>
+              )}
             </div>
 
             {/* Retain session / Forgot (login mode only) */}
@@ -186,12 +194,12 @@ export default function Auth() {
                     Retain Session
                   </label>
                 </div>
-                <a
-                  href="#"
-                  className="font-label text-xs uppercase tracking-wider text-primary hover:text-on-surface transition-colors duration-150"
+                <span
+                  title="Password recovery arrives in the next release."
+                  className="font-label text-xs uppercase tracking-wider text-on-surface-variant opacity-50 cursor-not-allowed"
                 >
                   Forgot Credential?
-                </a>
+                </span>
               </div>
             )}
 
@@ -209,7 +217,10 @@ export default function Auth() {
                     ? 'Access Terminal'
                     : 'Create Account'}
                   {!loading && (
-                    <span className="material-symbols-outlined text-[16px] transition-transform duration-200 group-hover/btn:translate-x-1">
+                    <span
+                      aria-hidden="true"
+                      className="material-symbols-outlined text-[16px] transition-transform duration-200 group-hover/btn:translate-x-1"
+                    >
                       arrow_forward
                     </span>
                   )}
