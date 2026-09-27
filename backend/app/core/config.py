@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from pathlib import Path
 from typing import List, Union, Any
 from pydantic import Field, field_validator
@@ -161,7 +162,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     LOG_LEVEL: str = "INFO"
 
-    def __repr_args__(self):  # type: ignore[no-untyped-def]
+    def __repr_args__(self) -> Iterator[tuple[str | None, Any]]:
         """Redact credentials from the repr.
 
         Pydantic prints every field by default, so any traceback that touched
