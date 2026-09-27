@@ -78,10 +78,15 @@ async def vantage_error_handler(request: Request, exc: VantageError) -> JSONResp
         "MODEL_OUTPUT_INVALID",
         "INVALID_CURSOR",
         "UNSUPPORTED_INSTRUMENT",
+        "AUTH_WEAK_PASSWORD",
     }:
         status_code = status.HTTP_400_BAD_REQUEST
-    elif exc.code in {"AUTH_REQUIRED", "AUTH_INVALID"}:
+    elif exc.code in {"AUTH_REQUIRED", "AUTH_INVALID", "AUTH_TOKEN_EXPIRED"}:
         status_code = status.HTTP_401_UNAUTHORIZED
+    elif exc.code in {"AUTH_RATE_LIMITED"}:
+        status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    elif exc.code in {"AUTH_ACCOUNT_LOCKED"}:
+        status_code = status.HTTP_403_FORBIDDEN
 
     safe_error = SafeError(
         code=exc.code,
