@@ -14,6 +14,17 @@ GROQ_STRICT_JSON_SCHEMA_MODELS: tuple[str, ...] = (
 )
 
 
+# Substrings that mark a field as credential-bearing. Matching on the name
+# rather than an explicit list means a secret added later is redacted by default
+# instead of leaking until someone remembers to update this.
+SECRET_NAME_PARTS = ("SECRET", "KEY", "PASSWORD", "TOKEN", "SALT", "DSN")
+
+
+def _is_secret_field(name: str) -> bool:
+    upper = name.upper()
+    return any(part in upper for part in SECRET_NAME_PARTS)
+
+
 class Settings(BaseSettings):
     """
     Centralised application configuration.
@@ -149,6 +160,19 @@ class Settings(BaseSettings):
     # Logging
     # ------------------------------------------------------------------
     LOG_LEVEL: str = "INFO"
+
+    def __repr_args__(self):  # type: ignore[no-untyped-def]
+        """Redact credentials from the repr.
+
+        Pydantic prints every field by default, so any traceback that touched
+        settings dumped live API keys and the JWT signing secret into logs,
+        CI output and error trackers.
+        """
+        for name, value in super().__repr_args__():
+            if name is not None and _is_secret_field(name) and value:
+                yield name, "***redacted***"
+            else:
+                yield name, value
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -71,3 +71,40 @@ def test_app_starts_with_a_valid_secret(monkeypatch: pytest.MonkeyPatch) -> None
 
     with TestClient(app) as client:
         assert client.get("/").status_code == 200
+
+
+def test_settings_repr_does_not_expose_secret_values() -> None:
+    """A traceback must never print credentials.
+
+    Pydantic's default repr prints every field, so any AttributeError touching
+    settings dumped the live Gemini key, both Langfuse keys, the telemetry salt
+    and the JWT signing secret into the output — CI logs, error trackers and
+    crash reports included.
+    """
+    probe = Settings(
+        AUTH_JWT_SECRET="j" * 40,
+        GEMINI_API_KEY="AIza-secret-gemini-value",
+        GROQ_API_KEY="gsk-secret-groq-value",
+        LANGFUSE_SECRET_KEY="sk-lf-secret-langfuse-value",
+        LANGFUSE_PUBLIC_KEY="pk-lf-public-langfuse-value",
+        TELEMETRY_USER_SALT="salt-secret-value",
+    )  # type: ignore[call-arg]
+
+    rendered = repr(probe) + str(probe)
+
+    for secret in (
+        "j" * 40,
+        "AIza-secret-gemini-value",
+        "gsk-secret-groq-value",
+        "sk-lf-secret-langfuse-value",
+        "pk-lf-public-langfuse-value",
+        "salt-secret-value",
+    ):
+        assert secret not in rendered, f"{secret!r} leaked through the settings repr"
+
+
+def test_settings_repr_still_shows_non_secret_fields() -> None:
+    """Redaction must not make the repr useless for debugging."""
+    rendered = repr(Settings(AUTH_JWT_SECRET="j" * 40))  # type: ignore[call-arg]
+    assert "APP_NAME" in rendered
+    assert "Vantage" in rendered
