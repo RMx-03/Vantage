@@ -67,3 +67,47 @@ def test_logout_all_invalidates_every_session(service: AuthService) -> None:
     for session in (first, second):
         with pytest.raises(VantageError):
             service.refresh(session.refresh_token)
+
+
+def _set_status(email: str, status: str) -> None:
+    from sqlalchemy import update
+
+    from app.db.auth_models import UserRow
+    from app.db.session import SessionFactory
+
+    with SessionFactory() as db, db.begin():
+        db.execute(update(UserRow).where(UserRow.email == email).values(status=status))
+
+
+def test_a_disabled_account_cannot_refresh(service: AuthService) -> None:
+    """Refresh must re-check account state, not just token validity.
+
+    Access tokens last 15 minutes, so revocation depends on refresh refusing to
+    mint more. Without this check a disabled account keeps issuing access tokens
+    indefinitely, and disabling an account accomplishes nothing.
+    """
+    email, session = _registered(service)
+    _set_status(email, "disabled")
+
+    with pytest.raises(VantageError):
+        service.refresh(session.refresh_token)
+
+
+def test_a_locked_account_cannot_refresh(service: AuthService) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import update
+
+    from app.db.auth_models import UserRow
+    from app.db.session import SessionFactory
+
+    email, session = _registered(service)
+    with SessionFactory() as db, db.begin():
+        db.execute(
+            update(UserRow)
+            .where(UserRow.email == email)
+            .values(locked_until=datetime.now(UTC) + timedelta(minutes=30))
+        )
+
+    with pytest.raises(VantageError):
+        service.refresh(session.refresh_token)

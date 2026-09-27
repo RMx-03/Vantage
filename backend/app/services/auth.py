@@ -92,6 +92,22 @@ class AuthService:
             created=True, user_public_id=user.public_id, email=normalized
         )
 
+    @staticmethod
+    def _require_usable_account(user: StoredUser) -> None:
+        """Reject an account that is disabled or inside a lockout window.
+
+        Shared by login and refresh deliberately: when only login checked this,
+        a disabled account kept minting access tokens through refresh forever.
+        """
+        if user.status != "active" or (
+            user.locked_until is not None and user.locked_until > datetime.now(UTC)
+        ):
+            raise VantageError(
+                code=AUTH_ACCOUNT_LOCKED,
+                safe_message="This account is temporarily locked.",
+                retryable=True,
+            )
+
     def login(
         self,
         *,
@@ -136,14 +152,7 @@ class AuthService:
                 code=AUTH_INVALID, safe_message=INVALID_CREDENTIALS_MESSAGE
             )
 
-        if user.status != "active" or (
-            user.locked_until is not None and user.locked_until > datetime.now(UTC)
-        ):
-            raise VantageError(
-                code=AUTH_ACCOUNT_LOCKED,
-                safe_message="This account is temporarily locked.",
-                retryable=True,
-            )
+        self._require_usable_account(user)
 
         if not verify_password(candidate, user.password_hash):
             self._attempts.record(key)
@@ -205,6 +214,16 @@ class AuthService:
             )
 
         user = self._users_by_internal_id(result.user_id)
+
+        # Re-check account state on every rotation. Access tokens live 15
+        # minutes, so refusing to mint more is the only thing that makes
+        # disabling or locking an account take effect at all.
+        try:
+            self._require_usable_account(user)
+        except VantageError:
+            self._refresh.revoke_all_for_user(user.id, reason="account_unusable")
+            raise
+
         access_token, expires_in = issue_access_token(
             user_public_id=user.public_id, email_verified=user.email_verified
         )
