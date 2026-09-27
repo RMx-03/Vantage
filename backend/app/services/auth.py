@@ -152,3 +152,60 @@ class AuthService:
             user_public_id=user.public_id,
             email_verified=user.email_verified,
         )
+
+    def refresh(
+        self,
+        raw_refresh_token: str,
+        *,
+        user_agent: str | None = None,
+        ip_hash: str | None = None,
+    ) -> IssuedSession:
+        result = self._refresh.rotate(
+            raw_refresh_token, user_agent=user_agent, ip_hash=ip_hash
+        )
+
+        if result.outcome != "rotated" or result.raw_token is None or result.user_id is None:
+            # not_found, expired and reused are all the same to the caller. A
+            # distinct "your session was revoked for reuse" message would tell
+            # an attacker their stolen token was detected.
+            raise VantageError(
+                code=AUTH_INVALID,
+                safe_message="Your session is no longer valid. Sign in again.",
+            )
+
+        user = self._users_by_internal_id(result.user_id)
+        access_token, expires_in = issue_access_token(
+            user_public_id=user.public_id, email_verified=user.email_verified
+        )
+        return IssuedSession(
+            access_token=access_token,
+            expires_in=expires_in,
+            refresh_token=result.raw_token,
+            user_public_id=user.public_id,
+            email_verified=user.email_verified,
+        )
+
+    def logout(self, raw_refresh_token: str) -> None:
+        """Revoke one session. Idempotent and never reveals token validity."""
+        self._refresh.revoke(raw_refresh_token, reason="logout")
+
+    def logout_all(self, user_public_id: UUID) -> None:
+        user = self._users.find_by_public_id(user_public_id)
+        if user is None:
+            return
+        self._refresh.revoke_all_for_user(user.id, reason="logout_all")
+
+    def _users_by_internal_id(self, user_id: int):  # type: ignore[no-untyped-def]
+        from app.db.auth_models import UserRow
+        from app.db.session import SessionFactory
+        from app.repositories.users import _to_stored
+
+        with SessionFactory() as session:
+            row = session.get(UserRow, user_id)
+            if row is None:
+                raise VantageError(
+                    code=AUTH_INVALID,
+                    safe_message="Your session is no longer valid. Sign in again.",
+                )
+            return _to_stored(row)
+
