@@ -155,8 +155,6 @@ class AuthService:
                 code=AUTH_INVALID, safe_message=INVALID_CREDENTIALS_MESSAGE
             )
 
-        self._require_usable_account(user)
-
         if not verify_password(candidate, user.password_hash):
             self._attempts.record(key)
             self._users.record_failed_login(
@@ -167,6 +165,11 @@ class AuthService:
             raise VantageError(
                 code=AUTH_INVALID, safe_message=INVALID_CREDENTIALS_MESSAGE
             )
+
+        # Only now, with the password proven, is it safe to reveal account
+        # state. Checking before this point told anyone which addresses were
+        # registered: a locked account answered differently from an unknown one.
+        self._require_usable_account(user)
 
         # Opportunistic upgrade when parameters change. The plaintext is only
         # available here, at the moment of a successful login.

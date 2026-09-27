@@ -2,7 +2,12 @@ from uuid import uuid4
 
 import pytest
 
-from app.domain.auth import AUTH_INVALID, AUTH_RATE_LIMITED, AUTH_WEAK_PASSWORD
+from app.domain.auth import (
+    AUTH_ACCOUNT_LOCKED,
+    AUTH_INVALID,
+    AUTH_RATE_LIMITED,
+    AUTH_WEAK_PASSWORD,
+)
 from app.domain.errors import VantageError
 from app.services.auth import AuthService
 
@@ -187,3 +192,62 @@ def test_successful_login_clears_the_attempt_window(
         with pytest.raises(VantageError) as excinfo:
             service.login(email=email, password="wrong password here", ip_hash="ip-a")
         assert excinfo.value.code == AUTH_INVALID
+
+
+def test_a_locked_account_is_indistinguishable_without_the_password(
+    service: AuthService,
+) -> None:
+    """Lock state must not be observable to someone who lacks the password.
+
+    Returning AUTH_ACCOUNT_LOCKED before verifying credentials told any caller
+    which addresses are registered, and that branch recorded no attempt, so the
+    probe was not even rate limited.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import update
+
+    from app.db.auth_models import UserRow
+    from app.db.session import SessionFactory
+
+    email = _email()
+    service.register(email=email, password=PASSWORD)
+    with SessionFactory() as db, db.begin():
+        db.execute(
+            update(UserRow)
+            .where(UserRow.email == email)
+            .values(locked_until=datetime.now(UTC) + timedelta(minutes=30))
+        )
+
+    with pytest.raises(VantageError) as locked:
+        service.login(email=email, password="wrong password here", ip_hash="probe")
+    with pytest.raises(VantageError) as unknown:
+        service.login(email=_email(), password="wrong password here", ip_hash="probe")
+
+    assert locked.value.code == unknown.value.code
+    assert str(locked.value) == str(unknown.value)
+
+
+def test_the_real_owner_still_learns_the_account_is_locked(
+    service: AuthService,
+) -> None:
+    """Knowing the password is what earns the accurate message."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import update
+
+    from app.db.auth_models import UserRow
+    from app.db.session import SessionFactory
+
+    email = _email()
+    service.register(email=email, password=PASSWORD)
+    with SessionFactory() as db, db.begin():
+        db.execute(
+            update(UserRow)
+            .where(UserRow.email == email)
+            .values(locked_until=datetime.now(UTC) + timedelta(minutes=30))
+        )
+
+    with pytest.raises(VantageError) as excinfo:
+        service.login(email=email, password=PASSWORD, ip_hash="owner")
+    assert excinfo.value.code == AUTH_ACCOUNT_LOCKED
