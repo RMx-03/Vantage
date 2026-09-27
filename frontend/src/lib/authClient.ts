@@ -26,7 +26,7 @@ export class AuthApiError extends Error {
     this.name = 'AuthApiError';
     this.status = status;
     this.code = error.code;
-    this.retryable = error.retryable;
+    this.retryable = Boolean(error.retryable);
   }
 }
 
