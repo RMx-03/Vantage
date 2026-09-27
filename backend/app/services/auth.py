@@ -72,7 +72,28 @@ class AuthService:
         self._refresh = refresh_tokens or RefreshTokenRepository()
         self._attempts = attempts or AuthAttemptRepository()
 
-    def register(self, *, email: str, password: str) -> RegistrationOutcome:
+    def register(
+        self, *, email: str, password: str, ip_hash: str | None = None
+    ) -> RegistrationOutcome:
+        # Registration needs no credentials and runs a deliberately expensive
+        # 19 MiB Argon2 hash. FastAPI offloads sync endpoints to a 40-slot
+        # threadpool, so an unthrottled endpoint lets one caller drive roughly
+        # 760 MiB of concurrent hashing on a 512 MB dyno — the exact ceiling
+        # those parameters were chosen to respect — besides creating unbounded
+        # accounts.
+        register_key = attempt_key("register", ip_hash or "unknown-source")
+        if self._attempts.is_rate_limited(
+            register_key,
+            window_seconds=settings.AUTH_REGISTER_WINDOW_SECONDS,
+            max_attempts=settings.AUTH_REGISTER_MAX_ATTEMPTS,
+        ):
+            raise VantageError(
+                code=AUTH_RATE_LIMITED,
+                safe_message="Too many attempts. Try again shortly.",
+                retryable=True,
+            )
+        self._attempts.record(register_key)
+
         normalized = normalize_email(email)
         checked = validate_password(password, email=normalized)
 

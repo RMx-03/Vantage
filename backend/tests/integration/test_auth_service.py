@@ -251,3 +251,48 @@ def test_the_real_owner_still_learns_the_account_is_locked(
     with pytest.raises(VantageError) as excinfo:
         service.login(email=email, password=PASSWORD, ip_hash="owner")
     assert excinfo.value.code == AUTH_ACCOUNT_LOCKED
+
+
+def test_registration_is_rate_limited_per_source(
+    service: AuthService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Registration runs a 19 MiB Argon2 hash and needs no credentials.
+
+    FastAPI offloads sync endpoints to a 40-slot threadpool, so an unthrottled
+    /register lets one caller drive roughly 760 MiB of concurrent hashing on a
+    512 MB dyno — the very memory ceiling those parameters were chosen for —
+    besides creating unbounded accounts.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "AUTH_REGISTER_MAX_ATTEMPTS", 3)
+    # The attempts table outlives a single test run, so a fixed key would carry
+    # counts forward from previous runs and trip on the first call.
+    source = f"flooder-{uuid4().hex}"
+
+    for _ in range(3):
+        service.register(email=_email(), password=PASSWORD, ip_hash=source)
+
+    with pytest.raises(VantageError) as excinfo:
+        service.register(email=_email(), password=PASSWORD, ip_hash=source)
+    assert excinfo.value.code == AUTH_RATE_LIMITED
+
+
+def test_registration_from_another_source_is_unaffected(
+    service: AuthService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "AUTH_REGISTER_MAX_ATTEMPTS", 2)
+
+    noisy = f"flooder-{uuid4().hex}"
+    for _ in range(3):
+        try:
+            service.register(email=_email(), password=PASSWORD, ip_hash=noisy)
+        except VantageError:
+            pass
+
+    outcome = service.register(
+        email=_email(), password=PASSWORD, ip_hash=f"quiet-{uuid4().hex}"
+    )
+    assert outcome.created is True

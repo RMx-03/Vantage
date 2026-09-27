@@ -8,6 +8,9 @@ os.environ.setdefault("SUPABASE_KEY", "test-anon-key")
 os.environ.setdefault("TRACE_EXPORT_ENABLED", "false")
 os.environ.setdefault("AUTH_JWT_SECRET", "test-only-secret-that-is-long-enough-32b")
 os.environ.setdefault("AUTH_COOKIE_SECURE", "false")
+# The suite registers many accounts from one apparent source; the tests that
+# exercise throttling lower this themselves.
+os.environ.setdefault("AUTH_REGISTER_MAX_ATTEMPTS", "100000")
 os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+psycopg://vantage_runtime:vantage_runtime@localhost:5433/vantage_test",

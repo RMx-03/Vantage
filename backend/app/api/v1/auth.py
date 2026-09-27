@@ -90,9 +90,14 @@ def _clear_refresh_cookie(response: Response) -> None:
 )
 def register(
     payload: CredentialsRequest,
+    request: Request,
     service: AuthService = Depends(get_auth_service),
 ) -> AcceptedResponse:
-    service.register(email=str(payload.email), password=payload.password)
+    service.register(
+        email=str(payload.email),
+        password=payload.password,
+        ip_hash=_client_ip_hash(request),
+    )
     # Identical body whether or not the address was already registered.
     return AcceptedResponse(message=GENERIC_ACCEPTED_MESSAGE)
 

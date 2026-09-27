@@ -119,6 +119,11 @@ class Settings(BaseSettings):
     # Empty means host-only, which is what production uses. `vercel.app` is on the
     # Public Suffix List, so a Domain-scoped cookie cannot be set there anyway.
     AUTH_COOKIE_DOMAIN: str = ""
+    # Generous on purpose: corporate NAT, campus networks and mobile CGNAT
+    # put many legitimate users behind one address. This bounds the Argon2
+    # flood, it is not an anti-abuse control.
+    AUTH_REGISTER_MAX_ATTEMPTS: int = Field(default=20, gt=0)
+    AUTH_REGISTER_WINDOW_SECONDS: int = Field(default=3600, gt=0)
     AUTH_LOGIN_MAX_ATTEMPTS: int = Field(default=10, gt=0)
     AUTH_LOGIN_WINDOW_SECONDS: int = Field(default=900, gt=0)
 
