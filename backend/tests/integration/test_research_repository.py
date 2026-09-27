@@ -37,6 +37,7 @@ from app.domain.research import (
 )
 import app.repositories.research_runs as research_runs_module
 from app.repositories.research_runs import ResearchRunRepository
+from app.repositories.users import UserRepository
 from app.services.snapshots import combined_snapshot_hash
 
 VALID_INTERPRETATION = AIInterpretation(
@@ -64,12 +65,22 @@ def repo(check_db_url) -> ResearchRunRepository:
 
 @pytest.fixture
 def user_id() -> UUID:
-    return uuid4()
+    user = UserRepository().create(
+        email=f"repo-{uuid4().hex}@example.com",
+        password_hash="h",
+        password_algo="argon2id",
+    )
+    return user.public_id
 
 
 @pytest.fixture
 def other_user_id() -> UUID:
-    return uuid4()
+    user = UserRepository().create(
+        email=f"other-{uuid4().hex}@example.com",
+        password_hash="h",
+        password_algo="argon2id",
+    )
+    return user.public_id
 
 
 @pytest.fixture

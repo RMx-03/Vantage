@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.db import auth_models as _auth_models  # noqa: F401
 from app.db.base import Base
 
 
@@ -52,6 +53,7 @@ class ResearchRunRow(Base):
     )
     user_id: Mapped[UUID] = mapped_column(
         postgresql.UUID(as_uuid=True),
+        ForeignKey("vantage_auth.users.public_id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )

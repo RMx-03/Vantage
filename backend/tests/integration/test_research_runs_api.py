@@ -39,6 +39,7 @@ from app.services.research_run import (
     ResearchRunService,
     get_research_service,
 )
+from app.repositories.users import UserRepository
 from app.services.policy import PolicyResult
 from app.providers.llm import build_interpretation_provider
 from app.agents.research_graph import create_research_graph
@@ -46,12 +47,22 @@ from app.agents.research_graph import create_research_graph
 
 @pytest.fixture
 def test_user_id() -> UUID:
-    return uuid4()
+    user = UserRepository().create(
+        email=f"api-{uuid4().hex}@example.com",
+        password_hash="h",
+        password_algo="argon2id",
+    )
+    return user.public_id
 
 
 @pytest.fixture
 def other_user_id() -> UUID:
-    return uuid4()
+    user = UserRepository().create(
+        email=f"api-other-{uuid4().hex}@example.com",
+        password_hash="h",
+        password_algo="argon2id",
+    )
+    return user.public_id
 
 
 @pytest.fixture

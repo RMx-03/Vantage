@@ -37,6 +37,7 @@ from app.services.research_run import (
     ResearchRunService,
     get_research_service,
 )
+from app.repositories.users import UserRepository
 from app.telemetry.redaction import (
     ALLOWED_ATTRIBUTES,
     RedactingSpanProcessor,
@@ -53,7 +54,12 @@ from app.telemetry.tracing import (
 
 @pytest.fixture
 def test_user_id() -> UUID:
-    return uuid4()
+    user = UserRepository().create(
+        email=f"trace-{uuid4().hex}@example.com",
+        password_hash="h",
+        password_algo="argon2id",
+    )
+    return user.public_id
 
 
 @pytest.fixture
