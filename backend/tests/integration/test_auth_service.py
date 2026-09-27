@@ -140,3 +140,50 @@ def test_password_length_ceiling_is_enforced_on_login(
 
     assert excinfo.value.code == AUTH_INVALID
     assert calls == [], "an over-length password reached the Argon2 hasher"
+
+
+def test_one_source_cannot_rate_limit_a_victim_elsewhere(
+    service: AuthService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Throttling must be scoped per source, not per email alone.
+
+    With an email-only key, anyone who knows an address can spend the whole
+    window on it and lock the real owner out of logging in at all — a denial of
+    service that needs no credentials and renews indefinitely.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "AUTH_LOGIN_MAX_ATTEMPTS", 3)
+    email = _email()
+    service.register(email=email, password=PASSWORD)
+
+    for _ in range(5):
+        with pytest.raises(VantageError):
+            service.login(
+                email=email, password="wrong password here", ip_hash="attacker-ip"
+            )
+
+    session = service.login(email=email, password=PASSWORD, ip_hash="victim-ip")
+    assert session.access_token
+
+
+def test_successful_login_clears_the_attempt_window(
+    service: AuthService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "AUTH_LOGIN_MAX_ATTEMPTS", 3)
+    email = _email()
+    service.register(email=email, password=PASSWORD)
+
+    for _ in range(2):
+        with pytest.raises(VantageError):
+            service.login(email=email, password="wrong password here", ip_hash="ip-a")
+
+    service.login(email=email, password=PASSWORD, ip_hash="ip-a")
+
+    # Two more failures would trip the limit if the earlier ones still counted.
+    for _ in range(2):
+        with pytest.raises(VantageError) as excinfo:
+            service.login(email=email, password="wrong password here", ip_hash="ip-a")
+        assert excinfo.value.code == AUTH_INVALID

@@ -86,7 +86,16 @@ class UserRepository:
             row = session.get(UserRow, user_id)
             if row is None:
                 return
-            row.failed_login_count += 1
+            # A lapsed lockout resets the tally. Without this the counter stays
+            # at or above the threshold forever, so the first typo after a
+            # lockout expires re-locks the account, and so does every one after
+            # it — a permanent lockout from one burst of wrong guesses.
+            if row.locked_until is not None and row.locked_until <= now:
+                row.failed_login_count = 1
+                row.locked_until = None
+            else:
+                row.failed_login_count += 1
+
             if row.failed_login_count >= lock_after:
                 row.locked_until = now + timedelta(seconds=lock_for_seconds)
             row.updated_at = now

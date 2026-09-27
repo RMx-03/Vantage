@@ -49,6 +49,15 @@ class AuthAttemptRepository:
     ) -> bool:
         return self.count_within(key, window_seconds=window_seconds) >= max_attempts
 
+    def clear(self, key: str) -> None:
+        """Drop every attempt for one key.
+
+        Called after a successful login so earlier failures cannot keep
+        throttling the person who has just proved they own the account.
+        """
+        with SessionFactory() as session, session.begin():
+            session.execute(delete(AuthAttemptRow).where(AuthAttemptRow.key == key))
+
     def purge_older_than(self, seconds: int) -> int:
         """Delete attempts outside the retention window. Returns rows removed."""
         cutoff = datetime.now(UTC) - timedelta(seconds=seconds)

@@ -117,7 +117,10 @@ class AuthService:
         ip_hash: str | None = None,
     ) -> IssuedSession:
         normalized = normalize_email(email)
-        key = attempt_key("login:email", normalized)
+        # Scope throttling to the source as well as the address. Keyed on email
+        # alone, anyone who knows an address could spend the window on it and
+        # lock the real owner out — a denial of service needing no credentials.
+        key = attempt_key("login", f"{normalized}|{ip_hash or 'unknown-source'}")
 
         if self._attempts.is_rate_limited(
             key,
@@ -174,6 +177,7 @@ class AuthService:
                 password_algo=PASSWORD_ALGO,
             )
 
+        self._attempts.clear(key)
         self._users.record_successful_login(user.id)
         raw_refresh, _ = self._refresh.issue(
             user_id=user.id, user_agent=user_agent, ip_hash=ip_hash

@@ -65,3 +65,36 @@ def test_marking_email_verified_is_visible(repo: UserRepository) -> None:
     refreshed = repo.find_by_public_id(user.public_id)
     assert refreshed is not None
     assert refreshed.email_verified is True
+
+
+def test_an_expired_lockout_restarts_the_failure_count(repo: UserRepository) -> None:
+    """A lapsed lockout must not leave the counter above the threshold.
+
+    Otherwise the first typo after a lockout expires re-locks the account
+    immediately, and every one after that does too — a permanent lockout from a
+    single burst of wrong guesses.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import update
+
+    from app.db.auth_models import UserRow
+    from app.db.session import SessionFactory
+
+    user = repo.create(email=_email(), password_hash="h", password_algo="argon2id")
+    for _ in range(3):
+        repo.record_failed_login(user.id, lock_after=3, lock_for_seconds=900)
+
+    # The lockout window lapses.
+    with SessionFactory() as db, db.begin():
+        db.execute(
+            update(UserRow)
+            .where(UserRow.id == user.id)
+            .values(locked_until=datetime.now(UTC) - timedelta(seconds=1))
+        )
+
+    repo.record_failed_login(user.id, lock_after=3, lock_for_seconds=900)
+
+    refreshed = repo.find_by_public_id(user.public_id)
+    assert refreshed is not None
+    assert refreshed.locked_until is None, "one typo re-locked an unlocked account"
