@@ -12,6 +12,7 @@ export const TEST_USER: AuthUser = {
 export function mockSignedIn(user: AuthUser = TEST_USER): void {
   authClient.setAccessToken('test-access-token', 900);
   vi.spyOn(authClient, 'refresh').mockResolvedValue(true);
+  vi.spyOn(authClient, 'refreshSession').mockResolvedValue('refreshed');
   vi.spyOn(authClient, 'fetchMe').mockResolvedValue(user);
 }
 
@@ -19,4 +20,5 @@ export function mockSignedIn(user: AuthUser = TEST_USER): void {
 export function mockSignedOut(): void {
   authClient.setAccessToken(null);
   vi.spyOn(authClient, 'refresh').mockResolvedValue(false);
+  vi.spyOn(authClient, 'refreshSession').mockResolvedValue('unauthenticated');
 }

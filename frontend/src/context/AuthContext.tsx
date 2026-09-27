@@ -29,6 +29,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const ownerIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
+  // Advanced by every sign-in and sign-out. A hydration that started under an
+  // earlier generation is describing a session that no longer exists, and its
+  // result must be dropped rather than applied over the newer one.
+  const generationRef = useRef(0);
+  // Re-arms the proactive refresh after a transient failure.
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -63,16 +69,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [queryClient]
   );
 
-  const hydrate = useCallback(async () => {
+  const hydrate = useCallback(async (): Promise<authClient.RefreshOutcome> => {
+    const generation = generationRef.current;
+    const stale = () => !mountedRef.current || generation !== generationRef.current;
+
+    let outcome: authClient.RefreshOutcome;
     try {
-      const ok = await authClient.refresh();
-      if (!mountedRef.current) return;
-      applyUser(ok ? await authClient.fetchMe() : null);
+      outcome = await authClient.refreshSession();
     } catch {
-      // Any failure means "not signed in". Leaving `loading` true would trap
-      // the user on a spinner with no way forward.
-      if (!mountedRef.current) return;
+      outcome = 'unavailable';
+    }
+    if (stale()) return outcome;
+
+    if (outcome === 'unauthenticated') {
       applyUser(null);
+      return outcome;
+    }
+    if (outcome === 'unavailable') {
+      // Keep the current user. A network blip or a 5xx says nothing about
+      // whether the session is valid, and signing out here would wipe an
+      // active user's session and cache on every hiccup.
+      return outcome;
+    }
+
+    try {
+      const me = await authClient.fetchMe();
+      if (stale()) return outcome;
+      applyUser(me);
+      return outcome;
+    } catch (error) {
+      if (stale()) return 'unavailable';
+      if (error instanceof authClient.AuthApiError && error.status === 401) {
+        applyUser(null);
+        return 'unauthenticated';
+      }
+      return 'unavailable';
     }
   }, [applyUser]);
 
@@ -91,12 +122,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     const leadMs = 60_000;
     const delay = Math.max(authClient.accessTokenExpiresAt() - Date.now() - leadMs, 5_000);
-    const timer = window.setTimeout(() => void hydrate(), delay);
+    const timer = window.setTimeout(() => {
+      void hydrate().then((outcome) => {
+        if (outcome === 'unavailable' && mountedRef.current) {
+          setRetryNonce((n) => n + 1);
+        }
+      });
+    }, delay);
     return () => window.clearTimeout(timer);
-  }, [user, hydrate]);
+  }, [user, hydrate, retryNonce]);
 
   const signIn = useCallback(
     async (email: string, password: string) => {
+      generationRef.current += 1;
       await authClient.login(email, password);
       applyUser(await authClient.fetchMe());
     },
@@ -108,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    generationRef.current += 1;
     await authClient.logout();
     applyUser(null);
   }, [applyUser]);

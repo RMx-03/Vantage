@@ -31,7 +31,7 @@ afterEach(() => {
 
 describe('hydration', () => {
   it('signs the user in when the refresh cookie is valid', async () => {
-    vi.spyOn(authClient, 'refresh').mockResolvedValue(true);
+    vi.spyOn(authClient, 'refreshSession').mockResolvedValue('refreshed');
     vi.spyOn(authClient, 'fetchMe').mockResolvedValue({
       id: 'user-1',
       email: 'operator@example.com',
@@ -45,14 +45,14 @@ describe('hydration', () => {
   });
 
   it('settles signed-out when there is no valid cookie', async () => {
-    vi.spyOn(authClient, 'refresh').mockResolvedValue(false);
+    vi.spyOn(authClient, 'refreshSession').mockResolvedValue('unauthenticated');
     renderProbe();
     await waitFor(() => expect(screen.getByText('signed-out')).toBeInTheDocument());
   });
 
   it('stops loading even when hydration throws', async () => {
     // A hung loading state locks the user out of the whole application.
-    vi.spyOn(authClient, 'refresh').mockRejectedValue(new Error('network down'));
+    vi.spyOn(authClient, 'refreshSession').mockRejectedValue(new Error('network down'));
     renderProbe();
     await waitFor(() => expect(screen.getByText('signed-out')).toBeInTheDocument());
   });
@@ -67,7 +67,7 @@ describe('owner-change cache purge', () => {
     client.setQueryData(['research-run', 'user-1', 'run-1'], { id: 'detail' });
     const removeSpy = vi.spyOn(client, 'removeQueries');
 
-    vi.spyOn(authClient, 'refresh').mockResolvedValue(true);
+    vi.spyOn(authClient, 'refreshSession').mockResolvedValue('refreshed');
     vi.spyOn(authClient, 'fetchMe').mockResolvedValue({
       id: 'user-2',
       email: 'second@example.com',
