@@ -41,6 +41,17 @@ def normalize_email(raw: str) -> str:
     return candidate
 
 
+def normalize_password(password: str) -> str:
+    """NFKC-normalize a password.
+
+    Register hashes the normalized form, so every other path that touches a
+    password must normalize identically or the same typed characters produce a
+    different hash. Login diverging from this is why full-width and IME input
+    could be registered and then never used again.
+    """
+    return unicodedata.normalize("NFKC", password)
+
+
 def validate_password(password: str, *, email: str) -> str:
     """Return the NFKC-normalized password, or raise VantageError.
 
@@ -48,7 +59,7 @@ def validate_password(password: str, *, email: str) -> str:
     same typed password always produces the same hash regardless of how the
     client's input method encoded it.
     """
-    normalized = unicodedata.normalize("NFKC", password)
+    normalized = normalize_password(password)
 
     if len(normalized) < MIN_PASSWORD_LENGTH:
         raise _weak(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")

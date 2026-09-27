@@ -90,3 +90,53 @@ def test_repeated_failures_trip_the_rate_limiter(
     with pytest.raises(VantageError) as excinfo:
         service.login(email=email, password=PASSWORD)
     assert excinfo.value.code == AUTH_RATE_LIMITED
+
+
+def test_a_password_needing_nfkc_normalization_can_log_in(
+    service: AuthService,
+) -> None:
+    """Register normalizes before hashing; login must normalize before verifying.
+
+    U+FF21 FULLWIDTH LATIN CAPITAL A normalizes to "A". If login verifies the
+    raw string, any password typed through an IME or containing ligatures or
+    full-width characters is registered successfully and can then never be
+    used again.
+    """
+    email = _email()
+    password = "\uff21bcdefghijklm"
+
+    service.register(email=email, password=password)
+    session = service.login(email=email, password=password)
+
+    assert session.access_token
+
+
+def test_password_length_ceiling_is_enforced_on_login(
+    service: AuthService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Argon2 CPU ceiling must exist on the unauthenticated path too.
+
+    validate_password bounds length at 128, but login never called it, so an
+    arbitrarily long password reached the hasher on an endpoint that needs no
+    credentials to invoke. Asserting the hasher was never entered is the point:
+    rejecting late still burns the CPU the ceiling exists to protect.
+    """
+    email = _email()
+    service.register(email=email, password=PASSWORD)
+
+    calls: list[int] = []
+    import app.services.auth as auth_module
+
+    real_verify = auth_module.verify_password
+
+    def counting_verify(password: str, encoded_hash: str) -> bool:
+        calls.append(len(password))
+        return real_verify(password, encoded_hash)
+
+    monkeypatch.setattr(auth_module, "verify_password", counting_verify)
+
+    with pytest.raises(VantageError) as excinfo:
+        service.login(email=email, password="a" * 5000)
+
+    assert excinfo.value.code == AUTH_INVALID
+    assert calls == [], "an over-length password reached the Argon2 hasher"

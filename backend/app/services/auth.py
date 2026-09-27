@@ -21,7 +21,12 @@ from app.core.security.passwords import (
     needs_rehash,
     verify_password,
 )
-from app.core.security.policy import normalize_email, validate_password
+from app.core.security.policy import (
+    MAX_PASSWORD_LENGTH,
+    normalize_email,
+    normalize_password,
+    validate_password,
+)
 from app.core.security.tokens import issue_access_token
 from app.domain.auth import (
     AUTH_ACCOUNT_LOCKED,
@@ -109,6 +114,18 @@ class AuthService:
                 retryable=True,
             )
 
+        candidate = normalize_password(password)
+
+        # Bound the work before anything expensive runs. Argon2 is deliberately
+        # costly, and login needs no credentials to invoke, so an unbounded
+        # password here is a free way to burn dyno CPU. Reported as AUTH_INVALID
+        # so it stays indistinguishable from a wrong password.
+        if len(candidate) > MAX_PASSWORD_LENGTH:
+            self._attempts.record(key)
+            raise VantageError(
+                code=AUTH_INVALID, safe_message=INVALID_CREDENTIALS_MESSAGE
+            )
+
         user = self._users.find_by_email(normalized)
 
         if user is None:
@@ -128,7 +145,7 @@ class AuthService:
                 retryable=True,
             )
 
-        if not verify_password(password, user.password_hash):
+        if not verify_password(candidate, user.password_hash):
             self._attempts.record(key)
             self._users.record_failed_login(
                 user.id,
@@ -144,7 +161,7 @@ class AuthService:
         if needs_rehash(user.password_hash):
             self._users.update_password(
                 user.id,
-                password_hash=hash_password(password),
+                password_hash=hash_password(candidate),
                 password_algo=PASSWORD_ALGO,
             )
 
