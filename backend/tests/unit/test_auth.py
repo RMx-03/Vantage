@@ -146,3 +146,25 @@ async def test_missing_credentials_are_rejected() -> None:
     with pytest.raises(VantageError) as excinfo:
         await deps.get_current_user(None)
     assert excinfo.value.code == "AUTH_REQUIRED"
+
+
+@pytest.mark.anyio
+async def test_expired_native_token_reports_expiry_not_invalid() -> None:
+    """An expired Vantage token must not fall through to the legacy path.
+
+    `except VantageError: pass` caught AUTH_TOKEN_EXPIRED as well as AUTH_INVALID,
+    so an expired native token was handed to Supabase, rejected there, and
+    surfaced as AUTH_INVALID. The client cannot tell "refresh me" from
+    "re-authenticate", and the AUTH_TOKEN_EXPIRED mapping is unreachable.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    past = datetime.now(UTC) - timedelta(hours=2)
+    token, _ = issue_access_token(user_public_id=uuid4(), email_verified=True, now=past)
+
+    with pytest.raises(VantageError) as excinfo:
+        await deps.get_current_user(
+            HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+        )
+
+    assert excinfo.value.code == "AUTH_TOKEN_EXPIRED"

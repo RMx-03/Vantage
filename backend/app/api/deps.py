@@ -6,6 +6,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.database import supabase_client
 from app.core.security.tokens import decode_access_token
+from app.domain.auth import AUTH_TOKEN_EXPIRED
 from app.domain.errors import VantageError
 from app.repositories.research_runs import ResearchRunRepository
 from app.services.research_run import (
@@ -48,8 +49,12 @@ async def get_current_user(
         try:
             claims = decode_access_token(token)
             return AuthenticatedUser(id=claims.subject)
-        except VantageError:
-            pass  # Not a Vantage token; try the legacy path.
+        except VantageError as error:
+            # A token we issued and that has merely expired is ours, and the
+            # caller needs to know to refresh rather than re-authenticate.
+            # Only an unrecognisable token falls through to the legacy path.
+            if error.code == AUTH_TOKEN_EXPIRED:
+                raise
 
         try:
             response = await run_in_threadpool(supabase_client.auth.get_user, token)
