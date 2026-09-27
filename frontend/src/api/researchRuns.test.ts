@@ -1,12 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as authClient from '../lib/authClient';
 import { informationalRun } from '../test/fixtures';
-
-const { getSession } = vi.hoisted(() => ({ getSession: vi.fn() }));
-
-vi.mock('../lib/supabase', () => ({
-  supabase: { auth: { getSession } },
-}));
-
 import {
   ApiError,
   createResearchRun,
@@ -14,22 +8,21 @@ import {
   listResearchRuns,
 } from './researchRuns';
 
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  authClient.setAccessToken(null);
+});
+
 describe('research-runs API client', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getSession.mockResolvedValue({
-      data: { session: { access_token: 'access-token' } },
-    });
-  });
-
-  it('requires an authenticated session before making a request', async () => {
-    getSession.mockResolvedValueOnce({ data: { session: null } });
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    await expect(createResearchRun('AAPL')).rejects.toMatchObject({
-      status: 401,
-      error: { code: 'AUTH_REQUIRED', retryable: false },
-    });
-    expect(fetchSpy).not.toHaveBeenCalled();
+    authClient.setAccessToken('access-token', 900);
   });
 
   it('normalizes a symbol and sends the bearer token', async () => {
@@ -110,5 +103,61 @@ describe('research-runs API client', () => {
     );
     await listResearchRuns('a cursor/+');
     expect(fetchSpy.mock.calls[0][0]).toContain('before=a%20cursor%2F%2B');
+  });
+});
+
+describe('authenticated requests', () => {
+  it('sends the in-memory access token as a bearer header', async () => {
+    authClient.setAccessToken('tok-123', 900);
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(json({ items: [], next_before: null }));
+
+    await listResearchRuns();
+
+    const init = spy.mock.calls[0][1] as RequestInit;
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer tok-123');
+  });
+
+  it('fails fast with AUTH_REQUIRED when there is no token and refresh fails', async () => {
+    vi.spyOn(authClient, 'refresh').mockResolvedValue(false);
+    await expect(listResearchRuns()).rejects.toMatchObject({
+      error: { code: 'AUTH_REQUIRED' },
+    });
+  });
+
+  it('refreshes once on 401 and retries the request', async () => {
+    authClient.setAccessToken('stale', 900);
+    const refreshSpy = vi.spyOn(authClient, 'refresh').mockImplementation(async () => {
+      authClient.setAccessToken('fresh', 900);
+      return true;
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        json({ detail: { code: 'AUTH_TOKEN_EXPIRED', message: 'x', retryable: false } }, 401)
+      )
+      .mockResolvedValueOnce(json({ items: [], next_before: null }));
+
+    await listResearchRuns();
+
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const retry = fetchSpy.mock.calls[1][1] as RequestInit;
+    expect(new Headers(retry.headers).get('Authorization')).toBe('Bearer fresh');
+  });
+
+  it('does not retry more than once', async () => {
+    // A retry loop against a permanently 401ing API would hammer the server.
+    authClient.setAccessToken('stale', 900);
+    vi.spyOn(authClient, 'refresh').mockResolvedValue(true);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        json({ detail: { code: 'AUTH_INVALID', message: 'x', retryable: false } }, 401)
+      );
+
+    await expect(listResearchRuns()).rejects.toBeInstanceOf(ApiError);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });
