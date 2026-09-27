@@ -46,23 +46,13 @@ from app.agents.research_graph import create_research_graph
 
 
 @pytest.fixture
-def test_user_id() -> UUID:
-    user = UserRepository().create(
-        email=f"api-{uuid4().hex}@example.com",
-        password_hash="h",
-        password_algo="argon2id",
-    )
-    return user.public_id
+def test_user_id(make_user) -> UUID:
+    return make_user("api")
 
 
 @pytest.fixture
-def other_user_id() -> UUID:
-    user = UserRepository().create(
-        email=f"api-other-{uuid4().hex}@example.com",
-        password_hash="h",
-        password_algo="argon2id",
-    )
-    return user.public_id
+def other_user_id(make_user) -> UUID:
+    return make_user("api-other")
 
 
 @pytest.fixture

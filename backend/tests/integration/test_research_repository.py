@@ -51,36 +51,19 @@ VALID_INTERPRETATION = AIInterpretation(
 )
 
 
-@pytest.fixture(scope="session")
-def check_db_url() -> None:
-    db_url = os.environ.get("DATABASE_URL", "")
-    if "vantage_test" not in db_url:
-        pytest.fail(f"DATABASE_URL must target 'vantage_test', got: {db_url}")
-
-
 @pytest.fixture
-def repo(check_db_url) -> ResearchRunRepository:
+def repo() -> ResearchRunRepository:
     return ResearchRunRepository()
 
 
 @pytest.fixture
-def user_id() -> UUID:
-    user = UserRepository().create(
-        email=f"repo-{uuid4().hex}@example.com",
-        password_hash="h",
-        password_algo="argon2id",
-    )
-    return user.public_id
+def user_id(make_user) -> UUID:
+    return make_user("repo")
 
 
 @pytest.fixture
-def other_user_id() -> UUID:
-    user = UserRepository().create(
-        email=f"other-{uuid4().hex}@example.com",
-        password_hash="h",
-        password_algo="argon2id",
-    )
-    return user.public_id
+def other_user_id(make_user) -> UUID:
+    return make_user("other")
 
 
 @pytest.fixture

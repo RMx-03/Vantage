@@ -14,16 +14,12 @@ _VERSIONS = VersionInfo(
 )
 
 
-def test_a_run_can_be_created_for_a_real_user() -> None:
-    user = UserRepository().create(
-        email=f"own-{uuid4().hex}@example.com",
-        password_hash="h",
-        password_algo="argon2id",
-    )
+def test_a_run_can_be_created_for_a_real_user(make_user) -> None:
+    owner = make_user("own")
     run = ResearchRunRepository().create_running(
-        user_id=user.public_id, symbol="AAPL", versions=_VERSIONS
+        user_id=owner, symbol="AAPL", versions=_VERSIONS
     )
-    assert run.user_id == user.public_id
+    assert run.user_id == owner
 
 
 def test_a_run_cannot_be_created_for_an_unknown_user() -> None:

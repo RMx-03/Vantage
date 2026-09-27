@@ -53,13 +53,8 @@ from app.telemetry.tracing import (
 
 
 @pytest.fixture
-def test_user_id() -> UUID:
-    user = UserRepository().create(
-        email=f"trace-{uuid4().hex}@example.com",
-        password_hash="h",
-        password_algo="argon2id",
-    )
-    return user.public_id
+def test_user_id(make_user) -> UUID:
+    return make_user("trace")
 
 
 @pytest.fixture
