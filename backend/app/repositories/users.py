@@ -34,7 +34,9 @@ def _to_stored(row: UserRow) -> StoredUser:
 
 
 class UserRepository:
-    def create(self, *, email: str, password_hash: str, password_algo: str) -> StoredUser:
+    def create(
+        self, *, email: str, password_hash: str, password_algo: str
+    ) -> StoredUser:
         now = datetime.now(UTC)
         row = UserRow(
             public_id=uuid4(),
@@ -89,7 +91,9 @@ class UserRepository:
                 row.locked_until = now + timedelta(seconds=lock_for_seconds)
             row.updated_at = now
 
-    def update_password(self, user_id: int, *, password_hash: str, password_algo: str) -> None:
+    def update_password(
+        self, user_id: int, *, password_hash: str, password_algo: str
+    ) -> None:
         now = datetime.now(UTC)
         with SessionFactory() as session, session.begin():
             row = session.get(UserRow, user_id)

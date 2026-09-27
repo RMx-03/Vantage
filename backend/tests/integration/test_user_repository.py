@@ -19,7 +19,9 @@ def _email() -> str:
 
 def test_created_user_is_retrievable_by_email(repo: UserRepository) -> None:
     email = _email()
-    created = repo.create(email=email, password_hash="$argon2id$fake", password_algo="argon2id")
+    created = repo.create(
+        email=email, password_hash="$argon2id$fake", password_algo="argon2id"
+    )
     found = repo.find_by_email(email)
     assert found is not None
     assert found.public_id == created.public_id

@@ -27,7 +27,9 @@ def _runtime_role() -> str | None:
     if not role:
         return None
     if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", role) is None:
-        raise RuntimeError("VANTAGE_RUNTIME_DB_ROLE is not a valid PostgreSQL role name")
+        raise RuntimeError(
+            "VANTAGE_RUNTIME_DB_ROLE is not a valid PostgreSQL role name"
+        )
     return role
 
 
@@ -38,13 +40,22 @@ def upgrade() -> None:
     op.create_table(
         "users",
         sa.Column("id", sa.BigInteger(), sa.Identity(), primary_key=True),
-        sa.Column("public_id", postgresql.UUID(as_uuid=True), nullable=False, unique=True),
+        sa.Column(
+            "public_id", postgresql.UUID(as_uuid=True), nullable=False, unique=True
+        ),
         sa.Column("email", sa.Text(), nullable=False, unique=True),
         sa.Column("password_hash", sa.Text(), nullable=False),
         sa.Column("password_algo", sa.Text(), nullable=False),
         sa.Column("email_verified_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("status", sa.Text(), nullable=False, server_default=sa.text("'active'")),
-        sa.Column("failed_login_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column(
+            "status", sa.Text(), nullable=False, server_default=sa.text("'active'")
+        ),
+        sa.Column(
+            "failed_login_count",
+            sa.Integer(),
+            nullable=False,
+            server_default=sa.text("0"),
+        ),
         sa.Column("locked_until", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -68,15 +79,21 @@ def upgrade() -> None:
         sa.Column("replaced_by_id", sa.BigInteger(), nullable=True),
         sa.Column("user_agent", sa.Text(), nullable=True),
         sa.Column("ip_hash", sa.Text(), nullable=True),
-        sa.ForeignKeyConstraint(["user_id"], [f"{_SCHEMA}.users.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["user_id"], [f"{_SCHEMA}.users.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["replaced_by_id"], [f"{_SCHEMA}.refresh_tokens.id"]),
         schema=_SCHEMA,
     )
     op.create_index(
-        "ix_refresh_tokens_user_expires", "refresh_tokens", ["user_id", "expires_at"],
+        "ix_refresh_tokens_user_expires",
+        "refresh_tokens",
+        ["user_id", "expires_at"],
         schema=_SCHEMA,
     )
-    op.create_index("ix_refresh_tokens_family", "refresh_tokens", ["family_id"], schema=_SCHEMA)
+    op.create_index(
+        "ix_refresh_tokens_family", "refresh_tokens", ["family_id"], schema=_SCHEMA
+    )
 
     op.create_table(
         "email_tokens",
@@ -89,13 +106,19 @@ def upgrade() -> None:
         sa.Column("consumed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
-            "purpose IN ('email_verification','password_reset')", name="ck_email_tokens_purpose"
+            "purpose IN ('email_verification','password_reset')",
+            name="ck_email_tokens_purpose",
         ),
-        sa.ForeignKeyConstraint(["user_id"], [f"{_SCHEMA}.users.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["user_id"], [f"{_SCHEMA}.users.id"], ondelete="CASCADE"
+        ),
         schema=_SCHEMA,
     )
     op.create_index(
-        "ix_email_tokens_user_purpose", "email_tokens", ["user_id", "purpose"], schema=_SCHEMA
+        "ix_email_tokens_user_purpose",
+        "email_tokens",
+        ["user_id", "purpose"],
+        schema=_SCHEMA,
     )
 
     op.create_table(

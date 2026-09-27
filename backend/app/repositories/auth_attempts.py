@@ -38,11 +38,15 @@ class AuthAttemptRepository:
                 session.execute(
                     select(func.count())
                     .select_from(AuthAttemptRow)
-                    .where(AuthAttemptRow.key == key, AuthAttemptRow.occurred_at > cutoff)
+                    .where(
+                        AuthAttemptRow.key == key, AuthAttemptRow.occurred_at > cutoff
+                    )
                 ).scalar_one()
             )
 
-    def is_rate_limited(self, key: str, *, window_seconds: int, max_attempts: int) -> bool:
+    def is_rate_limited(
+        self, key: str, *, window_seconds: int, max_attempts: int
+    ) -> bool:
         return self.count_within(key, window_seconds=window_seconds) >= max_attempts
 
     def purge_older_than(self, seconds: int) -> int:

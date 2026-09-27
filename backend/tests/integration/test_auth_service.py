@@ -68,7 +68,9 @@ def test_login_with_a_wrong_password_is_rejected(service: AuthService) -> None:
     assert excinfo.value.code == AUTH_INVALID
 
 
-def test_login_for_an_unknown_account_is_rejected_identically(service: AuthService) -> None:
+def test_login_for_an_unknown_account_is_rejected_identically(
+    service: AuthService,
+) -> None:
     with pytest.raises(VantageError) as excinfo:
         service.login(email=_email(), password=PASSWORD)
     assert excinfo.value.code == AUTH_INVALID

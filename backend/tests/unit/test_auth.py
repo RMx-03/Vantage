@@ -146,4 +146,3 @@ async def test_missing_credentials_are_rejected() -> None:
     with pytest.raises(VantageError) as excinfo:
         await deps.get_current_user(None)
     assert excinfo.value.code == "AUTH_REQUIRED"
-

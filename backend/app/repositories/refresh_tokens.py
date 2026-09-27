@@ -78,7 +78,9 @@ class RefreshTokenRepository:
 
             if row.revoked_at is not None:
                 # Already consumed or revoked. Treat as theft and burn the family.
-                self._revoke_family_in_session(session, row.family_id, now, "reuse_detected")
+                self._revoke_family_in_session(
+                    session, row.family_id, now, "reuse_detected"
+                )
                 return RotationResult(outcome="reused", family_id=row.family_id)
 
             if row.expires_at <= now:

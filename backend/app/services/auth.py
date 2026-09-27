@@ -74,7 +74,9 @@ class AuthService:
         if self._users.find_by_email(normalized) is not None:
             # Do not raise. The route returns the same body either way; Phase 2C
             # sends the existing account a notice instead.
-            return RegistrationOutcome(created=False, user_public_id=None, email=normalized)
+            return RegistrationOutcome(
+                created=False, user_public_id=None, email=normalized
+            )
 
         user = self._users.create(
             email=normalized,
@@ -113,7 +115,9 @@ class AuthService:
             # Cost parity with the wrong-password path.
             dummy_verify()
             self._attempts.record(key)
-            raise VantageError(code=AUTH_INVALID, safe_message=INVALID_CREDENTIALS_MESSAGE)
+            raise VantageError(
+                code=AUTH_INVALID, safe_message=INVALID_CREDENTIALS_MESSAGE
+            )
 
         if user.status != "active" or (
             user.locked_until is not None and user.locked_until > datetime.now(UTC)
@@ -127,15 +131,21 @@ class AuthService:
         if not verify_password(password, user.password_hash):
             self._attempts.record(key)
             self._users.record_failed_login(
-                user.id, lock_after=_LOCK_AFTER_FAILURES, lock_for_seconds=_LOCK_FOR_SECONDS
+                user.id,
+                lock_after=_LOCK_AFTER_FAILURES,
+                lock_for_seconds=_LOCK_FOR_SECONDS,
             )
-            raise VantageError(code=AUTH_INVALID, safe_message=INVALID_CREDENTIALS_MESSAGE)
+            raise VantageError(
+                code=AUTH_INVALID, safe_message=INVALID_CREDENTIALS_MESSAGE
+            )
 
         # Opportunistic upgrade when parameters change. The plaintext is only
         # available here, at the moment of a successful login.
         if needs_rehash(user.password_hash):
             self._users.update_password(
-                user.id, password_hash=hash_password(password), password_algo=PASSWORD_ALGO
+                user.id,
+                password_hash=hash_password(password),
+                password_algo=PASSWORD_ALGO,
             )
 
         self._users.record_successful_login(user.id)
@@ -164,7 +174,11 @@ class AuthService:
             raw_refresh_token, user_agent=user_agent, ip_hash=ip_hash
         )
 
-        if result.outcome != "rotated" or result.raw_token is None or result.user_id is None:
+        if (
+            result.outcome != "rotated"
+            or result.raw_token is None
+            or result.user_id is None
+        ):
             # not_found, expired and reused are all the same to the caller. A
             # distinct "your session was revoked for reuse" message would tell
             # an attacker their stolen token was detected.
@@ -208,4 +222,3 @@ class AuthService:
                     safe_message="Your session is no longer valid. Sign in again.",
                 )
             return _to_stored(row)
-

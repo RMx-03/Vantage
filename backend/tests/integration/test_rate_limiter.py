@@ -25,7 +25,9 @@ def test_key_does_not_contain_the_raw_value() -> None:
 
 
 def test_same_value_produces_a_stable_key() -> None:
-    assert attempt_key("login:email", "a@b.com") == attempt_key("login:email", "a@b.com")
+    assert attempt_key("login:email", "a@b.com") == attempt_key(
+        "login:email", "a@b.com"
+    )
 
 
 def test_fresh_key_is_not_limited(repo: AuthAttemptRepository) -> None:

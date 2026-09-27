@@ -63,7 +63,9 @@ def _cookie_kwargs() -> dict[str, object]:
         "key": settings.AUTH_COOKIE_NAME,
         "httponly": True,
         "secure": settings.AUTH_COOKIE_SECURE,
-        "samesite": settings.AUTH_COOKIE_SAMESITE.capitalize() if settings.AUTH_COOKIE_SAMESITE else "Lax",
+        "samesite": settings.AUTH_COOKIE_SAMESITE.capitalize()
+        if settings.AUTH_COOKIE_SAMESITE
+        else "Lax",
         "path": f"{settings.API_V1_PREFIX}/auth",
     }
     if settings.AUTH_COOKIE_DOMAIN:
@@ -83,7 +85,9 @@ def _clear_refresh_cookie(response: Response) -> None:
     response.delete_cookie(**_cookie_kwargs())  # type: ignore[arg-type]
 
 
-@router.post("/register", status_code=status.HTTP_202_ACCEPTED, response_model=AcceptedResponse)
+@router.post(
+    "/register", status_code=status.HTTP_202_ACCEPTED, response_model=AcceptedResponse
+)
 def register(
     payload: CredentialsRequest,
     service: AuthService = Depends(get_auth_service),
@@ -118,7 +122,9 @@ def refresh(
 ) -> TokenResponse:
     raw = request.cookies.get(settings.AUTH_COOKIE_NAME)
     if not raw:
-        raise VantageError(code=AUTH_REQUIRED, safe_message="Authentication is required.")
+        raise VantageError(
+            code=AUTH_REQUIRED, safe_message="Authentication is required."
+        )
 
     try:
         issued = service.refresh(
@@ -165,7 +171,11 @@ def logout_all(
 def me(user: AuthenticatedUser = Depends(get_current_user)) -> MeResponse:
     stored = UserRepository().find_by_public_id(user.id)
     if stored is None:
-        raise VantageError(code=AUTH_REQUIRED, safe_message="Authentication is required.")
+        raise VantageError(
+            code=AUTH_REQUIRED, safe_message="Authentication is required."
+        )
     return MeResponse(
-        id=str(stored.public_id), email=stored.email, email_verified=stored.email_verified
+        id=str(stored.public_id),
+        email=stored.email,
+        email_verified=stored.email_verified,
     )

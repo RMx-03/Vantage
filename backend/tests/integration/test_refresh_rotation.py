@@ -14,9 +14,15 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture()
 def user_id() -> int:
-    return UserRepository().create(
-        email=f"rt-{uuid4().hex}@example.com", password_hash="h", password_algo="argon2id"
-    ).id
+    return (
+        UserRepository()
+        .create(
+            email=f"rt-{uuid4().hex}@example.com",
+            password_hash="h",
+            password_algo="argon2id",
+        )
+        .id
+    )
 
 
 @pytest.fixture()
@@ -24,7 +30,9 @@ def repo() -> RefreshTokenRepository:
     return RefreshTokenRepository()
 
 
-def test_rotation_returns_a_new_token(repo: RefreshTokenRepository, user_id: int) -> None:
+def test_rotation_returns_a_new_token(
+    repo: RefreshTokenRepository, user_id: int
+) -> None:
     raw, _ = repo.issue(user_id=user_id)
     result = repo.rotate(raw)
     assert result.outcome == "rotated"
@@ -42,7 +50,9 @@ def test_rotation_keeps_the_family(repo: RefreshTokenRepository, user_id: int) -
     with SessionFactory() as session:
         families = set(
             session.execute(
-                select(RefreshTokenRow.family_id).where(RefreshTokenRow.user_id == user_id)
+                select(RefreshTokenRow.family_id).where(
+                    RefreshTokenRow.user_id == user_id
+                )
             ).scalars()
         )
     assert families == {family}
@@ -70,11 +80,16 @@ def test_reuse_revokes_the_whole_family(
     after = repo.rotate(rotated.raw_token)
     assert after.outcome in {"reused", "not_found"}
     with SessionFactory() as session:
-        live = session.execute(
-            select(RefreshTokenRow).where(
-                RefreshTokenRow.user_id == user_id, RefreshTokenRow.revoked_at.is_(None)
+        live = (
+            session.execute(
+                select(RefreshTokenRow).where(
+                    RefreshTokenRow.user_id == user_id,
+                    RefreshTokenRow.revoked_at.is_(None),
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert live == []
 
 
@@ -92,7 +107,9 @@ def test_expired_token_is_rejected(repo: RefreshTokenRepository, user_id: int) -
     assert repo.rotate(raw).outcome == "expired"
 
 
-def test_revoke_all_kills_every_family(repo: RefreshTokenRepository, user_id: int) -> None:
+def test_revoke_all_kills_every_family(
+    repo: RefreshTokenRepository, user_id: int
+) -> None:
     first, _ = repo.issue(user_id=user_id)
     second, _ = repo.issue(user_id=user_id)
     repo.revoke_all_for_user(user_id, reason="password_change")

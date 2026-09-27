@@ -23,7 +23,9 @@ SCHEMA = "vantage_auth"
 class UserRow(Base):
     __tablename__ = "users"
     __table_args__ = (
-        CheckConstraint("status IN ('active','locked','disabled')", name="ck_users_status"),
+        CheckConstraint(
+            "status IN ('active','locked','disabled')", name="ck_users_status"
+        ),
         {"schema": SCHEMA},
     )
 
@@ -37,14 +39,24 @@ class UserRow(Base):
     email_verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'active'"))
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'active'")
+    )
     failed_login_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
-    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class RefreshTokenRow(Base):
@@ -60,10 +72,16 @@ class RefreshTokenRow(Base):
     user_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey(f"{SCHEMA}.users.id", ondelete="CASCADE"), nullable=False
     )
-    family_id: Mapped[UUID] = mapped_column(postgresql.UUID(as_uuid=True), nullable=False)
+    family_id: Mapped[UUID] = mapped_column(
+        postgresql.UUID(as_uuid=True), nullable=False
+    )
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     revoked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     replaced_by_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey(f"{SCHEMA}.refresh_tokens.id"), nullable=True
@@ -76,7 +94,8 @@ class EmailTokenRow(Base):
     __tablename__ = "email_tokens"
     __table_args__ = (
         CheckConstraint(
-            "purpose IN ('email_verification','password_reset')", name="ck_email_tokens_purpose"
+            "purpose IN ('email_verification','password_reset')",
+            name="ck_email_tokens_purpose",
         ),
         Index("ix_email_tokens_user_purpose", "user_id", "purpose"),
         {"schema": SCHEMA},
@@ -89,9 +108,15 @@ class EmailTokenRow(Base):
     )
     purpose: Mapped[str] = mapped_column(Text, nullable=False)
     email: Mapped[str] = mapped_column(Text, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class AuthAttemptRow(Base):
@@ -103,4 +128,6 @@ class AuthAttemptRow(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     key: Mapped[str] = mapped_column(Text, nullable=False)
-    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )

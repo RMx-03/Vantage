@@ -9,20 +9,26 @@ pytestmark = pytest.mark.integration
 def test_auth_schema_exists() -> None:
     with SessionFactory() as session:
         result = session.execute(
-            text("SELECT 1 FROM information_schema.schemata WHERE schema_name = 'vantage_auth'")
+            text(
+                "SELECT 1 FROM information_schema.schemata WHERE schema_name = 'vantage_auth'"
+            )
         ).scalar()
     assert result == 1
 
 
 def test_expected_tables_exist() -> None:
     with SessionFactory() as session:
-        names = set(inspect(session.connection()).get_table_names(schema="vantage_auth"))
+        names = set(
+            inspect(session.connection()).get_table_names(schema="vantage_auth")
+        )
     assert {"users", "refresh_tokens", "email_tokens", "auth_attempts"} <= names
 
 
 def test_email_is_unique() -> None:
     with SessionFactory() as session:
-        indexes = inspect(session.connection()).get_indexes("users", schema="vantage_auth")
+        indexes = inspect(session.connection()).get_indexes(
+            "users", schema="vantage_auth"
+        )
         uniques = inspect(session.connection()).get_unique_constraints(
             "users", schema="vantage_auth"
         )
@@ -36,7 +42,9 @@ def test_public_id_is_unique_so_it_can_be_a_foreign_key_target() -> None:
         uniques = inspect(session.connection()).get_unique_constraints(
             "users", schema="vantage_auth"
         )
-        indexes = inspect(session.connection()).get_indexes("users", schema="vantage_auth")
+        indexes = inspect(session.connection()).get_indexes(
+            "users", schema="vantage_auth"
+        )
     unique_cols = [tuple(u["column_names"]) for u in uniques]
     unique_cols += [tuple(i["column_names"]) for i in indexes if i["unique"]]
     assert ("public_id",) in unique_cols

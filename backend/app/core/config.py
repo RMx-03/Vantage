@@ -161,7 +161,13 @@ settings = Settings()
 # Substrings that mark a secret as a non-secret example value. A deployment
 # that ships one of these is misconfigured, and failing to start is the only
 # safe response.
-_PLACEHOLDER_MARKERS = ("change-me", "changeme", "placeholder", "example", "your-secret")
+_PLACEHOLDER_MARKERS = (
+    "change-me",
+    "changeme",
+    "placeholder",
+    "example",
+    "your-secret",
+)
 
 
 def validate_auth_settings(active: Settings) -> None:
@@ -174,8 +180,11 @@ def validate_auth_settings(active: Settings) -> None:
     if not secret:
         raise RuntimeError("AUTH_JWT_SECRET must be set; refusing to start.")
     if len(secret.encode("utf-8")) < 32:
-        raise RuntimeError("AUTH_JWT_SECRET must be at least 32 bytes; refusing to start.")
+        raise RuntimeError(
+            "AUTH_JWT_SECRET must be at least 32 bytes; refusing to start."
+        )
     lowered = secret.lower()
     if any(marker in lowered for marker in _PLACEHOLDER_MARKERS):
-        raise RuntimeError("AUTH_JWT_SECRET looks like a placeholder; refusing to start.")
-
+        raise RuntimeError(
+            "AUTH_JWT_SECRET looks like a placeholder; refusing to start."
+        )
