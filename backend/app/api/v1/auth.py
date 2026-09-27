@@ -3,6 +3,7 @@ import hashlib
 from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict
 
+from app.api.client_ip import client_ip
 from app.api.errors import vantage_error_response
 from app.api.deps import AuthenticatedUser, get_current_user
 from app.core.config import settings
@@ -45,10 +46,10 @@ def get_auth_service() -> AuthService:
 
 def _client_ip_hash(request: Request) -> str | None:
     """Salted hash of the client address. The raw address is never stored."""
-    client = request.client
-    if client is None:
+    address = client_ip(request)
+    if address is None:
         return None
-    salted = f"{settings.TELEMETRY_USER_SALT}:{client.host}"
+    salted = f"{settings.TELEMETRY_USER_SALT}:{address}"
     return hashlib.sha256(salted.encode("utf-8")).hexdigest()
 
 

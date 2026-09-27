@@ -194,3 +194,33 @@ def test_same_origin_refresh_is_allowed(client: TestClient) -> None:
         "/api/v1/auth/refresh", headers={"Sec-Fetch-Site": "same-origin"}
     )
     assert response.status_code == 200
+
+
+def test_users_behind_the_same_proxy_get_separate_rate_limits(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Behind Vercel and Heroku every request arrives from the proxy.
+
+    Keyed on the socket address, twenty sign-ups from anyone would lock out
+    every other new user for an hour. The limit must follow the real client.
+    """
+    from uuid import uuid4 as _uuid4
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_HOPS", 2)
+    monkeypatch.setattr(settings, "AUTH_REGISTER_MAX_ATTEMPTS", 2)
+    busy = f"198.51.100.{_uuid4().int % 250 + 1}"
+    other = f"203.0.113.{_uuid4().int % 250 + 1}"
+
+    def register(ip: str) -> int:
+        return client.post(
+            "/api/v1/auth/register",
+            json={"email": _email(), "password": PASSWORD},
+            headers={"X-Forwarded-For": f"{ip}, 76.76.21.21"},
+        ).status_code
+
+    for _ in range(2):
+        register(busy)
+    assert register(busy) == 429
+    assert register(other) == 202

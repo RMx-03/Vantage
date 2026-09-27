@@ -131,6 +131,15 @@ class Settings(BaseSettings):
     # Empty means host-only, which is what production uses. `vercel.app` is on the
     # Public Suffix List, so a Domain-scoped cookie cannot be set there anyway.
     AUTH_COOKIE_DOMAIN: str = ""
+    # How many proxies in front of the app append to X-Forwarded-For. 0 means
+    # none: use the socket peer and ignore the header, which any caller can set.
+    # Production is 2 — Vercel overwrites the header with the real client, then
+    # Heroku's router appends the Vercel edge — making the client the second
+    # entry from the right. Wrong here, every user shares one rate-limit bucket.
+    TRUSTED_PROXY_HOPS: int = Field(default=0, ge=0)
+    # Concurrent Argon2 hashes allowed. Each needs 19 MiB; this bounds memory on
+    # the 512 MB dyno even if per-client rate limits are evaded.
+    ARGON2_MAX_CONCURRENCY: int = Field(default=4, gt=0)
     # Generous on purpose: corporate NAT, campus networks and mobile CGNAT
     # put many legitimate users behind one address. This bounds the Argon2
     # flood, it is not an anti-abuse control.
