@@ -38,6 +38,7 @@ from app.domain.errors import VantageError
 from app.repositories.auth_attempts import AuthAttemptRepository, attempt_key
 from app.repositories.refresh_tokens import RefreshTokenRepository
 from app.repositories.users import StoredUser, UserRepository
+from app.services.account import AccountService
 
 # Account lockout escalates beyond the per-key rate limit; it survives an
 # attacker rotating source addresses.
@@ -98,8 +99,8 @@ class AuthService:
         checked = validate_password(password, email=normalized)
 
         if self._users.find_by_email(normalized) is not None:
-            # Do not raise. The route returns the same body either way; Phase 2C
-            # sends the existing account a notice instead.
+            AccountService().notify_duplicate_registration(normalized)
+            # Do not raise. The route returns the same body either way.
             return RegistrationOutcome(
                 created=False, user_public_id=None, email=normalized
             )
@@ -109,6 +110,7 @@ class AuthService:
             password_hash=hash_password(checked),
             password_algo=PASSWORD_ALGO,
         )
+        AccountService().send_verification(user.id, normalized)
         return RegistrationOutcome(
             created=True, user_public_id=user.public_id, email=normalized
         )
