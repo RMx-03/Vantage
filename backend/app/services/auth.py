@@ -68,10 +68,21 @@ class AuthService:
         users: UserRepository | None = None,
         refresh_tokens: RefreshTokenRepository | None = None,
         attempts: AuthAttemptRepository | None = None,
+        accounts: AccountService | None = None,
     ) -> None:
         self._users = users or UserRepository()
         self._refresh = refresh_tokens or RefreshTokenRepository()
         self._attempts = attempts or AuthAttemptRepository()
+        # Injected so registration's mail behaviour can be tested against the
+        # sender it really uses. Built lazily: only registration sends mail, and
+        # building it resolves the configured sender.
+        self._accounts = accounts
+
+    @property
+    def _account_service(self) -> AccountService:
+        if self._accounts is None:
+            self._accounts = AccountService(users=self._users)
+        return self._accounts
 
     def register(
         self, *, email: str, password: str, ip_hash: str | None = None
@@ -99,7 +110,7 @@ class AuthService:
         checked = validate_password(password, email=normalized)
 
         if self._users.find_by_email(normalized) is not None:
-            AccountService().notify_duplicate_registration(normalized)
+            self._account_service.notify_duplicate_registration(normalized)
             # Do not raise. The route returns the same body either way.
             return RegistrationOutcome(
                 created=False, user_public_id=None, email=normalized
@@ -110,7 +121,7 @@ class AuthService:
             password_hash=hash_password(checked),
             password_algo=PASSWORD_ALGO,
         )
-        AccountService().send_verification(user.id, normalized)
+        self._account_service.send_verification(user.id, normalized)
         return RegistrationOutcome(
             created=True, user_public_id=user.public_id, email=normalized
         )

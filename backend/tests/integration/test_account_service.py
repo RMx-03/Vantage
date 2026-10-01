@@ -134,15 +134,39 @@ def test_change_password_succeeds_with_the_current_one(
 
 
 def test_registration_survives_a_mail_outage() -> None:
-    # Losing an account because the provider was down would be a worse failure
-    # than an unverified account.
-    failing = AccountService(email_sender=FailingSender())
+    """Losing an account because the provider was down would be a worse failure
+    than an unverified account. The failing sender has to be the one that
+    registration actually uses, or this proves nothing."""
     email = f"outage-{uuid4().hex}@example.com"
-    AuthService().register(email=email, password=PASSWORD)
-    stored = UserRepository().find_by_email(email)
-    assert stored is not None
-    failing.send_verification(stored.id, email)  # must not raise
+    service = AuthService(accounts=AccountService(email_sender=FailingSender()))
+
+    outcome = service.register(email=email, password=PASSWORD)
+
+    assert outcome.created is True
     assert UserRepository().find_by_email(email) is not None
+
+
+def test_a_duplicate_registration_survives_a_mail_outage() -> None:
+    email = f"outage-dup-{uuid4().hex}@example.com"
+    AuthService().register(email=email, password=PASSWORD)
+    service = AuthService(accounts=AccountService(email_sender=FailingSender()))
+
+    outcome = service.register(email=email, password=PASSWORD)
+
+    assert outcome.created is False
+
+
+def test_registration_sends_through_the_injected_account_service() -> None:
+    """Guards the two tests above: if registration built its own service again,
+    they would pass without ever touching the failing sender."""
+    recording = RecordingSender()
+    email = f"wired-{uuid4().hex}@example.com"
+
+    AuthService(accounts=AccountService(email_sender=recording)).register(
+        email=email, password=PASSWORD
+    )
+
+    assert [m.to for m in recording.sent] == [email]
 
 
 def test_a_rejected_weak_password_does_not_burn_the_reset_link(
