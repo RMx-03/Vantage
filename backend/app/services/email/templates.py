@@ -14,6 +14,19 @@ def _base_url() -> str:
     return settings.APP_BASE_URL.rstrip("/")
 
 
+def _lifetime(seconds: int) -> str:
+    """Render a link lifetime the way the email states it.
+
+    Derived from the same setting that expires the token, so the text can never
+    promise longer than the link actually lives.
+    """
+    minutes = max(seconds // 60, 1)
+    if minutes > 90 and minutes % 60 == 0:
+        hours = minutes // 60
+        return f"{hours} hour" if hours == 1 else f"{hours} hours"
+    return f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
+
+
 def verification_message(to: str, token: str) -> EmailMessage:
     link = f"{_base_url()}/verify-email?token={quote(token)}"
     return EmailMessage(
@@ -22,7 +35,7 @@ def verification_message(to: str, token: str) -> EmailMessage:
         text=(
             "Confirm this address to finish setting up your Vantage account.\n\n"
             f"{link}\n\n"
-            "This link works once and expires in 24 hours.\n\n"
+            f"This link works once and expires in {_lifetime(settings.EMAIL_VERIFICATION_TTL_SECONDS)}.\n\n"
             "If you did not create a Vantage account, no action is needed.\n"
         ),
     )
@@ -36,7 +49,7 @@ def password_reset_message(to: str, token: str) -> EmailMessage:
         text=(
             "Use this link to choose a new Vantage password.\n\n"
             f"{link}\n\n"
-            "This link works once and expires in 60 minutes.\n\n"
+            f"This link works once and expires in {_lifetime(settings.PASSWORD_RESET_TTL_SECONDS)}.\n\n"
             "If you did not request a reset, ignore this message. Your password "
             "has not changed.\n"
         ),
