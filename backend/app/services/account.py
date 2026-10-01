@@ -51,8 +51,7 @@ class AccountService:
 
     def send_verification(self, user_id: int, email: str) -> None:
         """Mint and send a verification link. Never raises on delivery failure."""
-        self._tokens.invalidate_outstanding(user_id, purpose=_VERIFICATION)
-        raw = self._tokens.issue(
+        raw = self._tokens.replace(
             user_id=user_id,
             purpose=_VERIFICATION,
             email=email,
@@ -80,8 +79,7 @@ class AccountService:
         if user is None:
             return  # Silent.
 
-        self._tokens.invalidate_outstanding(user.id, purpose=_RESET)
-        raw = self._tokens.issue(
+        raw = self._tokens.replace(
             user_id=user.id,
             purpose=_RESET,
             email=user.email,
