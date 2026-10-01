@@ -264,6 +264,39 @@ def verify_email(
     return AcceptedResponse(message="Your address is confirmed.")
 
 
+def _limit_email_action(
+    attempts: AuthAttemptRepository, kind: str, email: str, request: Request
+) -> None:
+    """Throttle an endpoint that sends mail, per address and per source.
+
+    Both checks run before anything is recorded or sent, and before the address
+    is looked up, so the response never depends on whether it is registered.
+    The per-source budget is shared by resend and reset because they spend the
+    same 300/day Brevo quota; per-address limits alone let one client cycle
+    through addresses and exhaust it for everyone.
+    """
+    window = settings.AUTH_EMAIL_ACTION_WINDOW_SECONDS
+    per_address = attempt_key(kind, email)
+    source = client_ip(request) or "unknown-source"
+    per_source = attempt_key("email-action-source", source)
+    if attempts.is_rate_limited(
+        per_address,
+        window_seconds=window,
+        max_attempts=settings.AUTH_EMAIL_ACTION_MAX_ATTEMPTS,
+    ) or attempts.is_rate_limited(
+        per_source,
+        window_seconds=window,
+        max_attempts=settings.AUTH_EMAIL_SOURCE_MAX_ATTEMPTS,
+    ):
+        raise VantageError(
+            code=AUTH_RATE_LIMITED,
+            safe_message="Too many attempts. Try again shortly.",
+            retryable=True,
+        )
+    attempts.record(per_address)
+    attempts.record(per_source)
+
+
 @router.post(
     "/resend-verification",
     status_code=status.HTTP_202_ACCEPTED,
@@ -271,21 +304,11 @@ def verify_email(
 )
 def resend_verification(
     payload: EmailRequest,
+    request: Request,
     accounts: AccountService = Depends(get_account_service),
     attempts: AuthAttemptRepository = Depends(get_attempt_repository),
 ) -> AcceptedResponse:
-    key = attempt_key("resend", str(payload.email))
-    if attempts.is_rate_limited(
-        key,
-        window_seconds=settings.AUTH_EMAIL_ACTION_WINDOW_SECONDS,
-        max_attempts=settings.AUTH_EMAIL_ACTION_MAX_ATTEMPTS,
-    ):
-        raise VantageError(
-            code=AUTH_RATE_LIMITED,
-            safe_message="Too many attempts. Try again shortly.",
-            retryable=True,
-        )
-    attempts.record(key)
+    _limit_email_action(attempts, "resend", str(payload.email), request)
     accounts.resend_verification(str(payload.email))
     return AcceptedResponse(message=GENERIC_ACCEPTED_MESSAGE)
 
@@ -297,21 +320,11 @@ def resend_verification(
 )
 def forgot_password(
     payload: EmailRequest,
+    request: Request,
     accounts: AccountService = Depends(get_account_service),
     attempts: AuthAttemptRepository = Depends(get_attempt_repository),
 ) -> AcceptedResponse:
-    key = attempt_key("reset", str(payload.email))
-    if attempts.is_rate_limited(
-        key,
-        window_seconds=settings.AUTH_EMAIL_ACTION_WINDOW_SECONDS,
-        max_attempts=settings.AUTH_EMAIL_ACTION_MAX_ATTEMPTS,
-    ):
-        raise VantageError(
-            code=AUTH_RATE_LIMITED,
-            safe_message="Too many attempts. Try again shortly.",
-            retryable=True,
-        )
-    attempts.record(key)
+    _limit_email_action(attempts, "reset", str(payload.email), request)
     accounts.request_password_reset(str(payload.email))
     # Identical body for registered and unregistered addresses.
     return AcceptedResponse(message=GENERIC_ACCEPTED_MESSAGE)

@@ -15,6 +15,7 @@ os.environ.setdefault(
 # The suite registers many accounts from one apparent source; the tests that
 # exercise throttling lower this themselves.
 os.environ.setdefault("AUTH_REGISTER_MAX_ATTEMPTS", "100000")
+os.environ.setdefault("AUTH_EMAIL_SOURCE_MAX_ATTEMPTS", "100000")
 os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+psycopg://vantage_runtime:vantage_runtime@localhost:5433/vantage_test",

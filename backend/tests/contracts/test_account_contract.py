@@ -128,3 +128,34 @@ def test_a_failed_reset_leaves_the_session_cookie_alone(client: TestClient) -> N
     )
     assert response.status_code == 400
     assert "vantage_refresh=" not in response.headers.get("set-cookie", "")
+
+
+def test_one_source_cannot_drain_the_email_quota_across_addresses(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The free tier is 300 emails a day, shared across the whole account. A
+    per-address limit alone let one client cycle through addresses and spend it,
+    after which every user's verification and reset mail silently failed."""
+    from uuid import uuid4 as _uuid4
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_HOPS", 2)
+    monkeypatch.setattr(settings, "AUTH_EMAIL_SOURCE_MAX_ATTEMPTS", 3)
+    flooder = f"198.51.100.{_uuid4().int % 250 + 1}"
+    other = f"203.0.113.{_uuid4().int % 250 + 1}"
+
+    def ask(path: str, ip: str) -> int:
+        return client.post(
+            f"/api/v1/auth/{path}",
+            json={"email": f"drain-{_uuid4().hex}@example.com"},
+            headers={"X-Forwarded-For": f"{ip}, 76.76.21.21"},
+        ).status_code
+
+    # Resend and reset share one budget per source: they spend the same quota.
+    assert ask("forgot-password", flooder) == 202
+    assert ask("resend-verification", flooder) == 202
+    assert ask("forgot-password", flooder) == 202
+    assert ask("forgot-password", flooder) == 429
+    assert ask("resend-verification", flooder) == 429
+    assert ask("forgot-password", other) == 202

@@ -149,6 +149,10 @@ class Settings(BaseSettings):
     AUTH_LOGIN_WINDOW_SECONDS: int = Field(default=900, gt=0)
     AUTH_EMAIL_ACTION_MAX_ATTEMPTS: int = Field(default=5, gt=0)
     AUTH_EMAIL_ACTION_WINDOW_SECONDS: int = Field(default=3600, gt=0)
+    # Verification and reset emails per source, across all addresses. The
+    # per-address limit alone let one client cycle through addresses and spend
+    # the account's shared 300/day Brevo quota, after which nobody's mail sent.
+    AUTH_EMAIL_SOURCE_MAX_ATTEMPTS: int = Field(default=10, gt=0)
 
     # ------------------------------------------------------------------
     # Transactional email (Phase 2C)
