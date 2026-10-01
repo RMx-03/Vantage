@@ -18,7 +18,7 @@ from app.telemetry.tracing import get_tracer
 class AuthenticatedUser(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: UUID
-    email_verified: bool = False
+    email_verified: bool = True
 
 
 _bearer_scheme = HTTPBearer(auto_error=False)
