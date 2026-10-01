@@ -8,7 +8,11 @@ from fastapi.responses import JSONResponse
 
 from app.api.errors import vantage_error_response
 from app.api.v1.routes import router as v1_router
-from app.core.config import settings, validate_auth_settings
+from app.core.config import (
+    settings,
+    validate_auth_settings,
+    validate_email_settings,
+)
 from app.domain.errors import RUN_ALREADY_FINALIZED, SafeError, VantageError
 from app.telemetry.tracing import configure_telemetry, get_tracer
 
@@ -35,6 +39,7 @@ async def lifespan(app: FastAPI):
     # HS256 with a zero-length key and only warns, so an application that boots
     # without a real secret issues tokens anyone can forge.
     validate_auth_settings(settings)
+    validate_email_settings(settings)
     configure_telemetry(app)
     logger.info("Vantage backend started")
     logger.info("Swagger UI available at http://localhost:8000/docs")

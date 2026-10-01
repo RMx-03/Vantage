@@ -273,3 +273,35 @@ def validate_auth_settings(active: Settings) -> None:
         raise RuntimeError(
             "TELEMETRY_USER_SALT looks like a placeholder; refusing to start."
         )
+
+
+_EMAIL_PROVIDERS = {"noop", "brevo"}
+
+
+def validate_email_settings(active: Settings) -> None:
+    """Fail at startup on an email configuration that cannot work.
+
+    Otherwise the failure surfaces on the first send, inside /register after
+    the user row is committed: a 500 to the caller and an account that can
+    never receive its verification link. An unknown provider is refused rather
+    than treated as no-op, because a silent no-op in production means nobody
+    receives mail while the UI says a message is on its way.
+    """
+    provider = active.EMAIL_PROVIDER.strip().lower()
+    if provider not in _EMAIL_PROVIDERS:
+        raise RuntimeError(
+            f"EMAIL_PROVIDER must be one of {sorted(_EMAIL_PROVIDERS)}; "
+            "refusing to start."
+        )
+    if provider != "brevo":
+        return
+    if not active.BREVO_API_KEY:
+        raise RuntimeError(
+            "EMAIL_PROVIDER=brevo requires BREVO_API_KEY; refusing to start."
+        )
+    sender = active.EMAIL_FROM.lower()
+    if "@" not in sender or "example.invalid" in sender:
+        raise RuntimeError(
+            "EMAIL_PROVIDER=brevo requires EMAIL_FROM set to a sender verified in "
+            "Brevo; refusing to start."
+        )
