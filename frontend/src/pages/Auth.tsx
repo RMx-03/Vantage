@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { forgotPassword } from '../lib/authClient';
 
 type Mode = 'login' | 'register';
 
@@ -16,6 +17,24 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError('Enter your email address to request a reset link.');
+      return;
+    }
+    setError(null);
+    setInfo(null);
+    setLoading(true);
+    try {
+      await forgotPassword(email.trim());
+      setInfo('If that address can receive mail, a message is on its way.');
+    } catch {
+      setInfo('If that address can receive mail, a message is on its way.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -194,12 +213,13 @@ export default function Auth() {
                     Retain Session
                   </label>
                 </div>
-                <span
-                  title="Password recovery arrives in the next release."
-                  className="font-label text-xs uppercase tracking-wider text-on-surface-variant opacity-50 cursor-not-allowed"
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="font-label text-xs uppercase tracking-wider text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
                 >
                   Forgot Credential?
-                </span>
+                </button>
               </div>
             )}
 

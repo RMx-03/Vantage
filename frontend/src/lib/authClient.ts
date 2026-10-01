@@ -158,3 +158,32 @@ export function fetchMe(): Promise<AuthUser> {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
   });
 }
+
+export function verifyEmail(token: string): Promise<void> {
+  return authRequest('/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  }).then(() => undefined);
+}
+
+export function resendVerification(email: string): Promise<void> {
+  return authRequest('/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  }).then(() => undefined);
+}
+
+export function forgotPassword(email: string): Promise<void> {
+  return authRequest('/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  }).then(() => undefined);
+}
+
+export function resetPassword(token: string, password: string): Promise<void> {
+  return authRequest('/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  }).then(() => undefined);
+}
+

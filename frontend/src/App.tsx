@@ -5,6 +5,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Landing from './pages/Landing';
 import Terminal from './pages/Terminal';
 import Auth from './pages/Auth';
+import VerifyEmail from './pages/VerifyEmail';
+import ResetPassword from './pages/ResetPassword';
 
 import ResearchWorkspace from './features/research/ResearchWorkspace';
 import UserSettingsPanel from './components/UserSettingsPanel';
@@ -17,6 +19,9 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+
             <Route
               path="/app"
               element={
