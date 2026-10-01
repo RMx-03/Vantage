@@ -31,6 +31,25 @@ class EmailTokenRepository:
             )
         return raw
 
+    def peek(self, raw_token: str, *, purpose: str) -> ConsumedToken | None:
+        """Return what a token would yield, without spending it.
+
+        Lets a caller validate input against the token (a new password against
+        the address it was sent to) before committing the single use. Same
+        failure semantics as consume: every invalid case is None.
+        """
+        digest = hash_opaque_token(raw_token)
+        now = datetime.now(UTC)
+        with SessionFactory() as session:
+            row = session.execute(
+                select(EmailTokenRow).where(EmailTokenRow.token_hash == digest)
+            ).scalar_one_or_none()
+            if row is None or row.purpose != purpose:
+                return None
+            if row.consumed_at is not None or row.expires_at <= now:
+                return None
+            return ConsumedToken(user_id=row.user_id, email=row.email)
+
     def consume(self, raw_token: str, *, purpose: str) -> ConsumedToken | None:
         """Atomically spend a token. Returns None for every failure mode.
 

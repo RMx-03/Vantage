@@ -87,14 +87,23 @@ class AccountService:
         self._deliver(password_reset_message(user.email, raw))
 
     def reset_password(self, raw_token: str, new_password: str) -> None:
+        invalid = VantageError(
+            code=AUTH_INVALID,
+            safe_message="This link is invalid or has expired. Request a new one.",
+        )
+        # Validate before spending the single-use link. Consuming first meant a
+        # rejected weak password burned the link and sent the user back to
+        # their inbox.
+        pending = self._tokens.peek(raw_token, purpose=_RESET)
+        if pending is None:
+            raise invalid
+        checked = validate_password(new_password, email=pending.email)
+
+        # consume() locks the row, so of two concurrent submissions exactly one
+        # wins; the other is told the link is spent.
         consumed = self._tokens.consume(raw_token, purpose=_RESET)
         if consumed is None:
-            raise VantageError(
-                code=AUTH_INVALID,
-                safe_message="This link is invalid or has expired. Request a new one.",
-            )
-
-        checked = validate_password(new_password, email=consumed.email)
+            raise invalid
         self._users.update_password(
             consumed.user_id,
             password_hash=hash_password(checked),

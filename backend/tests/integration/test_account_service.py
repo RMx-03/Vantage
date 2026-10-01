@@ -143,3 +143,21 @@ def test_registration_survives_a_mail_outage() -> None:
     assert stored is not None
     failing.send_verification(stored.id, email)  # must not raise
     assert UserRepository().find_by_email(email) is not None
+
+
+def test_a_rejected_weak_password_does_not_burn_the_reset_link(
+    accounts: AccountService, sender: RecordingSender
+) -> None:
+    """The link is single-use, so it must only be spent on a password that is
+    actually accepted. Consuming it first meant one typo of a short password
+    forced the user back to their inbox for a new link."""
+    email, _ = _new_user(accounts)
+    accounts.request_password_reset(email)
+    token = _token_from(sender.sent[-1])
+
+    with pytest.raises(VantageError) as excinfo:
+        accounts.reset_password(token, "short")
+    assert excinfo.value.code == AUTH_WEAK_PASSWORD
+
+    accounts.reset_password(token, NEW_PASSWORD)
+    AuthService().login(email=email, password=NEW_PASSWORD)

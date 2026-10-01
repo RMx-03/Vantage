@@ -326,9 +326,9 @@ def reset_password(
     try:
         accounts.reset_password(payload.token, payload.password)
     except VantageError as exc:
-        failure = vantage_error_response(exc, status_code=status.HTTP_400_BAD_REQUEST)
-        _clear_refresh_cookie(failure)
-        return failure
+        # Nothing was revoked on failure, so the session cookie stays. Clearing
+        # it on an expired link or a weak password signed out a valid session.
+        return vantage_error_response(exc, status_code=status.HTTP_400_BAD_REQUEST)
     # Every session was revoked; the browser's cookie is now dead.
     _clear_refresh_cookie(response)
     return AcceptedResponse(message="Your password has been changed. Sign in again.")

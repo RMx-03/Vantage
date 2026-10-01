@@ -117,3 +117,14 @@ def test_forgot_password_is_rate_limited(
         client.post("/api/v1/auth/forgot-password", json={"email": email}).status_code
         == 429
     )
+
+
+def test_a_failed_reset_leaves_the_session_cookie_alone(client: TestClient) -> None:
+    """Nothing was revoked, so there is nothing to clear. Deleting the cookie
+    on an expired link or a weak password signed out a valid session."""
+    response = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "not-a-real-token", "password": "a brand new passphrase"},
+    )
+    assert response.status_code == 400
+    assert "vantage_refresh=" not in response.headers.get("set-cookie", "")
