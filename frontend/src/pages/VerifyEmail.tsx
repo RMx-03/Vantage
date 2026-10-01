@@ -5,6 +5,22 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { resendVerification, verifyEmail } from '../lib/authClient';
 
+// Verification tokens are single-use, so each one is sent to the server at most
+// once per page load. React StrictMode mounts effects twice in development, and
+// any remount would otherwise do the same: the first request spends the token,
+// the second is rejected, and a just-verified user is told the link expired.
+// Both runs share one request instead.
+const verifications = new Map<string, Promise<void>>();
+
+function verifyOnce(token: string): Promise<void> {
+  let pending = verifications.get(token);
+  if (!pending) {
+    pending = verifyEmail(token);
+    verifications.set(token, pending);
+  }
+  return pending;
+}
+
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -24,7 +40,7 @@ export default function VerifyEmail() {
     if (!token) return;
 
     let active = true;
-    verifyEmail(token)
+    verifyOnce(token)
       .then(() => {
         if (!active) return;
         setStatus('success');
