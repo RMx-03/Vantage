@@ -147,6 +147,8 @@ class Settings(BaseSettings):
     AUTH_REGISTER_WINDOW_SECONDS: int = Field(default=3600, gt=0)
     AUTH_LOGIN_MAX_ATTEMPTS: int = Field(default=10, gt=0)
     AUTH_LOGIN_WINDOW_SECONDS: int = Field(default=900, gt=0)
+    AUTH_EMAIL_ACTION_MAX_ATTEMPTS: int = Field(default=5, gt=0)
+    AUTH_EMAIL_ACTION_WINDOW_SECONDS: int = Field(default=3600, gt=0)
 
     # ------------------------------------------------------------------
     # Transactional email (Phase 2C)

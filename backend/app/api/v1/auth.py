@@ -1,15 +1,22 @@
 import hashlib
 
 from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
 from app.api.client_ip import client_ip
 from app.api.errors import vantage_error_response
 from app.api.deps import AuthenticatedUser, get_current_user
 from app.core.config import settings
-from app.domain.auth import AUTH_REQUIRED, GENERIC_ACCEPTED_MESSAGE
+from app.domain.auth import (
+    AUTH_RATE_LIMITED,
+    AUTH_REQUIRED,
+    GENERIC_ACCEPTED_MESSAGE,
+)
 from app.domain.errors import VantageError
+from app.repositories.auth_attempts import AuthAttemptRepository, attempt_key
 from app.repositories.users import UserRepository
+from app.services.account import AccountService
 from app.services.auth import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -213,3 +220,127 @@ def me(user: AuthenticatedUser = Depends(get_current_user)) -> MeResponse:
         email=stored.email,
         email_verified=stored.email_verified,
     )
+
+
+class EmailRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str
+
+
+class TokenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str
+
+
+class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str
+    password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    current_password: str
+    new_password: str
+
+
+def get_account_service() -> AccountService:
+    return AccountService()
+
+
+def get_attempt_repository() -> AuthAttemptRepository:
+    return AuthAttemptRepository()
+
+
+@router.post("/verify-email", response_model=AcceptedResponse)
+def verify_email(
+    payload: TokenRequest,
+    accounts: AccountService = Depends(get_account_service),
+) -> AcceptedResponse | JSONResponse:
+    try:
+        accounts.verify_email(payload.token)
+    except VantageError as exc:
+        return vantage_error_response(exc, status_code=status.HTTP_400_BAD_REQUEST)
+    return AcceptedResponse(message="Your address is confirmed.")
+
+
+@router.post(
+    "/resend-verification",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=AcceptedResponse,
+)
+def resend_verification(
+    payload: EmailRequest,
+    accounts: AccountService = Depends(get_account_service),
+    attempts: AuthAttemptRepository = Depends(get_attempt_repository),
+) -> AcceptedResponse:
+    key = attempt_key("resend", str(payload.email))
+    if attempts.is_rate_limited(
+        key,
+        window_seconds=settings.AUTH_EMAIL_ACTION_WINDOW_SECONDS,
+        max_attempts=settings.AUTH_EMAIL_ACTION_MAX_ATTEMPTS,
+    ):
+        raise VantageError(
+            code=AUTH_RATE_LIMITED,
+            safe_message="Too many attempts. Try again shortly.",
+            retryable=True,
+        )
+    attempts.record(key)
+    accounts.resend_verification(str(payload.email))
+    return AcceptedResponse(message=GENERIC_ACCEPTED_MESSAGE)
+
+
+@router.post(
+    "/forgot-password",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=AcceptedResponse,
+)
+def forgot_password(
+    payload: EmailRequest,
+    accounts: AccountService = Depends(get_account_service),
+    attempts: AuthAttemptRepository = Depends(get_attempt_repository),
+) -> AcceptedResponse:
+    key = attempt_key("reset", str(payload.email))
+    if attempts.is_rate_limited(
+        key,
+        window_seconds=settings.AUTH_EMAIL_ACTION_WINDOW_SECONDS,
+        max_attempts=settings.AUTH_EMAIL_ACTION_MAX_ATTEMPTS,
+    ):
+        raise VantageError(
+            code=AUTH_RATE_LIMITED,
+            safe_message="Too many attempts. Try again shortly.",
+            retryable=True,
+        )
+    attempts.record(key)
+    accounts.request_password_reset(str(payload.email))
+    # Identical body for registered and unregistered addresses.
+    return AcceptedResponse(message=GENERIC_ACCEPTED_MESSAGE)
+
+
+@router.post("/reset-password", response_model=AcceptedResponse)
+def reset_password(
+    payload: ResetPasswordRequest,
+    response: Response,
+    accounts: AccountService = Depends(get_account_service),
+) -> AcceptedResponse | JSONResponse:
+    try:
+        accounts.reset_password(payload.token, payload.password)
+    except VantageError as exc:
+        failure = vantage_error_response(exc, status_code=status.HTTP_400_BAD_REQUEST)
+        _clear_refresh_cookie(failure)
+        return failure
+    # Every session was revoked; the browser's cookie is now dead.
+    _clear_refresh_cookie(response)
+    return AcceptedResponse(message="Your password has been changed. Sign in again.")
+
+
+@router.post("/change-password", response_model=AcceptedResponse)
+def change_password(
+    payload: ChangePasswordRequest,
+    response: Response,
+    user: AuthenticatedUser = Depends(get_current_user),
+    accounts: AccountService = Depends(get_account_service),
+) -> AcceptedResponse:
+    accounts.change_password(user.id, payload.current_password, payload.new_password)
+    _clear_refresh_cookie(response)
+    return AcceptedResponse(message="Your password has been changed. Sign in again.")
