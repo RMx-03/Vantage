@@ -15,8 +15,9 @@ from uuid import UUID
 from app.core.config import settings
 from app.core.security.passwords import PASSWORD_ALGO, hash_password, verify_password
 from app.core.security.policy import normalize_email, validate_password
-from app.domain.auth import AUTH_INVALID, INVALID_CREDENTIALS_MESSAGE
+from app.domain.auth import AUTH_INVALID, AUTH_RATE_LIMITED, INVALID_CREDENTIALS_MESSAGE
 from app.domain.errors import VantageError
+from app.repositories.auth_attempts import AuthAttemptRepository, attempt_key
 from app.repositories.email_tokens import EmailTokenRepository
 from app.repositories.refresh_tokens import RefreshTokenRepository
 from app.repositories.users import UserRepository
@@ -40,8 +41,10 @@ class AccountService:
         email_tokens: EmailTokenRepository | None = None,
         refresh_tokens: RefreshTokenRepository | None = None,
         email_sender: EmailSender | None = None,
+        attempts: AuthAttemptRepository | None = None,
     ) -> None:
         self._users = users or UserRepository()
+        self._attempts = attempts or AuthAttemptRepository()
         self._tokens = email_tokens or EmailTokenRepository()
         self._refresh = refresh_tokens or RefreshTokenRepository()
         self._sender = email_sender or get_email_sender()
@@ -119,11 +122,28 @@ class AccountService:
     def change_password(
         self, user_public_id: UUID, current_password: str, new_password: str
     ) -> None:
+        # Guesses at the current password are throttled exactly like login.
+        # This endpoint checks the same secret, and a stolen access token would
+        # otherwise buy unlimited attempts at it.
+        key = attempt_key("change-password", str(user_public_id))
+        if self._attempts.is_rate_limited(
+            key,
+            window_seconds=settings.AUTH_LOGIN_WINDOW_SECONDS,
+            max_attempts=settings.AUTH_LOGIN_MAX_ATTEMPTS,
+        ):
+            raise VantageError(
+                code=AUTH_RATE_LIMITED,
+                safe_message="Too many attempts. Try again shortly.",
+                retryable=True,
+            )
+
         user = self._users.find_by_public_id(user_public_id)
         if user is None or not verify_password(current_password, user.password_hash):
+            self._attempts.record(key)
             raise VantageError(
                 code=AUTH_INVALID, safe_message=INVALID_CREDENTIALS_MESSAGE
             )
+        self._attempts.clear(key)
 
         checked = validate_password(new_password, email=user.email)
         self._users.update_password(

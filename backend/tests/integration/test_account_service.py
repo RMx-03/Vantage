@@ -161,3 +161,48 @@ def test_a_rejected_weak_password_does_not_burn_the_reset_link(
 
     accounts.reset_password(token, NEW_PASSWORD)
     AuthService().login(email=email, password=NEW_PASSWORD)
+
+
+def test_change_password_limits_guesses_at_the_current_password(
+    accounts: AccountService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whoever holds an access token, including a stolen one, must not get
+    unlimited guesses at the current password. Login was throttled and this
+    endpoint, which checks the same secret, was not."""
+    from app.core.config import settings
+    from app.domain.auth import AUTH_RATE_LIMITED
+
+    monkeypatch.setattr(settings, "AUTH_LOGIN_MAX_ATTEMPTS", 3)
+    email, _ = _new_user(accounts)
+    stored = UserRepository().find_by_email(email)
+    assert stored is not None
+
+    for _ in range(3):
+        with pytest.raises(VantageError) as wrong:
+            accounts.change_password(stored.public_id, "not the password", NEW_PASSWORD)
+        assert wrong.value.code == AUTH_INVALID
+
+    with pytest.raises(VantageError) as limited:
+        accounts.change_password(stored.public_id, PASSWORD, NEW_PASSWORD)
+    assert limited.value.code == AUTH_RATE_LIMITED
+
+
+def test_a_successful_password_change_clears_the_guess_count(
+    accounts: AccountService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "AUTH_LOGIN_MAX_ATTEMPTS", 3)
+    email, _ = _new_user(accounts)
+    stored = UserRepository().find_by_email(email)
+    assert stored is not None
+
+    for _ in range(2):
+        with pytest.raises(VantageError):
+            accounts.change_password(stored.public_id, "not the password", NEW_PASSWORD)
+    accounts.change_password(stored.public_id, PASSWORD, NEW_PASSWORD)
+
+    for _ in range(2):
+        with pytest.raises(VantageError) as wrong:
+            accounts.change_password(stored.public_id, "still wrong", PASSWORD)
+        assert wrong.value.code == AUTH_INVALID
