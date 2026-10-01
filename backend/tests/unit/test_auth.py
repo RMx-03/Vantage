@@ -63,3 +63,20 @@ async def test_expired_native_token_reports_expiry_not_invalid() -> None:
 
 def test_repository_dependency_returns_owner_scoped_repository() -> None:
     assert isinstance(deps.get_research_repository(), ResearchRunRepository)
+
+
+def test_an_authenticated_user_must_state_whether_it_is_verified() -> None:
+    """email_verified gates research runs, so it must never default open.
+
+    A default of True meant any code that built an AuthenticatedUser and forgot
+    the field produced a verified user, silently bypassing the gate. Every other
+    part of the auth layer fails closed; this must too.
+    """
+    from uuid import uuid4
+
+    from pydantic import ValidationError
+
+    from app.api.deps import AuthenticatedUser
+
+    with pytest.raises(ValidationError):
+        AuthenticatedUser(id=uuid4())  # type: ignore[call-arg]

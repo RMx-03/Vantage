@@ -369,7 +369,8 @@ def test_disabled_model_skips_workflow_call_and_exposes_null_model_info(
         interpretation_provider=provider,
     )
     app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
-        id=test_user_id
+        id=test_user_id,
+        email_verified=True,
     )
     app.dependency_overrides[get_research_service] = lambda: service
     try:
@@ -451,8 +452,8 @@ def client(service, tracking_repo, test_user_id: UUID, other_user_id: UUID):
             "Authorization", ""
         )
         if str(other_user_id) in auth_str:
-            return AuthenticatedUser(id=other_user_id)
-        return AuthenticatedUser(id=test_user_id)
+            return AuthenticatedUser(id=other_user_id, email_verified=True)
+        return AuthenticatedUser(id=test_user_id, email_verified=True)
 
     app.dependency_overrides[get_current_user] = fake_auth
     app.dependency_overrides[get_research_service] = lambda: service
@@ -795,7 +796,8 @@ def test_run_already_finalized_maps_to_conflict(
             )
 
     app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
-        id=test_user_id
+        id=test_user_id,
+        email_verified=True,
     )
     app.dependency_overrides[get_research_service] = lambda: ConflictService()
     try:

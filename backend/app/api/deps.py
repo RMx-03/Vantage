@@ -18,7 +18,9 @@ from app.telemetry.tracing import get_tracer
 class AuthenticatedUser(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: UUID
-    email_verified: bool = True
+    # Required, with no default. It gates research runs, so it must never fail
+    # open: code that forgets it is a validation error, not a verified user.
+    email_verified: bool
 
 
 _bearer_scheme = HTTPBearer(auto_error=False)
