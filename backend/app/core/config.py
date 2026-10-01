@@ -149,6 +149,20 @@ class Settings(BaseSettings):
     AUTH_LOGIN_WINDOW_SECONDS: int = Field(default=900, gt=0)
 
     # ------------------------------------------------------------------
+    # Transactional email (Phase 2C)
+    # ------------------------------------------------------------------
+    # "noop" logs instead of sending, and is the default everywhere except
+    # production so no test or local run can mail a real person.
+    EMAIL_PROVIDER: str = "noop"
+    BREVO_API_KEY: str = ""
+    EMAIL_FROM: str = "Vantage <noreply@example.invalid>"
+    EMAIL_TIMEOUT_SECONDS: int = Field(default=10, gt=0)
+    # Public origin used to build verification and reset links.
+    APP_BASE_URL: str = "http://localhost:5173"
+    EMAIL_VERIFICATION_TTL_SECONDS: int = Field(default=86400, gt=0)
+    PASSWORD_RESET_TTL_SECONDS: int = Field(default=3600, gt=0)
+
+    # ------------------------------------------------------------------
     # Database (PostgreSQL)
     # ------------------------------------------------------------------
     DATABASE_URL: str = "postgresql+psycopg://vantage_runtime:vantage_runtime@localhost:5433/vantage_test"
