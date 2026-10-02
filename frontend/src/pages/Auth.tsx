@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { forgotPassword } from '../lib/authClient';
+import { forgotPassword, resendVerification } from '../lib/authClient';
 
 type Mode = 'login' | 'register';
 
@@ -17,6 +17,7 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [justRegistered, setJustRegistered] = useState(false);
 
   const handleForgotPassword = async () => {
     if (!email.trim()) {
@@ -32,6 +33,27 @@ export default function Auth() {
     } catch {
       setInfo('If that address can receive mail, a message is on its way.');
     } finally {
+      setLoading(false);
+    }
+  };
+
+  // Resend lives here, not only inside the app. A user whose first email never
+  // arrived lands on this page; with no way to ask again they registered a
+  // second time. Same generic answer as the backend, whatever the outcome.
+  const handleResendVerification = async () => {
+    if (!email.trim()) {
+      setError('Enter your email address to resend the verification link.');
+      return;
+    }
+    setError(null);
+    setInfo(null);
+    setLoading(true);
+    try {
+      await resendVerification(email.trim());
+    } catch {
+      // Deliberately ignored: the message must not depend on the outcome.
+    } finally {
+      setInfo('If that address can receive mail, a message is on its way.');
       setLoading(false);
     }
   };
@@ -52,6 +74,7 @@ export default function Auth() {
         // address was already registered, so the form cannot be used to
         // discover who has an account.
         setInfo('If that address can receive mail, a message is on its way.');
+        setJustRegistered(true);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
@@ -106,7 +129,7 @@ export default function Auth() {
           <div className="flex p-1 bg-surface-container-lowest border border-surface-variant mb-8 relative z-10">
             <button
               type="button"
-              onClick={() => { setMode('login'); setError(null); setInfo(null); }}
+              onClick={() => { setMode('login'); setError(null); setInfo(null); setJustRegistered(false); }}
               className={`flex-1 py-3 text-sm font-headline font-medium transition-colors duration-200 ${
                 mode === 'login'
                   ? 'text-on-surface bg-surface-bright'
@@ -118,7 +141,7 @@ export default function Auth() {
             <button
               type="button"
               aria-label="Create Account mode"
-              onClick={() => { setMode('register'); setError(null); setInfo(null); }}
+              onClick={() => { setMode('register'); setError(null); setInfo(null); setJustRegistered(false); }}
               className={`flex-1 py-3 text-sm font-headline font-medium transition-colors duration-200 ${
                 mode === 'register'
                   ? 'text-on-surface bg-surface-bright'
@@ -138,6 +161,16 @@ export default function Auth() {
           {info && (
             <div className="mb-6 px-4 py-3 border border-primary bg-primary/10 text-primary text-xs font-label uppercase tracking-wider relative z-10">
               {info}
+              {justRegistered && mode === 'register' && (
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={loading}
+                  className="block mt-2 underline font-label text-xs uppercase tracking-wider text-primary hover:text-on-surface transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Resend verification email
+                </button>
+              )}
             </div>
           )}
 
@@ -213,13 +246,22 @@ export default function Auth() {
                     Retain Session
                   </label>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleForgotPassword}
-                  className="font-label text-xs uppercase tracking-wider text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-                >
-                  Forgot Credential?
-                </button>
+                <div className="flex flex-col items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="font-label text-xs uppercase tracking-wider text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+                  >
+                    Forgot Credential?
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    className="font-label text-xs uppercase tracking-wider text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+                  >
+                    Resend verification email
+                  </button>
+                </div>
               </div>
             )}
 
