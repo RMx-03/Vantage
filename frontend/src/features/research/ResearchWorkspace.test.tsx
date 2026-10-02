@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,14 +30,15 @@ vi.mock('react-router-dom', async (importOriginal) => {
   };
 });
 
+import { mockSignedIn } from '../../test/authHelpers';
+import { useAuth } from '../../context/AuthContext';
+
 const authMock = vi.hoisted(() => ({
   user: null as { id: string; email: string } | null,
   signOut: vi.fn(),
   // When true, useAuth resolves through the real AuthProvider instead of the
   // stub, so one test can exercise the provider/workspace seam end to end.
   useRealProvider: false,
-  listeners: [] as Array<(event: string, session: unknown) => void>,
-  session: null as { user: { id: string } } | null,
 }));
 vi.mock('../../context/AuthContext', async (importOriginal) => {
   const actual =
@@ -50,18 +52,17 @@ vi.mock('../../context/AuthContext', async (importOriginal) => {
   };
 });
 
-vi.mock('../../lib/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: () => Promise.resolve({ data: { session: authMock.session } }),
-      onAuthStateChange: (listener: (event: string, session: unknown) => void) => {
-        authMock.listeners.push(listener);
-        return { data: { subscription: { unsubscribe: vi.fn() } } };
-      },
-      signOut: () => Promise.resolve({ error: null }),
-    },
-  },
-}));
+let switchWorkspaceOwner: ((id: string) => Promise<void>) | null = null;
+function WorkspaceAuthBridge() {
+  const { refreshUser } = useAuth();
+  useEffect(() => {
+    switchWorkspaceOwner = async (id: string) => {
+      mockSignedIn({ id, email: `${id}@example.com`, email_verified: true });
+      await refreshUser();
+    };
+  }, [refreshUser]);
+  return null;
+}
 
 import type { SafeError } from '../../types/research';
 
@@ -114,10 +115,9 @@ function deferred<T>() {
 describe('ResearchWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSignedIn({ id: 'user-a', email: 'test@example.com', email_verified: true });
     authMock.user = { id: 'user-a', email: 'test@example.com' };
     authMock.useRealProvider = false;
-    authMock.listeners.length = 0;
-    authMock.session = null;
     vi.mocked(api.listResearchRuns).mockResolvedValue({
       items: [],
       next_cursor: null,
@@ -451,7 +451,7 @@ describe('ResearchWorkspace', () => {
 
   it('drops the previous owner workspace state when the real provider switches owner', async () => {
     authMock.useRealProvider = true;
-    authMock.session = { user: { id: 'user-a' } };
+    mockSignedIn({ id: 'user-a', email: 'user-a@example.com', email_verified: true });
     vi.mocked(api.createResearchRun).mockResolvedValueOnce(informationalRun);
 
     const queryClient = new QueryClient({
@@ -460,6 +460,7 @@ describe('ResearchWorkspace', () => {
     renderWithRouter(
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <WorkspaceAuthBridge />
           <Routes>
             <Route path="/app/research" element={<ResearchWorkspace />} />
             <Route path="/app/research/:runId" element={<ResearchWorkspace />} />
@@ -479,11 +480,8 @@ describe('ResearchWorkspace', () => {
     await userEvent.click(screen.getByRole('button', { name: /Run research/i }));
     expect(await screen.findByText(informationalRun.summary!)).toBeVisible();
 
-    authMock.session = { user: { id: 'user-b' } };
     await act(async () => {
-      authMock.listeners.forEach((listener) =>
-        listener('SIGNED_IN', authMock.session)
-      );
+      await switchWorkspaceOwner?.('user-b');
     });
 
     await waitFor(() =>
@@ -496,7 +494,7 @@ describe('ResearchWorkspace', () => {
   it('drops a pending run result after the real provider switches owner', async () => {
     const pendingRun = deferred<typeof informationalRun>();
     authMock.useRealProvider = true;
-    authMock.session = { user: { id: 'user-a' } };
+    mockSignedIn({ id: 'user-a', email: 'user-a@example.com', email_verified: true });
     vi.mocked(api.createResearchRun).mockReturnValueOnce(pendingRun.promise);
 
     const queryClient = new QueryClient({
@@ -505,6 +503,7 @@ describe('ResearchWorkspace', () => {
     renderWithRouter(
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <WorkspaceAuthBridge />
           <Routes>
             <Route path="/app/research" element={<ResearchWorkspace />} />
             <Route path="/app/research/:runId" element={<ResearchWorkspace />} />
@@ -523,11 +522,8 @@ describe('ResearchWorkspace', () => {
     );
 
     mockNavigate.mockClear();
-    authMock.session = { user: { id: 'user-b' } };
     await act(async () => {
-      authMock.listeners.forEach((listener) =>
-        listener('SIGNED_IN', authMock.session)
-      );
+      await switchWorkspaceOwner?.('user-b');
     });
 
     await waitFor(() =>

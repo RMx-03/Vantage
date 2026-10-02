@@ -103,12 +103,6 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
-    # Supabase Authentication
-    # ------------------------------------------------------------------
-    SUPABASE_URL: str = ""
-    SUPABASE_KEY: str = ""
-
-    # ------------------------------------------------------------------
     # First-party authentication (Phase 2)
     # ------------------------------------------------------------------
     # HS256 signing secret for access tokens. There is deliberately no
@@ -119,6 +113,12 @@ class Settings(BaseSettings):
     AUTH_JWT_AUDIENCE: str = "vantage-api"
     AUTH_ACCESS_TOKEN_TTL_SECONDS: int = Field(default=900, gt=0)
     AUTH_REFRESH_TOKEN_TTL_SECONDS: int = Field(default=2592000, gt=0)
+    # How long a just-rotated refresh token may be presented again without being
+    # treated as theft. Covers a page reload landing after the server rotated
+    # but before the browser stored the new cookie. Honoured once per token and
+    # only while its successor is unused, so it never helps a thief who replays
+    # after the real client has moved on. 0 disables it.
+    AUTH_REFRESH_REUSE_GRACE_SECONDS: int = Field(default=10, ge=0)
     AUTH_COOKIE_NAME: str = "vantage_refresh"
     # Only ever false for local plain-HTTP development.
     AUTH_COOKIE_SECURE: bool = True
@@ -131,6 +131,15 @@ class Settings(BaseSettings):
     # Empty means host-only, which is what production uses. `vercel.app` is on the
     # Public Suffix List, so a Domain-scoped cookie cannot be set there anyway.
     AUTH_COOKIE_DOMAIN: str = ""
+    # How many proxies in front of the app append to X-Forwarded-For. 0 means
+    # none: use the socket peer and ignore the header, which any caller can set.
+    # Production is 2 — Vercel overwrites the header with the real client, then
+    # Heroku's router appends the Vercel edge — making the client the second
+    # entry from the right. Wrong here, every user shares one rate-limit bucket.
+    TRUSTED_PROXY_HOPS: int = Field(default=0, ge=0)
+    # Concurrent Argon2 hashes allowed. Each needs 19 MiB; this bounds memory on
+    # the 512 MB dyno even if per-client rate limits are evaded.
+    ARGON2_MAX_CONCURRENCY: int = Field(default=4, gt=0)
     # Generous on purpose: corporate NAT, campus networks and mobile CGNAT
     # put many legitimate users behind one address. This bounds the Argon2
     # flood, it is not an anti-abuse control.

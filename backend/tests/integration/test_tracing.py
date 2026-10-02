@@ -37,6 +37,7 @@ from app.services.research_run import (
     ResearchRunService,
     get_research_service,
 )
+from app.repositories.users import UserRepository
 from app.telemetry.redaction import (
     ALLOWED_ATTRIBUTES,
     RedactingSpanProcessor,
@@ -52,8 +53,8 @@ from app.telemetry.tracing import (
 
 
 @pytest.fixture
-def test_user_id() -> UUID:
-    return uuid4()
+def test_user_id(make_user) -> UUID:
+    return make_user("trace")
 
 
 @pytest.fixture

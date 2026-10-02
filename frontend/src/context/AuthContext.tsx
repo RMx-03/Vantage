@@ -1,55 +1,62 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+
+import * as authClient from '../lib/authClient';
+import type { AuthUser } from '../types/auth';
 
 interface AuthContextValue {
-  session: Session | null;
-  user: User | null;
+  user: AuthUser | null;
   loading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
-  session: null,
   user: null,
   loading: true,
+  signIn: async () => {},
+  signUp: async () => {},
   signOut: async () => {},
+  refreshUser: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const queryClient = useQueryClient();
   const ownerIdRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  // Advanced by every sign-in and sign-out. A hydration that started under an
+  // earlier generation is describing a session that no longer exists, and its
+  // result must be dropped rather than applied over the newer one.
+  const generationRef = useRef(0);
+  // Re-arms the proactive refresh after a transient failure.
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
-    // The initial getSession() promise races the auth-state subscription: it
-    // can resolve after a newer event has already switched owners. Applying it
-    // then would switch the app back to the previous owner and purge the
-    // current owner's cache, so once any auth event has been applied the
-    // hydration result is stale by definition and must be dropped.
-    let authEventApplied = false;
-    let disposed = false;
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-    const applySession = (nextSession: Session | null) => {
-      const nextOwnerId = nextSession?.user?.id ?? null;
+  const applyUser = useCallback(
+    (nextUser: AuthUser | null) => {
+      if (!mountedRef.current) return;
+      const nextOwnerId = nextUser?.id ?? null;
 
       if (nextOwnerId !== ownerIdRef.current) {
         // The signed-in owner changed (sign-in, sign-out, account switch).
         // Drop every owner-scoped research query before the next owner can
         // render, so cached rows never outlive the session that fetched them.
         //
-        // INVARIANT: these are all owner-scoped query key roots in the app.
-        // If another owner-scoped query is added, add its root here before it ships.
+        // INVARIANT: every owner-scoped query key root must be purged here.
+        // If you add a query whose data belongs to one user, add its root to
+        // this list — otherwise the next user signed into the same browser
+        // can render the previous user's rows from the cache.
         for (const root of [['research-runs'], ['research-run']]) {
           void queryClient.cancelQueries({ queryKey: root });
           queryClient.removeQueries({ queryKey: root });
@@ -57,39 +64,99 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ownerIdRef.current = nextOwnerId;
       }
 
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-    };
+      setUser(nextUser);
+    },
+    [queryClient]
+  );
 
-    // Hydrate from an existing persisted session on first mount.
-    supabase.auth.getSession().then(({ data }) => {
-      if (disposed) return;
-      if (!authEventApplied) {
-        applySession(data.session);
+  const hydrate = useCallback(async (): Promise<authClient.RefreshOutcome> => {
+    const generation = generationRef.current;
+    const stale = () => !mountedRef.current || generation !== generationRef.current;
+
+    let outcome: authClient.RefreshOutcome;
+    try {
+      outcome = await authClient.refreshSession();
+    } catch {
+      outcome = 'unavailable';
+    }
+    if (stale()) return outcome;
+
+    if (outcome === 'unauthenticated') {
+      applyUser(null);
+      return outcome;
+    }
+    if (outcome === 'unavailable') {
+      // Keep the current user. A network blip or a 5xx says nothing about
+      // whether the session is valid, and signing out here would wipe an
+      // active user's session and cache on every hiccup.
+      return outcome;
+    }
+
+    try {
+      const me = await authClient.fetchMe();
+      if (stale()) return outcome;
+      applyUser(me);
+      return outcome;
+    } catch (error) {
+      if (stale()) return 'unavailable';
+      if (error instanceof authClient.AuthApiError && error.status === 401) {
+        applyUser(null);
+        return 'unauthenticated';
       }
-      setLoading(false);
+      return 'unavailable';
+    }
+  }, [applyUser]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void hydrate().finally(() => {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     });
+  }, [hydrate]);
 
-    // Subscribe to future auth state changes (login, logout, token refresh).
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      authEventApplied = true;
-      applySession(newSession);
-    });
+  // Proactively refresh shortly before expiry so an active user never sees a
+  // request fail. The 401 path in researchRuns.ts remains the safety net.
+  useEffect(() => {
+    if (!user) return;
+    const leadMs = 60_000;
+    const delay = Math.max(authClient.accessTokenExpiresAt() - Date.now() - leadMs, 5_000);
+    const timer = window.setTimeout(() => {
+      void hydrate().then((outcome) => {
+        if (outcome === 'unavailable' && mountedRef.current) {
+          setRetryNonce((n) => n + 1);
+        }
+      });
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [user, hydrate, retryNonce]);
 
-    return () => {
-      disposed = true;
-      subscription.unsubscribe();
-    };
-  }, [queryClient]);
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      generationRef.current += 1;
+      await authClient.login(email, password);
+      applyUser(await authClient.fetchMe());
+    },
+    [applyUser]
+  );
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-  };
+  const signUp = useCallback(async (email: string, password: string) => {
+    await authClient.register(email, password);
+  }, []);
+
+  const signOut = useCallback(async () => {
+    generationRef.current += 1;
+    await authClient.logout();
+    applyUser(null);
+  }, [applyUser]);
+
+  const refreshUser = useCallback(async () => {
+    await hydrate();
+  }, [hydrate]);
 
   return (
-    <AuthContext.Provider value={{ session, user, loading, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

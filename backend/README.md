@@ -6,7 +6,7 @@ The backend executes durable, synchronous, end-of-day research runs for supporte
 
 - FastAPI on Python 3.12, managed with `uv`
 - PostgreSQL 17 through SQLAlchemy 2 and psycopg 3; Alembic owns schema changes
-- Supabase Auth only for bearer-token identity; research data is stored in PostgreSQL
+- First-party email/password identity issuing short-lived JWT access tokens; research data is stored in PostgreSQL
 - Provider protocols in `app/providers/contracts.py`; the Phase 1 adapter is `YFinanceSnapshotProvider`
 - LangGraph for the deterministic metrics → optional interpretation → policy workflow
 - OpenTelemetry spans with allowlisted attributes and optional Langfuse v4 export
@@ -15,7 +15,7 @@ The backend executes durable, synchronous, end-of-day research runs for supporte
 
 ## API
 
-All research routes require a valid Supabase bearer token.
+All research routes require a valid Vantage access token.
 
 - `POST /api/v1/research-runs` creates and completes one run synchronously
 - `GET /api/v1/research-runs/{run_id}` retrieves an owner-scoped run
@@ -31,7 +31,7 @@ Stale, invalid, or insufficient price series produce a typed `insufficient_data`
 
 ## Local configuration
 
-Copy `.env.example` to `.env`. Required production values include Supabase credentials, separate database URLs, a high-entropy telemetry salt, and provider credentials for the selected LLM.
+Copy `.env.example` to `.env`. Required production values include `AUTH_JWT_SECRET`, separate database URLs, a high-entropy telemetry salt, and provider credentials for the selected LLM.
 
 The database split is intentional:
 
