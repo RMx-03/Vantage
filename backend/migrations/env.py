@@ -9,6 +9,12 @@ from app.db.base import Base
 from app.db.urls import normalize_database_url
 import app.db.models  # noqa: F401
 
+# Autogenerate compares the database against Base.metadata, so every module
+# defining mapped tables must be imported here. A missing import does not fail
+# loudly: the tables are simply absent from the metadata, and the next
+# --autogenerate emits drop_table for all of them.
+import app.db.auth_models  # noqa: F401
+
 config = context.config
 
 if config.config_file_name is not None:
