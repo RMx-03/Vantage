@@ -85,6 +85,15 @@ Heroku's `postgres://` database URLs are normalized to SQLAlchemy's `postgresql+
 
 The initial migration revokes `PUBLIC` access. Its downgrade deliberately raises an error because research history is immutable. Roll back application code by deploying the prior application version; use a reviewed forward migration for schema corrections.
 
+### Production database
+
+Heroku Postgres Essential-tier plans (`essential-0`) expose exactly one database credential. In production:
+- `MIGRATION_DATABASE_URL` is left unset, so Alembic migrations fall back to `DATABASE_URL`. The owner/runtime role separation exists only in Compose and CI.
+- Connecting to remote hosts requires TLS (`sslmode=require` is enforced automatically by `normalize_database_url` for all non-local hosts).
+- The connection pool is sized with `POOL_SIZE = 5` and `MAX_OVERFLOW = 2` (plus `pool_recycle = 280`), allocating at most 7 connections for the single web process. This leaves headroom under Essential-0's 20-connection ceiling for release-phase migrations, scheduled maintenance jobs, and administrative `heroku pg:psql` sessions.
+- `WEB_CONCURRENCY` must stay unset (single web process) unless the connection pool bounds are re-sized to prevent exhausting database connection limits and dyno memory.
+
+
 From the repository root, `docker compose up --build` creates the local owner/runtime roles, applies migrations, and then starts the API. For a manual backend setup:
 
 ```bash

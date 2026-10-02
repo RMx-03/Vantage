@@ -180,8 +180,7 @@ Every push runs four jobs:
 - **Frontend Tests, Lint & Build.** Dependency audit, unit tests with coverage, lint, a design-system check, and a production build.
 - **Mocked Browser Journey.** A Playwright run of the user journey against the development server, with the API mocked. This tests what the user sees, not the backend.
 - **Production Container Smoke Test.** Builds the production images, migrates a fresh database, and checks the following:
-  - the database grants nothing to the public role;
-  - the runtime role cannot change the schema;
+  - the database grants nothing to the public role and the runtime role cannot change the schema (these role checks hold only where two roles exist, in Compose and CI; production's Essential-tier database has one credential);
   - the backend answers its health check;
   - the frontend serves its routes.
 
