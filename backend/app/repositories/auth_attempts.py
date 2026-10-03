@@ -26,7 +26,9 @@ def retention_seconds() -> int:
     evidence a live limit depends on and silently re-open it.
     """
     return max(
-        settings.AUTH_LOGIN_WINDOW_SECONDS, settings.AUTH_REGISTER_WINDOW_SECONDS
+        settings.AUTH_LOGIN_WINDOW_SECONDS,
+        settings.AUTH_REGISTER_WINDOW_SECONDS,
+        settings.AUTH_EMAIL_ACTION_WINDOW_SECONDS,
     )
 
 

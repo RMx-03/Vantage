@@ -1,5 +1,6 @@
 import pytest
 
+from app.db.session import MAX_OVERFLOW, POOL_SIZE, engine
 from app.db.urls import normalize_database_url
 
 
@@ -12,21 +13,104 @@ from app.db.urls import normalize_database_url
         ),
         (
             "postgresql://user:password@host.example:5432/database",
-            "postgresql+psycopg://user:password@host.example:5432/database",
+            "postgresql+psycopg://user:password@host.example:5432/database?sslmode=require",
         ),
         (
             "postgresql+psycopg://user:password@host.example:5432/database",
-            "postgresql+psycopg://user:password@host.example:5432/database",
+            "postgresql+psycopg://user:password@host.example:5432/database?sslmode=require",
         ),
         (
             "postgresql+asyncpg://user:password@host.example:5432/database",
-            "postgresql+asyncpg://user:password@host.example:5432/database",
+            "postgresql+asyncpg://user:password@host.example:5432/database?sslmode=require",
         ),
         (
             "sqlite+pysqlite:///local.db",
             "sqlite+pysqlite:///local.db",
+        ),
+        (
+            "postgres://u:p@ec2.amazonaws.com/db",
+            "postgresql+psycopg://u:p@ec2.amazonaws.com/db?sslmode=require",
+        ),
+        (
+            "postgres://u:p@host.example/db?sslmode=verify-full",
+            "postgresql+psycopg://u:p@host.example/db?sslmode=verify-full",
+        ),
+        (
+            "postgres://u:p@host.example/db?sslmode=disable",
+            "postgresql+psycopg://u:p@host.example/db?sslmode=disable",
+        ),
+        (
+            "postgres://u:p@host.example:5432/db?custom=1&sslmode=require",
+            "postgresql+psycopg://u:p@host.example:5432/db?custom=1&sslmode=require",
+        ),
+        (
+            "postgres://u:p@host.example:5432/db?custom=1",
+            "postgresql+psycopg://u:p@host.example:5432/db?custom=1&sslmode=require",
         ),
     ],
 )
 def test_normalize_database_url(url: str, expected: str) -> None:
     assert normalize_database_url(url) == expected
+
+
+@pytest.mark.parametrize(
+    "host",
+    ["localhost", "127.0.0.1", "::1", "postgres", "db", "host.docker.internal"],
+)
+def test_local_hosts_are_not_forced_to_ssl(host: str) -> None:
+    formatted_host = f"[{host}]" if ":" in host else host
+    result = normalize_database_url(f"postgres://u:p@{formatted_host}:5432/db")
+    assert "sslmode" not in result
+    assert result == f"postgresql+psycopg://u:p@{formatted_host}:5432/db"
+
+
+def test_empty_database_url_raises_value_error() -> None:
+    with pytest.raises(ValueError):
+        normalize_database_url("")
+
+
+def test_whitespace_database_url_raises_value_error() -> None:
+    with pytest.raises(ValueError):
+        normalize_database_url("   ")
+
+
+def test_database_engine_pool_bounds() -> None:
+    assert POOL_SIZE == 5
+    assert MAX_OVERFLOW == 2
+    assert engine.pool.size() == 5
+    assert engine.pool._max_overflow == 2
+    assert engine.pool._recycle == 280
+    assert engine.pool._pre_ping is True
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("postgresql:///vantage", "postgresql+psycopg:///vantage"),
+        ("postgresql+psycopg:///vantage", "postgresql+psycopg:///vantage"),
+        (
+            "postgres:///db?host=/var/run/postgresql",
+            "postgresql+psycopg:///db?host=/var/run/postgresql",
+        ),
+    ],
+)
+def test_unix_socket_urls_keep_their_empty_host(url: str, expected: str) -> None:
+    # libpq's socket form has an empty netloc. Rebuilding it with urlunsplit
+    # dropped the "//", which SQLAlchemy then refused to parse.
+    assert normalize_database_url(url) == expected
+
+
+def test_percent_encoded_password_is_preserved_byte_for_byte() -> None:
+    url = "postgres://u:p%40ss%2Fw%3Ard@db.example.com:5432/d"
+    assert (
+        normalize_database_url(url)
+        == "postgresql+psycopg://u:p%40ss%2Fw%3Ard@db.example.com:5432/d?sslmode=require"
+    )
+
+
+def test_existing_query_values_are_not_re_encoded() -> None:
+    url = "postgres://u:p@db.example.com/d?application_name=a%20b"
+    assert (
+        normalize_database_url(url)
+        == "postgresql+psycopg://u:p@db.example.com/d?application_name=a%20b&sslmode=require"
+    )

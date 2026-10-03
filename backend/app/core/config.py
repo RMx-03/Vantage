@@ -147,6 +147,26 @@ class Settings(BaseSettings):
     AUTH_REGISTER_WINDOW_SECONDS: int = Field(default=3600, gt=0)
     AUTH_LOGIN_MAX_ATTEMPTS: int = Field(default=10, gt=0)
     AUTH_LOGIN_WINDOW_SECONDS: int = Field(default=900, gt=0)
+    AUTH_EMAIL_ACTION_MAX_ATTEMPTS: int = Field(default=5, gt=0)
+    AUTH_EMAIL_ACTION_WINDOW_SECONDS: int = Field(default=3600, gt=0)
+    # Verification and reset emails per source, across all addresses. The
+    # per-address limit alone let one client cycle through addresses and spend
+    # the account's shared 300/day Brevo quota, after which nobody's mail sent.
+    AUTH_EMAIL_SOURCE_MAX_ATTEMPTS: int = Field(default=10, gt=0)
+
+    # ------------------------------------------------------------------
+    # Transactional email (Phase 2C)
+    # ------------------------------------------------------------------
+    # "noop" logs instead of sending, and is the default everywhere except
+    # production so no test or local run can mail a real person.
+    EMAIL_PROVIDER: str = "noop"
+    BREVO_API_KEY: str = ""
+    EMAIL_FROM: str = "Vantage <noreply@example.invalid>"
+    EMAIL_TIMEOUT_SECONDS: int = Field(default=10, gt=0)
+    # Public origin used to build verification and reset links.
+    APP_BASE_URL: str = "http://localhost:5173"
+    EMAIL_VERIFICATION_TTL_SECONDS: int = Field(default=86400, gt=0)
+    PASSWORD_RESET_TTL_SECONDS: int = Field(default=3600, gt=0)
 
     # ------------------------------------------------------------------
     # Database (PostgreSQL)
@@ -252,4 +272,36 @@ def validate_auth_settings(active: Settings) -> None:
     if any(marker in salt.lower() for marker in _PLACEHOLDER_MARKERS):
         raise RuntimeError(
             "TELEMETRY_USER_SALT looks like a placeholder; refusing to start."
+        )
+
+
+_EMAIL_PROVIDERS = {"noop", "brevo"}
+
+
+def validate_email_settings(active: Settings) -> None:
+    """Fail at startup on an email configuration that cannot work.
+
+    Otherwise the failure surfaces on the first send, inside /register after
+    the user row is committed: a 500 to the caller and an account that can
+    never receive its verification link. An unknown provider is refused rather
+    than treated as no-op, because a silent no-op in production means nobody
+    receives mail while the UI says a message is on its way.
+    """
+    provider = active.EMAIL_PROVIDER.strip().lower()
+    if provider not in _EMAIL_PROVIDERS:
+        raise RuntimeError(
+            f"EMAIL_PROVIDER must be one of {sorted(_EMAIL_PROVIDERS)}; "
+            "refusing to start."
+        )
+    if provider != "brevo":
+        return
+    if not active.BREVO_API_KEY:
+        raise RuntimeError(
+            "EMAIL_PROVIDER=brevo requires BREVO_API_KEY; refusing to start."
+        )
+    sender = active.EMAIL_FROM.lower()
+    if "@" not in sender or "example.invalid" in sender:
+        raise RuntimeError(
+            "EMAIL_PROVIDER=brevo requires EMAIL_FROM set to a sender verified in "
+            "Brevo; refusing to start."
         )
