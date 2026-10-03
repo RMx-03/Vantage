@@ -101,6 +101,21 @@ app.add_middleware(
 
 
 @app.middleware("http")
+async def forbid_caching_auth_responses(request: Request, call_next):
+    # Auth responses carry access tokens and the caller's identity, and reach the
+    # browser through Vercel's edge. Set here rather than per route: refresh
+    # failures and exception handlers build fresh responses that a per-route
+    # header would miss.
+    response = await call_next(request)
+    auth_path = f"{settings.API_V1_PREFIX.rstrip('/')}/auth"
+    path = request.url.path
+    if path == auth_path or path.startswith(auth_path + "/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+
+@app.middleware("http")
 async def research_run_trace(request: Request, call_next):
     research_runs_path = f"{settings.API_V1_PREFIX.rstrip('/')}/research-runs"
     if request.method == "POST" and request.url.path.rstrip("/") == research_runs_path:
