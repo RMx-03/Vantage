@@ -81,3 +81,36 @@ def test_database_engine_pool_bounds() -> None:
     assert engine.pool._max_overflow == 2
     assert engine.pool._recycle == 280
     assert engine.pool._pre_ping is True
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("postgresql:///vantage", "postgresql+psycopg:///vantage"),
+        ("postgresql+psycopg:///vantage", "postgresql+psycopg:///vantage"),
+        (
+            "postgres:///db?host=/var/run/postgresql",
+            "postgresql+psycopg:///db?host=/var/run/postgresql",
+        ),
+    ],
+)
+def test_unix_socket_urls_keep_their_empty_host(url: str, expected: str) -> None:
+    # libpq's socket form has an empty netloc. Rebuilding it with urlunsplit
+    # dropped the "//", which SQLAlchemy then refused to parse.
+    assert normalize_database_url(url) == expected
+
+
+def test_percent_encoded_password_is_preserved_byte_for_byte() -> None:
+    url = "postgres://u:p%40ss%2Fw%3Ard@db.example.com:5432/d"
+    assert (
+        normalize_database_url(url)
+        == "postgresql+psycopg://u:p%40ss%2Fw%3Ard@db.example.com:5432/d?sslmode=require"
+    )
+
+
+def test_existing_query_values_are_not_re_encoded() -> None:
+    url = "postgres://u:p@db.example.com/d?application_name=a%20b"
+    assert (
+        normalize_database_url(url)
+        == "postgresql+psycopg://u:p@db.example.com/d?application_name=a%20b&sslmode=require"
+    )
