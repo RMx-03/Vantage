@@ -72,7 +72,7 @@ Each run also emits an OpenTelemetry trace (optionally exported to Langfuse), so
 | Accounts | First-party email and password: Argon2id, short-lived JWTs, rotating refresh cookies, email verification and password reset |
 | AI models | Gemini, Groq, or a local Ollama model; or none at all |
 | Market data | yfinance (development and research use) |
-| Email | Brevo |
+| Email | Any SMTP server (Gmail with an app password by default), or Brevo |
 | Observability | OpenTelemetry, Langfuse |
 | Hosting | Vercel (frontend) and Heroku (backend and database) |
 | Testing | pytest, Vitest, Testing Library, Playwright |
@@ -145,16 +145,21 @@ docker compose exec postgres psql -U vantage_owner -d vantage -c \
 
 Use the address in lowercase, then sign out and back in.
 
-To send real email through Brevo, add these to `.env` and restart the backend:
+To send real email through a Gmail account, add these to `.env` and restart the backend (`docker compose up -d backend`):
 
 | Variable | Value |
 |---|---|
-| `EMAIL_PROVIDER` | `brevo` |
-| `BREVO_API_KEY` | A Brevo **API** key (`xkeysib-…`). An SMTP key (`xsmtpsib-…`) is rejected with 401. |
-| `EMAIL_FROM` | A sender verified in your Brevo account, such as `Vantage <you@example.com>` |
+| `EMAIL_PROVIDER` | `smtp` |
+| `SMTP_HOST` | `smtp.gmail.com` |
+| `SMTP_PORT` | `587` |
+| `SMTP_USERNAME` | The Gmail address, such as `you@gmail.com` |
+| `SMTP_PASSWORD` | A Google **app password** (Google Account → Security → 2-Step Verification → App passwords). Never the account password. |
+| `EMAIL_FROM` | `Vantage <you@gmail.com>`, the same address; Gmail rewrites any other sender to the account |
 | `APP_BASE_URL` | Where links in emails point; `http://localhost:5173` locally |
 
-Test only with addresses you control. Sending to disposable inboxes can get a Brevo account suspended.
+Use a Gmail account dedicated to the app, not a personal one. A free account can send to 500 recipients a day. Any other SMTP server works the same way, and Brevo is also supported (`EMAIL_PROVIDER=brevo` with `BREVO_API_KEY`).
+
+Test only with addresses you control. Sending to disposable inboxes looks like abuse to any email provider.
 
 ### Troubleshooting
 

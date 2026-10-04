@@ -7,7 +7,7 @@ The backend executes durable, synchronous, end-of-day research runs for supporte
 - FastAPI on Python 3.12, managed with `uv`
 - PostgreSQL 17 through SQLAlchemy 2 and psycopg 3; Alembic owns schema changes
 - First-party email/password identity: Argon2id password hashes, 15-minute HS256 access tokens, rotating refresh tokens in an HttpOnly cookie, email verification and password reset. Accounts and research data are stored in PostgreSQL
-- Transactional email through Brevo, or a no-op sender for development and tests
+- Transactional email through any SMTP server (Gmail with an app password), Brevo's API, or a no-op sender for development and tests
 - Provider protocols in `app/providers/contracts.py`; the Phase 1 adapter is `YFinanceSnapshotProvider`
 - LangGraph for the deterministic metrics → optional interpretation → policy workflow
 - OpenTelemetry spans with allowlisted attributes and optional Langfuse v4 export
@@ -58,7 +58,7 @@ The application refuses to start on a configuration that cannot work safely, and
 
 - `AUTH_JWT_SECRET` and `TELEMETRY_USER_SALT` must each be at least 32 bytes and not look like a placeholder. Generate each with `openssl rand -hex 32`.
 - `AUTH_COOKIE_SAMESITE` must be `lax`, `strict` or `none`, and `none` requires `AUTH_COOKIE_SECURE=true`.
-- `EMAIL_PROVIDER` must be `noop` or `brevo`. `brevo` requires `BREVO_API_KEY` and an `EMAIL_FROM` that is not the shipped placeholder.
+- `EMAIL_PROVIDER` must be `noop`, `smtp` or `brevo`. `smtp` requires `SMTP_HOST`, `SMTP_USERNAME` and `SMTP_PASSWORD`; `brevo` requires `BREVO_API_KEY`. Both require an `EMAIL_FROM` that is not the shipped placeholder.
 
 Other settings that matter in a deployment:
 
@@ -68,8 +68,9 @@ Other settings that matter in a deployment:
 | `TRUSTED_PROXY_HOPS` | How many proxies append to `X-Forwarded-For`. `0` (default) ignores the header. Production behind Vercel and Heroku is `2`; a wrong value puts every user in one rate-limit bucket. |
 | `ARGON2_MAX_CONCURRENCY` | Concurrent password hashes (19 MiB each); bounds memory on a small dyno. |
 | `AUTH_*_MAX_ATTEMPTS`, `AUTH_*_WINDOW_SECONDS` | Rate limits for registration, login and email actions, including `AUTH_EMAIL_SOURCE_MAX_ATTEMPTS` per source across all addresses. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP delivery. For Gmail: `smtp.gmail.com`, `587` (STARTTLS; `465` uses implicit TLS), the account address and a Google app password. TLS is always negotiated before the password is sent. |
 | `BREVO_API_KEY` | A Brevo API key (`xkeysib-…`), not an SMTP key. |
-| `EMAIL_FROM` | A sender verified in the Brevo account. |
+| `EMAIL_FROM` | The sender. With Gmail, the account address or a verified alias; with Brevo, a sender verified there. |
 | `APP_BASE_URL` | The frontend origin that links in emails point to. |
 | `EMAIL_VERIFICATION_TTL_SECONDS`, `PASSWORD_RESET_TTL_SECONDS` | Link lifetimes; the email text states the same values. |
 
