@@ -11,6 +11,16 @@ from app.services.policy import apply_policy
 from app.telemetry.tracing import get_tracer
 
 
+def _market_is_usable(market: Any) -> bool:
+    return (
+        market.error_code is None
+        and market.quality == ComponentQuality.FRESH
+        and len(market.bars) >= 21
+        and bool(market.bars)
+        and market.bars[-1].session_date == market.latest_completed_session
+    )
+
+
 def create_research_graph(interpretation_provider: InterpretationProvider):
     def calculate_metrics_node(state: ResearchState) -> dict[str, Any]:
         tracer = get_tracer()
@@ -34,10 +44,15 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
     def skip_interpretation_node(state: ResearchState) -> dict[str, Any]:
         if not interpretation_provider.enabled:
             return {"interpretation": None, "model_failure_code": None}
+        reason = (
+            "no news evidence was available"
+            if _market_is_usable(state["market"])
+            else "price data was inadequate"
+        )
         return {
             "interpretation": AIInterpretation(
                 sentiment_label="unavailable",
-                summary="Automated interpretation was not run because price data was inadequate.",
+                summary=f"Automated interpretation was not run because {reason}.",
                 abstained=True,
                 abstention_reason="MODEL_NOT_RUN",
             ),
@@ -47,15 +62,12 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
     def interpretation_route(state: ResearchState) -> str:
         if not interpretation_provider.enabled:
             return "skip_interpretation"
-        market = state["market"]
-        is_usable = (
-            market.error_code is None
-            and market.quality == ComponentQuality.FRESH
-            and len(market.bars) >= 21
-            and bool(market.bars)
-            and market.bars[-1].session_date == market.latest_completed_session
-        )
-        return "generate_interpretation" if is_usable else "skip_interpretation"
+        # The model must cite at least one article, so with no evidence it can
+        # only abstain; calling it costs seconds and reported that forced
+        # abstention as a provider failure.
+        if not _market_is_usable(state["market"]) or not state["news"].items:
+            return "skip_interpretation"
+        return "generate_interpretation"
 
     def generate_interpretation_node(state: ResearchState) -> dict[str, Any]:
         tracer = get_tracer()

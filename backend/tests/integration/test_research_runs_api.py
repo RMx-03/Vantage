@@ -608,6 +608,40 @@ def test_inadequate_prices_skip_model_and_return_typed_outcome(
     assert stored == (None, None, None, None)
 
 
+def test_no_news_evidence_skips_the_model_instead_of_reporting_it_failed(
+    client: TestClient, auth_headers: dict, mock_news, mock_llm
+) -> None:
+    """With no evidence the model can only abstain: it must cite an article.
+
+    Calling it anyway cost most of the run's time and its forced abstention was
+    reported as MODEL_UNAVAILABLE, "provider unavailable or timed out", which
+    was false. Production showed exactly that on 2026-10-04.
+    """
+
+    def no_news(symbol, cutoff, retrieved_at, lookback_days, limit):
+        return NewsSnapshot(
+            symbol=symbol,
+            items=[],
+            provider="mock_news",
+            retrieved_at=retrieved_at,
+            quality=ComponentQuality.MISSING,
+        )
+
+    mock_news.fetch_company_news.side_effect = no_news
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
+    assert response.status_code == 201
+    body = response.json()
+    mock_llm.interpret.assert_not_called()
+    assert body["data_quality"]["news"] == "missing"
+    assert body["data_quality"]["model"] == "not_run"
+    assert body["interpretation"] is None
+    codes = [reason["code"] for reason in body["reasons"]]
+    assert "NO_RECENT_NEWS" in codes
+    assert "MODEL_UNAVAILABLE" not in codes
+
+
 def test_new_run_records_the_prompt_version_the_code_sends(
     client: TestClient, auth_headers: dict, mock_llm
 ) -> None:
