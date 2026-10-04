@@ -210,7 +210,7 @@ def traced_client(
     def fake_auth(request: Request) -> AuthenticatedUser:
         tracer = get_tracer()
         with tracer.start_as_current_span("authenticate_request"):
-            return AuthenticatedUser(id=test_user_id)
+            return AuthenticatedUser(id=test_user_id, email_verified=True)
 
     app.dependency_overrides[get_current_user] = fake_auth
     app.dependency_overrides[get_research_service] = lambda: service
@@ -298,7 +298,7 @@ def client_with_failing_exporter(service, test_user_id: UUID):
     def fake_auth(request: Request) -> AuthenticatedUser:
         tracer = get_tracer()
         with tracer.start_as_current_span("authenticate_request"):
-            return AuthenticatedUser(id=test_user_id)
+            return AuthenticatedUser(id=test_user_id, email_verified=True)
 
     app.dependency_overrides[get_current_user] = fake_auth
     app.dependency_overrides[get_research_service] = lambda: service

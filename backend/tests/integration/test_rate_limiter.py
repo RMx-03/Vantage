@@ -141,3 +141,17 @@ def test_the_sweep_removes_expired_attempts_across_all_keys() -> None:
 
     assert removed >= 1
     assert _rows_for(abandoned) == 0
+
+
+def test_recording_keeps_attempt_near_end_of_email_action_window(
+    repo: AuthAttemptRepository,
+) -> None:
+    """Attempts near the end of AUTH_EMAIL_ACTION_WINDOW_SECONDS must survive purge."""
+    from app.core.config import settings
+
+    key = _key()
+    _insert_attempt_at(key, seconds_ago=settings.AUTH_EMAIL_ACTION_WINDOW_SECONDS - 60)
+
+    repo.record(key)
+
+    assert _rows_for(key) == 2
