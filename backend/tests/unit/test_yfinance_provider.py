@@ -712,3 +712,107 @@ def test_unexpected_parse_failure_becomes_a_typed_news_error(
 
     assert exc_info.value.code == "NEWS_PROVIDER_FAILED"
     assert "boom" not in exc_info.value.safe_message
+
+
+# --- Search fallback --------------------------------------------------------
+# On 2026-10-02 Yahoo withdrew the quote-news endpoint behind Ticker.get_news:
+# it answers 404 and yfinance returns [] for every symbol. Yahoo's search
+# endpoint still serves news, tagged with the tickers each article covers.
+
+
+def _search_item(
+    uuid: str, title: str, tickers: list[str], published: datetime
+) -> dict:
+    return {
+        "uuid": uuid,
+        "title": title,
+        "publisher": "Reuters",
+        "link": f"https://example.com/{uuid}",
+        "providerPublishTime": int(published.timestamp()),
+        "relatedTickers": tickers,
+        "type": "STORY",
+    }
+
+
+def _empty_feed_provider(mock_ticker: MagicMock, search) -> YFinanceSnapshotProvider:
+    mock_ticker.get_news.return_value = []
+    return YFinanceSnapshotProvider(
+        ticker_factory=lambda _: mock_ticker, search_factory=search
+    )
+
+
+def test_an_empty_quote_feed_falls_back_to_search_news_for_the_symbol(
+    mock_ticker: MagicMock, fixed_now: datetime
+) -> None:
+    yesterday = fixed_now.replace(day=fixed_now.day - 1)
+    search_calls: list[tuple[str, int]] = []
+
+    def search(symbol: str, count: int) -> list[dict]:
+        search_calls.append((symbol, count))
+        return [
+            _search_item("s-1", "Apple expands services", ["AAPL"], yesterday),
+            _search_item("s-2", "Index funds rebalance", ["SPY", "QQQ"], yesterday),
+        ]
+
+    provider = _empty_feed_provider(mock_ticker, search)
+    snapshot = provider.fetch_company_news("aapl", fixed_now, fixed_now, 7, 10)
+
+    assert search_calls and search_calls[0][0] == "AAPL"
+    assert [item.evidence_id for item in snapshot.items] == ["s-1"]
+    assert snapshot.items[0].publisher == "Reuters"
+    assert snapshot.quality == ComponentQuality.FRESH
+
+
+def test_search_is_not_consulted_when_the_quote_feed_has_news(
+    mock_ticker: MagicMock, fixed_now: datetime
+) -> None:
+    def search(symbol: str, count: int) -> list[dict]:
+        raise AssertionError("search must not be called")
+
+    provider = YFinanceSnapshotProvider(
+        ticker_factory=lambda _: mock_ticker, search_factory=search
+    )
+    snapshot = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
+    assert snapshot.items
+
+
+def test_a_failing_search_fallback_is_a_provider_failure_not_missing_news(
+    mock_ticker: MagicMock, fixed_now: datetime
+) -> None:
+    # "No news" and "the news source is broken" must not look the same.
+    def search(symbol: str, count: int) -> list[dict]:
+        raise RuntimeError("search endpoint down")
+
+    provider = _empty_feed_provider(mock_ticker, search)
+    with pytest.raises(VantageError) as exc_info:
+        provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
+    assert exc_info.value.code == "NEWS_PROVIDER_FAILED"
+
+
+def test_both_sources_empty_is_still_missing_news(
+    mock_ticker: MagicMock, fixed_now: datetime
+) -> None:
+    provider = _empty_feed_provider(mock_ticker, lambda symbol, count: [])
+    snapshot = provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
+    assert snapshot.items == []
+    assert snapshot.quality == ComponentQuality.MISSING
+
+
+def test_the_news_outcome_is_logged_as_counts_without_titles(
+    mock_ticker: MagicMock, fixed_now: datetime, caplog: pytest.LogCaptureFixture
+) -> None:
+    yesterday = fixed_now.replace(day=fixed_now.day - 1)
+    provider = _empty_feed_provider(
+        mock_ticker,
+        lambda symbol, count: [
+            _search_item("s-1", "Confidential headline", ["AAPL"], yesterday)
+        ],
+    )
+    with caplog.at_level("INFO"):
+        provider.fetch_company_news("AAPL", fixed_now, fixed_now, 7, 10)
+    record = next(r for r in caplog.records if "news.fetched" in r.getMessage())
+    message = record.getMessage()
+    assert "source=search" in message
+    assert "symbol=AAPL" in message
+    assert "kept=1" in message
+    assert "Confidential headline" not in caplog.text

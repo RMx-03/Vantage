@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
 import hashlib
 import json
+import logging
 import math
 from numbers import Real
 from typing import Any, cast
@@ -20,10 +21,16 @@ from app.domain.research import (
 from app.domain.urls import normalize_url
 from app.providers.contracts import MarketDataProvider, NewsProvider
 
+logger = logging.getLogger(__name__)
+
 XNYS = exchange_calendars.get_calendar("XNYS")
 US_EQUITY_EXCHANGES = frozenset(
     {"ASE", "BATS", "BTS", "IEX", "NCM", "NGM", "NMS", "NYQ", "PCX"}
 )
+
+
+def _search_news(symbol: str, count: int) -> list[dict[str, Any]]:
+    return list(yf.Search(symbol, news_count=count).news or [])
 
 
 def latest_completed_xnys_close(now: datetime) -> datetime:
@@ -75,8 +82,9 @@ def snapshot_hash(symbol: str, bars: list[DailyBar]) -> str:
 class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
     name: str = "yfinance"
 
-    def __init__(self, ticker_factory: Any = None) -> None:
+    def __init__(self, ticker_factory: Any = None, search_factory: Any = None) -> None:
         self._ticker_factory = ticker_factory or yf.Ticker
+        self._search_factory = search_factory or _search_news
 
     def fetch_daily_snapshot(
         self,
@@ -321,7 +329,34 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                 safe_message="Company news could not be retrieved.",
             ) from e
 
+        source = "quote"
         if not raw_news:
+            # Yahoo withdrew the quote-news endpoint on 2026-10-02 (404, which
+            # yfinance returns as []). Its search endpoint still serves news,
+            # tagged with the tickers each article covers; keep only this
+            # symbol's. A failure here is a broken source, not "no news".
+            source = "search"
+            try:
+                searched = self._search_factory(normalized_symbol, max(limit * 5, 50))
+            except Exception as e:
+                raise VantageError(
+                    code="NEWS_PROVIDER_FAILED",
+                    safe_message="Company news could not be retrieved.",
+                ) from e
+            raw_news = [
+                raw
+                for raw in searched or []
+                if isinstance(raw, dict)
+                and normalized_symbol
+                in {str(t).upper() for t in raw.get("relatedTickers") or []}
+            ]
+
+        if not raw_news:
+            logger.info(
+                "news.fetched symbol=%s source=%s raw=0 kept=0",
+                normalized_symbol,
+                source,
+            )
             return NewsSnapshot(
                 symbol=normalized_symbol,
                 items=[],
@@ -479,6 +514,15 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
         )
 
         capped_items = items[:limit] if limit > 0 else items
+        # Counts only: titles and URLs are third-party content, and an empty
+        # result must be distinguishable from a dead source in the logs.
+        logger.info(
+            "news.fetched symbol=%s source=%s raw=%d kept=%d",
+            normalized_symbol,
+            source,
+            len(raw_news),
+            len(capped_items),
+        )
 
         if not capped_items:
             quality = ComponentQuality.MISSING
