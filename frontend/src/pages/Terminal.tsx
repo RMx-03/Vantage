@@ -8,6 +8,7 @@ import type { ResearchRun } from '../types/research';
 import { MicroLabel } from '../components/ui';
 import SideNav from '../components/nav/SideNav';
 import BottomNav from '../components/nav/BottomNav';
+import VerificationBanner from '../components/VerificationBanner';
 
 export default function Terminal() {
   const { pathname } = useLocation();
@@ -134,6 +135,7 @@ export default function Terminal() {
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto [scrollbar-gutter:stable] w-full">
+          <VerificationBanner />
           <div className="py-12 md:py-24">
             <Outlet />
           </div>

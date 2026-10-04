@@ -1,12 +1,11 @@
 from uuid import UUID
+
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
-from starlette.concurrency import run_in_threadpool
 
-from app.core.database import supabase_client
 from app.core.security.tokens import decode_access_token
-from app.domain.auth import AUTH_TOKEN_EXPIRED
+from app.domain.auth import AUTH_EMAIL_UNVERIFIED
 from app.domain.errors import VantageError
 from app.repositories.research_runs import ResearchRunRepository
 from app.services.research_run import (
@@ -19,6 +18,9 @@ from app.telemetry.tracing import get_tracer
 class AuthenticatedUser(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: UUID
+    # Required, with no default. It gates research runs, so it must never fail
+    # open: code that forgets it is a validation error, not a verified user.
+    email_verified: bool
 
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -27,14 +29,10 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> AuthenticatedUser:
-    """Resolve the caller from a bearer token.
+    """Resolve the caller from a Vantage-issued access token.
 
-    Vantage-issued JWTs are verified locally — no network call. During Phase 2A
-    only, a token this backend did not issue falls through to Supabase so the
-    deployed application keeps working while the frontend has not yet cut over.
-
-    PHASE 2B MUST DELETE THE SUPABASE FALLBACK. Leaving it in place would be a
-    standing authentication bypass through a third party we no longer use.
+    Verification is local: no network call, no third-party dependency on the
+    request path.
     """
     tracer = get_tracer()
     with tracer.start_as_current_span("authenticate_request"):
@@ -43,30 +41,27 @@ async def get_current_user(
                 code="AUTH_REQUIRED",
                 safe_message="Authentication is required.",
             )
+        claims = decode_access_token(credentials.credentials)
+        return AuthenticatedUser(
+            id=claims.subject, email_verified=claims.email_verified
+        )
 
-        token = credentials.credentials
 
-        try:
-            claims = decode_access_token(token)
-            return AuthenticatedUser(id=claims.subject)
-        except VantageError as error:
-            # A token we issued and that has merely expired is ours, and the
-            # caller needs to know to refresh rather than re-authenticate.
-            # Only an unrecognisable token falls through to the legacy path.
-            if error.code == AUTH_TOKEN_EXPIRED:
-                raise
+async def require_verified_user(
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AuthenticatedUser:
+    """Allow only accounts that have confirmed their email address.
 
-        try:
-            response = await run_in_threadpool(supabase_client.auth.get_user, token)
-            user = response.user if response is not None else None
-            if user is None or not hasattr(user, "id"):
-                raise ValueError("No user returned from authentication service")
-            return AuthenticatedUser(id=UUID(str(user.id)))
-        except Exception:
-            raise VantageError(
-                code="AUTH_INVALID",
-                safe_message="Authentication credentials are invalid or expired.",
-            )
+    Read from the token claim, so this costs no database query. The cost is a
+    lag of at most one access-token lifetime between verifying and being able
+    to act; the frontend calls refresh after verification to close it.
+    """
+    if not user.email_verified:
+        raise VantageError(
+            code=AUTH_EMAIL_UNVERIFIED,
+            safe_message="Confirm your email address before starting a research run.",
+        )
+    return user
 
 
 def get_research_repository() -> ResearchRunRepository:

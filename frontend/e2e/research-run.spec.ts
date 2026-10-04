@@ -1,47 +1,46 @@
 import { test, expect, type Page } from '@playwright/test';
 import { informationalRun, reviewRun } from '../src/test/fixtures';
 
-async function installAuthAndApiMocks(page: Page) {
-  // Return an authenticated session for the Supabase storage key selected by
-  // the build-time project URL. This keeps the journey portable across CI,
-  // local Vite, and the production container image.
-  await page.addInitScript(() => {
-    const mockSession = {
-      access_token: 'mock-access-token-123',
-      token_type: 'bearer',
-      expires_in: 3600,
-      expires_at: Math.floor(Date.now() / 1000) + 3600,
-      refresh_token: 'mock-refresh-token-123',
-      user: {
-        id: '11111111-1111-1111-1111-111111111111',
-        email: 'operator@example.com',
-        role: 'authenticated',
-        aud: 'authenticated',
-      },
-    };
-    const storedSession = JSON.stringify(mockSession);
-    const originalGetItem = Storage.prototype.getItem;
-    Storage.prototype.getItem = function (key: string) {
-      if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-        return storedSession;
-      }
-      return originalGetItem.call(this, key);
-    };
-  });
-
-  // Mock Supabase Auth API
-  await page.route('**/auth/v1/**', async (route) => {
-    await route.fulfill({
+async function mockAuth(page: Page) {
+  await page.route('**/api/v1/auth/refresh', (route) =>
+    route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        id: '11111111-1111-1111-1111-111111111111',
-        email: 'operator@example.com',
-        role: 'authenticated',
-        aud: 'authenticated',
+        access_token: 'e2e-access-token',
+        token_type: 'bearer',
+        expires_in: 900,
       }),
-    });
-  });
+    })
+  );
+
+  await page.route('**/api/v1/auth/me', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: '00000000-0000-4000-8000-000000000001',
+        email: 'operator@example.com',
+        email_verified: true,
+      }),
+    })
+  );
+
+  await page.route('**/api/v1/auth/login', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        access_token: 'e2e-access-token',
+        token_type: 'bearer',
+        expires_in: 900,
+      }),
+    })
+  );
+}
+
+async function installAuthAndApiMocks(page: Page) {
+  await mockAuth(page);
 
   // Mock Individual Research Run API
   await page.route('**/api/v1/research-runs/*', async (route) => {
@@ -99,14 +98,14 @@ async function installAuthAndApiMocks(page: Page) {
   });
 }
 
-test.describe('Research Run Browser Journey (Supabase and API route-mocked)', () => {
+test.describe('Research Run Browser Journey (first-party auth and API route-mocked)', () => {
   test('creates, inspects, and reopens transparent research runs', async ({ page }) => {
     await installAuthAndApiMocks(page);
 
     // Direct deep-link navigation, then a reload. Against the production
     // frontend container both requests are served by the Nginx SPA fallback
     // (`try_files ... /index.html`); against the dev server they are served by
-    // Vite. Supabase and the research API stay route-mocked either way, so this
+    // Vite. Auth and the research API stay route-mocked either way, so this
     // exercises static routing only — not the backend.
     const directResponse = await page.goto('/app');
     expect(directResponse?.status()).toBe(200);

@@ -9,6 +9,7 @@ from app.api.deps import (
     get_current_user,
     get_research_repository,
     get_research_service,
+    require_verified_user,
 )
 from app.domain.errors import SafeError
 from app.domain.research import ResearchRun, ResearchRunPage, ResearchRunRequest
@@ -29,7 +30,7 @@ router = APIRouter(tags=["research-runs"])
 )
 def create_run(
     request: ResearchRunRequest,
-    user: AuthenticatedUser = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(require_verified_user),
     service: ResearchRunService = Depends(get_research_service),
 ) -> ResearchRun:
     """

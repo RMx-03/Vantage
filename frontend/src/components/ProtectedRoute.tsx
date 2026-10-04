@@ -7,12 +7,12 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { session, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   // Wait for the auth state to resolve before making a redirect decision.
   if (loading) return null;
 
-  if (!session) {
+  if (!user) {
     return <Navigate to="/auth" replace />;
   }
 

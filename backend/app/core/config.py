@@ -103,12 +103,6 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
-    # Supabase Authentication
-    # ------------------------------------------------------------------
-    SUPABASE_URL: str = ""
-    SUPABASE_KEY: str = ""
-
-    # ------------------------------------------------------------------
     # First-party authentication (Phase 2)
     # ------------------------------------------------------------------
     # HS256 signing secret for access tokens. There is deliberately no
@@ -119,6 +113,12 @@ class Settings(BaseSettings):
     AUTH_JWT_AUDIENCE: str = "vantage-api"
     AUTH_ACCESS_TOKEN_TTL_SECONDS: int = Field(default=900, gt=0)
     AUTH_REFRESH_TOKEN_TTL_SECONDS: int = Field(default=2592000, gt=0)
+    # How long a just-rotated refresh token may be presented again without being
+    # treated as theft. Covers a page reload landing after the server rotated
+    # but before the browser stored the new cookie. Honoured once per token and
+    # only while its successor is unused, so it never helps a thief who replays
+    # after the real client has moved on. 0 disables it.
+    AUTH_REFRESH_REUSE_GRACE_SECONDS: int = Field(default=10, ge=0)
     AUTH_COOKIE_NAME: str = "vantage_refresh"
     # Only ever false for local plain-HTTP development.
     AUTH_COOKIE_SECURE: bool = True
@@ -131,6 +131,15 @@ class Settings(BaseSettings):
     # Empty means host-only, which is what production uses. `vercel.app` is on the
     # Public Suffix List, so a Domain-scoped cookie cannot be set there anyway.
     AUTH_COOKIE_DOMAIN: str = ""
+    # How many proxies in front of the app append to X-Forwarded-For. 0 means
+    # none: use the socket peer and ignore the header, which any caller can set.
+    # Production is 2 — Vercel overwrites the header with the real client, then
+    # Heroku's router appends the Vercel edge — making the client the second
+    # entry from the right. Wrong here, every user shares one rate-limit bucket.
+    TRUSTED_PROXY_HOPS: int = Field(default=0, ge=0)
+    # Concurrent Argon2 hashes allowed. Each needs 19 MiB; this bounds memory on
+    # the 512 MB dyno even if per-client rate limits are evaded.
+    ARGON2_MAX_CONCURRENCY: int = Field(default=4, gt=0)
     # Generous on purpose: corporate NAT, campus networks and mobile CGNAT
     # put many legitimate users behind one address. This bounds the Argon2
     # flood, it is not an anti-abuse control.
@@ -138,6 +147,32 @@ class Settings(BaseSettings):
     AUTH_REGISTER_WINDOW_SECONDS: int = Field(default=3600, gt=0)
     AUTH_LOGIN_MAX_ATTEMPTS: int = Field(default=10, gt=0)
     AUTH_LOGIN_WINDOW_SECONDS: int = Field(default=900, gt=0)
+    AUTH_EMAIL_ACTION_MAX_ATTEMPTS: int = Field(default=5, gt=0)
+    AUTH_EMAIL_ACTION_WINDOW_SECONDS: int = Field(default=3600, gt=0)
+    # Verification and reset emails per source, across all addresses. The
+    # per-address limit alone let one client cycle through addresses and spend
+    # the account's shared 300/day Brevo quota, after which nobody's mail sent.
+    AUTH_EMAIL_SOURCE_MAX_ATTEMPTS: int = Field(default=10, gt=0)
+
+    # ------------------------------------------------------------------
+    # Transactional email (Phase 2C)
+    # ------------------------------------------------------------------
+    # "noop" logs instead of sending, and is the default everywhere except
+    # production so no test or local run can mail a real person.
+    EMAIL_PROVIDER: str = "noop"
+    BREVO_API_KEY: str = ""
+    # SMTP delivery, e.g. Gmail: smtp.gmail.com, port 587, the account address as
+    # SMTP_USERNAME and a Google app password as SMTP_PASSWORD (redacted by name).
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = Field(default=587, gt=0)
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    EMAIL_FROM: str = "Vantage <noreply@example.invalid>"
+    EMAIL_TIMEOUT_SECONDS: int = Field(default=10, gt=0)
+    # Public origin used to build verification and reset links.
+    APP_BASE_URL: str = "http://localhost:5173"
+    EMAIL_VERIFICATION_TTL_SECONDS: int = Field(default=86400, gt=0)
+    PASSWORD_RESET_TTL_SECONDS: int = Field(default=3600, gt=0)
 
     # ------------------------------------------------------------------
     # Database (PostgreSQL)
@@ -243,4 +278,45 @@ def validate_auth_settings(active: Settings) -> None:
     if any(marker in salt.lower() for marker in _PLACEHOLDER_MARKERS):
         raise RuntimeError(
             "TELEMETRY_USER_SALT looks like a placeholder; refusing to start."
+        )
+
+
+_EMAIL_PROVIDERS = {"noop", "brevo", "smtp"}
+
+
+def validate_email_settings(active: Settings) -> None:
+    """Fail at startup on an email configuration that cannot work.
+
+    Otherwise the failure surfaces on the first send, inside /register after
+    the user row is committed: a 500 to the caller and an account that can
+    never receive its verification link. An unknown provider is refused rather
+    than treated as no-op, because a silent no-op in production means nobody
+    receives mail while the UI says a message is on its way.
+    """
+    provider = active.EMAIL_PROVIDER.strip().lower()
+    if provider not in _EMAIL_PROVIDERS:
+        raise RuntimeError(
+            f"EMAIL_PROVIDER must be one of {sorted(_EMAIL_PROVIDERS)}; "
+            "refusing to start."
+        )
+    if provider == "noop":
+        return
+    if provider == "brevo":
+        required = {"BREVO_API_KEY": active.BREVO_API_KEY}
+    else:
+        required = {
+            "SMTP_HOST": active.SMTP_HOST,
+            "SMTP_USERNAME": active.SMTP_USERNAME,
+            "SMTP_PASSWORD": active.SMTP_PASSWORD,
+        }
+    for name, value in required.items():
+        if not value.strip():
+            raise RuntimeError(
+                f"EMAIL_PROVIDER={provider} requires {name}; refusing to start."
+            )
+    sender = active.EMAIL_FROM.lower()
+    if "@" not in sender or "example.invalid" in sender:
+        raise RuntimeError(
+            f"EMAIL_PROVIDER={provider} requires EMAIL_FROM set to the real sender "
+            "address; refusing to start."
         )

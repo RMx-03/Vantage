@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,25 +10,10 @@ import * as api from '../../api/researchRuns';
 import { historicalRun, informationalRun } from '../../test/fixtures';
 import { renderWithRouter } from '../../test/renderWithRouter';
 
+import { mockSignedIn, mockSignedOut } from '../../test/authHelpers';
+import { useAuth } from '../../context/AuthContext';
+
 import type { ResearchRun, SafeError } from '../../types/research';
-
-const authMock = vi.hoisted(() => ({
-  listeners: [] as Array<(event: string, session: unknown) => void>,
-  session: null as { user: { id: string } } | null,
-}));
-
-vi.mock('../../lib/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: () => Promise.resolve({ data: { session: authMock.session } }),
-      onAuthStateChange: (listener: (event: string, session: unknown) => void) => {
-        authMock.listeners.push(listener);
-        return { data: { subscription: { unsubscribe: vi.fn() } } };
-      },
-      signOut: () => Promise.resolve({ error: null }),
-    },
-  },
-}));
 
 vi.mock('../../api/researchRuns', () => ({
   listResearchRuns: vi.fn(),
@@ -82,30 +68,53 @@ async function seedSignedInOwner(
   });
 }
 
+let testAuth: {
+  switchOwner: (id: string) => Promise<void>;
+  signOut: () => Promise<void>;
+} | null = null;
+
+function AuthProbe() {
+  const { refreshUser, signOut } = useAuth();
+  useEffect(() => {
+    testAuth = {
+      switchOwner: async (id: string) => {
+        mockSignedIn({ id, email: `${id}@example.com`, email_verified: true });
+        await refreshUser();
+      },
+      signOut: async () => {
+        mockSignedOut();
+        await signOut();
+      },
+    };
+  }, [refreshUser, signOut]);
+  return null;
+}
+
 function renderAsOwner(
   ui: React.ReactElement,
   userId: string | null = 'user-a',
   queryClient: QueryClient = makeQueryClient(),
   options?: { route?: string; path?: string }
 ) {
-  authMock.session = userId === null ? null : { user: { id: userId } };
+  if (userId) {
+    mockSignedIn({
+      id: userId,
+      email: `${userId}@example.com`,
+      email_verified: true,
+    });
+  } else {
+    mockSignedOut();
+  }
   const view = renderWithRouter(
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>{ui}</AuthProvider>
+      <AuthProvider>
+        <AuthProbe />
+        {ui}
+      </AuthProvider>
     </QueryClientProvider>,
     options
   );
   return { ...view, queryClient };
-}
-
-async function emitAuthState(
-  event: string,
-  session: { user: { id: string } } | null
-) {
-  authMock.session = session;
-  await act(async () => {
-    authMock.listeners.forEach((listener) => listener(event, session));
-  });
 }
 
 function neverResolves<T>(): Promise<T> {
@@ -126,8 +135,6 @@ describe('formatUtcDate', () => {
 describe('ResearchHistory', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authMock.listeners.length = 0;
-    authMock.session = null;
   });
 
   it('renders history items with accessible names', async () => {
@@ -250,7 +257,9 @@ describe('ResearchHistory', () => {
 
     expect(await screen.findByRole('link', { name: /TSLA/i })).toBeVisible();
 
-    await emitAuthState('SIGNED_OUT', null);
+    await act(async () => {
+      await testAuth?.signOut();
+    });
 
     await waitFor(() =>
       expect(queryClient.getQueryData(['research-runs', 'user-a'])).toBeUndefined()
@@ -268,7 +277,9 @@ describe('ResearchHistory', () => {
 
     expect(await screen.findByRole('link', { name: /TSLA/i })).toBeVisible();
 
-    await emitAuthState('SIGNED_IN', { user: { id: 'user-b' } });
+    await act(async () => {
+      await testAuth?.switchOwner('user-b');
+    });
 
     expect(await screen.findByRole('link', { name: /AAPL.*Sep 11, 2026/i })).toBeVisible();
     expect(screen.queryByRole('link', { name: /TSLA/i })).not.toBeInTheDocument();
