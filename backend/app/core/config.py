@@ -161,6 +161,12 @@ class Settings(BaseSettings):
     # production so no test or local run can mail a real person.
     EMAIL_PROVIDER: str = "noop"
     BREVO_API_KEY: str = ""
+    # SMTP delivery, e.g. Gmail: smtp.gmail.com, port 587, the account address as
+    # SMTP_USERNAME and a Google app password as SMTP_PASSWORD (redacted by name).
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = Field(default=587, gt=0)
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
     EMAIL_FROM: str = "Vantage <noreply@example.invalid>"
     EMAIL_TIMEOUT_SECONDS: int = Field(default=10, gt=0)
     # Public origin used to build verification and reset links.
@@ -275,7 +281,7 @@ def validate_auth_settings(active: Settings) -> None:
         )
 
 
-_EMAIL_PROVIDERS = {"noop", "brevo"}
+_EMAIL_PROVIDERS = {"noop", "brevo", "smtp"}
 
 
 def validate_email_settings(active: Settings) -> None:
@@ -293,15 +299,24 @@ def validate_email_settings(active: Settings) -> None:
             f"EMAIL_PROVIDER must be one of {sorted(_EMAIL_PROVIDERS)}; "
             "refusing to start."
         )
-    if provider != "brevo":
+    if provider == "noop":
         return
-    if not active.BREVO_API_KEY:
-        raise RuntimeError(
-            "EMAIL_PROVIDER=brevo requires BREVO_API_KEY; refusing to start."
-        )
+    if provider == "brevo":
+        required = {"BREVO_API_KEY": active.BREVO_API_KEY}
+    else:
+        required = {
+            "SMTP_HOST": active.SMTP_HOST,
+            "SMTP_USERNAME": active.SMTP_USERNAME,
+            "SMTP_PASSWORD": active.SMTP_PASSWORD,
+        }
+    for name, value in required.items():
+        if not value.strip():
+            raise RuntimeError(
+                f"EMAIL_PROVIDER={provider} requires {name}; refusing to start."
+            )
     sender = active.EMAIL_FROM.lower()
     if "@" not in sender or "example.invalid" in sender:
         raise RuntimeError(
-            "EMAIL_PROVIDER=brevo requires EMAIL_FROM set to a sender verified in "
-            "Brevo; refusing to start."
+            f"EMAIL_PROVIDER={provider} requires EMAIL_FROM set to the real sender "
+            "address; refusing to start."
         )
