@@ -37,6 +37,7 @@ from app.domain.research import (
 )
 import app.repositories.research_runs as research_runs_module
 from app.repositories.research_runs import ResearchRunRepository
+from app.repositories.users import UserRepository
 from app.services.snapshots import combined_snapshot_hash
 
 VALID_INTERPRETATION = AIInterpretation(
@@ -50,26 +51,19 @@ VALID_INTERPRETATION = AIInterpretation(
 )
 
 
-@pytest.fixture(scope="session")
-def check_db_url() -> None:
-    db_url = os.environ.get("DATABASE_URL", "")
-    if "vantage_test" not in db_url:
-        pytest.fail(f"DATABASE_URL must target 'vantage_test', got: {db_url}")
-
-
 @pytest.fixture
-def repo(check_db_url) -> ResearchRunRepository:
+def repo() -> ResearchRunRepository:
     return ResearchRunRepository()
 
 
 @pytest.fixture
-def user_id() -> UUID:
-    return uuid4()
+def user_id(make_user) -> UUID:
+    return make_user("repo")
 
 
 @pytest.fixture
-def other_user_id() -> UUID:
-    return uuid4()
+def other_user_id(make_user) -> UUID:
+    return make_user("other")
 
 
 @pytest.fixture

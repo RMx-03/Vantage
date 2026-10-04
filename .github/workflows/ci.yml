@@ -34,8 +34,9 @@ jobs:
       DATABASE_URL: postgresql+psycopg://vantage_runtime:vantage_runtime@localhost:5432/vantage_test
       MIGRATION_DATABASE_URL: postgresql+psycopg://vantage_owner:vantage_owner@localhost:5432/vantage_test
       VANTAGE_RUNTIME_DB_ROLE: vantage_runtime
+      EMAIL_PROVIDER: noop
       TRACE_EXPORT_ENABLED: "false"
-      SUPABASE_JWT_SECRET: "ci-dummy-jwt-secret-not-for-production-use"
+      AUTH_JWT_SECRET: "ci-dummy-jwt-secret-not-for-production-use"
       CODE_REVISION: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +53,11 @@ jobs:
       - name: Install dependencies (frozen)
         run: uv sync --frozen
 
-      - name: Create least-privilege runtime role
+      # Heroku Postgres Essential-tier plans expose exactly one credential, so
+      # production cannot enforce this split. These assertions prove the model
+      # holds where two roles exist; they are not a production guarantee.
+      # See ADR-0005.
+      - name: "Create least-privilege runtime role (Compose/CI only — production runs a single credential)"
         env:
           PGPASSWORD: vantage_owner
         run: >-
@@ -62,7 +67,11 @@ jobs:
       - name: Run database migrations
         run: uv run alembic upgrade head
 
-      - name: Verify PUBLIC has no application privileges
+      # Heroku Postgres Essential-tier plans expose exactly one credential, so
+      # production cannot enforce this split. These assertions prove the model
+      # holds where two roles exist; they are not a production guarantee.
+      # See ADR-0005.
+      - name: "Verify PUBLIC has no application privileges (Compose/CI only — production runs a single credential)"
         env:
           PGPASSWORD: vantage_owner
         run: |
@@ -88,8 +97,6 @@ jobs:
       run:
         working-directory: frontend
     env:
-      VITE_SUPABASE_URL: https://keusiyiyupmnskmlztmb.supabase.co
-      VITE_SUPABASE_ANON_KEY: ci-public-anon-key-not-for-production
       VITE_API_URL: http://localhost:8000
     steps:
       - uses: actions/checkout@v4
@@ -126,8 +133,6 @@ jobs:
       run:
         working-directory: frontend
     env:
-      VITE_SUPABASE_URL: https://keusiyiyupmnskmlztmb.supabase.co
-      VITE_SUPABASE_ANON_KEY: ci-public-anon-key-not-for-production
       VITE_API_URL: http://localhost:8000
     steps:
       - uses: actions/checkout@v4
@@ -153,15 +158,29 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     env:
-      # Non-secret CI-only values. The gate deliberately runs without Supabase,
+      # Non-secret CI-only values. The gate deliberately runs without external
       # market-data, model-provider, or Langfuse credentials.
       POSTGRES_OWNER_PASSWORD: ci-container-owner-not-for-production
       POSTGRES_RUNTIME_PASSWORD: ci-container-runtime-not-for-production
       LLM_PROVIDER: disabled
+      EMAIL_PROVIDER: noop
       TRACE_EXPORT_ENABLED: "false"
       CODE_REVISION: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
+
+      # The backend refuses to start without a real signing secret, because
+      # PyJWT accepts a zero-length HS256 key. Generate a fresh one per run and
+      # mask it, rather than committing a fixed value that would become a known
+      # secret the moment anyone copied it into a real environment.
+      - name: Generate per-run signing secret and hashing salt
+        run: |
+          secret="$(openssl rand -hex 48)"
+          echo "::add-mask::$secret"
+          echo "AUTH_JWT_SECRET=$secret" >> "$GITHUB_ENV"
+          salt="$(openssl rand -hex 32)"
+          echo "::add-mask::$salt"
+          echo "TELEMETRY_USER_SALT=$salt" >> "$GITHUB_ENV"
 
       - name: Set up Node.js 22.22.x
         uses: actions/setup-node@v4
@@ -184,7 +203,11 @@ jobs:
       - name: Apply Alembic migrations in a container
         run: docker compose run --rm migrate
 
-      - name: Verify container database privilege separation
+      # Heroku Postgres Essential-tier plans expose exactly one credential, so
+      # production cannot enforce this split. These assertions prove the model
+      # holds where two roles exist; they are not a production guarantee.
+      # See ADR-0005.
+      - name: "Verify container database privilege separation (Compose/CI only — production runs a single credential)"
         run: |
           public_grants="$(docker compose exec -T -e PGPASSWORD="$POSTGRES_OWNER_PASSWORD" postgres \
             psql -U vantage_owner -d vantage -tAc \

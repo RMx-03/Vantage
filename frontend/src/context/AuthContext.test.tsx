@@ -1,123 +1,84 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { AuthProvider, useAuth } from './AuthContext';
+import * as authClient from '../lib/authClient';
 
-type Listener = (event: string, session: unknown) => void;
-
-const authMock = vi.hoisted(() => ({
-  listeners: [] as Listener[],
-  releaseGetSession: null as ((session: unknown) => void) | null,
-}));
-
-vi.mock('../lib/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: () =>
-        new Promise((resolve) => {
-          authMock.releaseGetSession = (session: unknown) =>
-            resolve({ data: { session } });
-        }),
-      onAuthStateChange: (listener: Listener) => {
-        authMock.listeners.push(listener);
-        return { data: { subscription: { unsubscribe: vi.fn() } } };
-      },
-      signOut: () => Promise.resolve({ error: null }),
-    },
-  },
-}));
-
-const OWNER_A = { user: { id: 'owner-a' } };
-const OWNER_B = { user: { id: 'owner-b' } };
-
-function OwnerProbe() {
-  const { user } = useAuth();
-  return <span data-testid="owner">{user?.id ?? 'anonymous'}</span>;
+function Probe() {
+  const { user, loading } = useAuth();
+  if (loading) return <p>loading</p>;
+  return <p>{user ? `signed-in:${user.email}` : 'signed-out'}</p>;
 }
 
-function emit(session: unknown) {
-  act(() => {
-    authMock.listeners.forEach((listener) => listener('SIGNED_IN', session));
-  });
+function renderProbe(client = new QueryClient()) {
+  return render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    </QueryClientProvider>
+  );
 }
 
-async function releaseHydration(session: unknown) {
-  await act(async () => {
-    authMock.releaseGetSession?.(session);
-  });
-}
+beforeEach(() => {
+  authClient.setAccessToken(null);
+});
 
-describe('AuthProvider hydration race', () => {
-  let queryClient: QueryClient;
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
-  beforeEach(() => {
-    authMock.listeners = [];
-    authMock.releaseGetSession = null;
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
+describe('hydration', () => {
+  it('signs the user in when the refresh cookie is valid', async () => {
+    vi.spyOn(authClient, 'refreshSession').mockResolvedValue('refreshed');
+    vi.spyOn(authClient, 'fetchMe').mockResolvedValue({
+      id: 'user-1',
+      email: 'operator@example.com',
+      email_verified: true,
     });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <OwnerProbe />
-        </AuthProvider>
-      </QueryClientProvider>
+
+    renderProbe();
+    await waitFor(() =>
+      expect(screen.getByText('signed-in:operator@example.com')).toBeInTheDocument()
     );
   });
 
-  it('keeps the newer owner when the initial session resolves late', async () => {
-    await waitFor(() => expect(authMock.listeners.length).toBeGreaterThan(0));
-
-    // A newer auth event lands while getSession() is still in flight.
-    emit(OWNER_B);
-    expect(screen.getByTestId('owner')).toHaveTextContent('owner-b');
-
-    // The stale hydration for the previous owner must not win.
-    await releaseHydration(OWNER_A);
-    expect(screen.getByTestId('owner')).toHaveTextContent('owner-b');
+  it('settles signed-out when there is no valid cookie', async () => {
+    vi.spyOn(authClient, 'refreshSession').mockResolvedValue('unauthenticated');
+    renderProbe();
+    await waitFor(() => expect(screen.getByText('signed-out')).toBeInTheDocument());
   });
 
-  it('does not purge the newer owner cache when the initial session resolves late', async () => {
-    await waitFor(() => expect(authMock.listeners.length).toBeGreaterThan(0));
-
-    emit(OWNER_B);
-    queryClient.setQueryData(['research-runs', 'owner-b'], { items: ['kept'] });
-
-    await releaseHydration(OWNER_A);
-
-    expect(queryClient.getQueryData(['research-runs', 'owner-b'])).toEqual({
-      items: ['kept'],
-    });
+  it('stops loading even when hydration throws', async () => {
+    // A hung loading state locks the user out of the whole application.
+    vi.spyOn(authClient, 'refreshSession').mockRejectedValue(new Error('network down'));
+    renderProbe();
+    await waitFor(() => expect(screen.getByText('signed-out')).toBeInTheDocument());
   });
+});
 
-  it('still hydrates from the persisted session when no event precedes it', async () => {
-    await waitFor(() => expect(authMock.listeners.length).toBeGreaterThan(0));
+describe('owner-change cache purge', () => {
+  it('drops research queries when the signed-in owner changes', async () => {
+    // Preserved invariant. Without it, the next user
+    // signed into the same browser can render the previous user's rows.
+    const client = new QueryClient();
+    client.setQueryData(['research-runs', 'list'], [{ id: 'run-from-previous-user' }]);
+    client.setQueryData(['research-run', 'user-1', 'run-1'], { id: 'detail' });
+    const removeSpy = vi.spyOn(client, 'removeQueries');
 
-    await releaseHydration(OWNER_A);
-
-    expect(screen.getByTestId('owner')).toHaveTextContent('owner-a');
-  });
-
-  it('purges cached list and detail queries when the signed-in owner changes', async () => {
-    await waitFor(() => expect(authMock.listeners.length).toBeGreaterThan(0));
-
-    emit(OWNER_A);
-    queryClient.setQueryData(['research-run', 'owner-a', 'run-1'], {
-      run_id: 'run-1',
-    });
-    queryClient.setQueryData(['research-runs', 'owner-a'], {
-      pages: [],
+    vi.spyOn(authClient, 'refreshSession').mockResolvedValue('refreshed');
+    vi.spyOn(authClient, 'fetchMe').mockResolvedValue({
+      id: 'user-2',
+      email: 'second@example.com',
+      email_verified: true,
     });
 
-    emit(OWNER_B);
-
-    await waitFor(() => {
-      expect(
-        queryClient.getQueryData(['research-run', 'owner-a', 'run-1'])
-      ).toBeUndefined();
-      expect(
-        queryClient.getQueryData(['research-runs', 'owner-a'])
-      ).toBeUndefined();
-    });
+    renderProbe(client);
+    await waitFor(() =>
+      expect(screen.getByText('signed-in:second@example.com')).toBeInTheDocument()
+    );
+    expect(removeSpy).toHaveBeenCalledWith({ queryKey: ['research-runs'] });
+    expect(removeSpy).toHaveBeenCalledWith({ queryKey: ['research-run'] });
   });
 });
