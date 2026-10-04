@@ -52,7 +52,9 @@ services:
       # LLM_PROVIDER=ollama explicitly to use it.
       LLM_PROVIDER: ${LLM_PROVIDER:-disabled}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
       OLLAMA_BASE_URL: http://ollama:11434
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-noop}
       BREVO_API_KEY: ${BREVO_API_KEY:-}
