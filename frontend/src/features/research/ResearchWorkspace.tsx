@@ -90,6 +90,11 @@ function OwnerWorkspace({
   });
 
   const selectedRun: ResearchRun | null = routeRun ?? null;
+  // A failed poll while the cached run is still running (for example during a
+  // server restart) is expected; the next poll recovers, so keep the panel.
+  const pollFailedWhileRunning =
+    isRouteRunError && selectedRun?.workflow_status === 'running';
+  const showRouteRunError = isRouteRunError && !pollFailedWhileRunning;
   const routeUpdateCount =
     routeRunUpdatedAt >= 0
       ? (queryClient.getQueryState(['research-run', ownerId, runId])?.dataUpdateCount ?? 0)
@@ -232,7 +237,7 @@ function OwnerWorkspace({
           </div>
         )}
 
-        {!mutation.isPending && !mutation.isError && isRouteRunError && (
+        {!mutation.isPending && !mutation.isError && showRouteRunError && (
           <div className="border border-error-container bg-error-container/30 p-6 text-error">
             <p className="font-medium font-label">Failed to load research run.</p>
             <p className="mt-1 text-sm font-body">
@@ -253,7 +258,7 @@ function OwnerWorkspace({
         {!mutation.isPending &&
           !mutation.isError &&
           !isRouteRunLoading &&
-          !isRouteRunError &&
+          !showRouteRunError &&
           selectedRun &&
           (selectedRun.workflow_status === 'running' ? (
             <RunningPanel
@@ -268,7 +273,7 @@ function OwnerWorkspace({
         {!mutation.isPending &&
           !mutation.isError &&
           !isRouteRunLoading &&
-          !isRouteRunError &&
+          !showRouteRunError &&
           !selectedRun && (
           <div className="border border-outline-variant/30 bg-surface-container-low p-12 text-center text-outline font-label">
             <p className="text-sm">Enter a US equity symbol above to begin an EOD research run.</p>

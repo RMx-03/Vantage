@@ -754,4 +754,45 @@ describe('ResearchWorkspace asynchronous runs', () => {
     );
     expect(historyCalls).toHaveLength(1);
   });
+
+  it('renders a terminal run from an older backend and does not poll it', async () => {
+    vi.mocked(api.createResearchRun).mockResolvedValue(informationalRun);
+    vi.mocked(api.getResearchRun).mockResolvedValue(informationalRun);
+
+    renderWorkspace();
+    fireEvent.change(screen.getByLabelText(/US equity symbol/i), {
+      target: { value: 'AAPL' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Run research/i }));
+    await advance(0);
+    expect(screen.getByText(informationalRun.summary!)).toBeVisible();
+
+    // At most the single standard mount fetch; polling must add nothing.
+    const afterMount = vi.mocked(api.getResearchRun).mock.calls.length;
+    expect(afterMount).toBeLessThanOrEqual(1);
+    await advance(3500);
+    expect(vi.mocked(api.getResearchRun).mock.calls.length).toBe(afterMount);
+    expect(screen.getByText(informationalRun.summary!)).toBeVisible();
+  });
+
+  it('keeps the running panel when a poll fails, then shows the result', async () => {
+    vi.mocked(api.getResearchRun)
+      .mockResolvedValueOnce(runningRun())
+      .mockRejectedValueOnce(new Error('connection reset'))
+      .mockResolvedValue(informationalRun);
+
+    renderWorkspace({ route: `/app/research/${informationalRun.run_id}` });
+    await advance(0);
+    expect(screen.getByRole('status')).toHaveTextContent(/Running research analysis/);
+
+    await advance(1000);
+    await advance(50);
+    expect(vi.mocked(api.getResearchRun).mock.calls.length).toBe(2);
+    expect(screen.queryByText(/Failed to load research run/)).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/Running research analysis/);
+
+    await advance(1500);
+    expect(screen.getByText(informationalRun.summary!)).toBeVisible();
+    expect(screen.queryByText(/Failed to load research run/)).not.toBeInTheDocument();
+  });
 });
