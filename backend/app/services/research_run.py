@@ -65,24 +65,30 @@ class ResearchRunService:
         providers: ProviderSet | None = None,
     ) -> None:
         self.repo = repo or ResearchRunRepository()
-        explicit = (market_provider, news_provider, interpretation_provider)
-        if providers is None and all(p is not None for p in explicit):
+        if (
+            providers is None
+            and market_provider is not None
+            and news_provider is not None
+            and interpretation_provider is not None
+        ):
             # Fully explicit wiring never touches settings or the registry.
             providers = ProviderSet(
                 market=market_provider,
-                news=(news_provider,),  # type: ignore[arg-type]
+                news=(news_provider,),
                 filings=None,
                 fundamentals=None,
                 macro=None,
                 crosscheck=None,
-                llm=interpretation_provider,  # type: ignore[arg-type]
+                llm=interpretation_provider,
                 not_configured=("filings", "fundamentals", "macro", "crosscheck"),
             )
         self.providers = providers or build_providers(settings)
         self.market: MarketDataProvider | None = (
             market_provider or self.providers.market
         )
-        self.news: NewsProvider = news_provider or self.providers.news[0]
+        self.news: NewsProvider | None = news_provider or (
+            self.providers.news[0] if self.providers.news else None
+        )
         self.llm = interpretation_provider or self.providers.llm
         self.versions = versions or VersionInfo(
             response_schema=RESPONSE_SCHEMA_VERSION,
@@ -306,23 +312,33 @@ class ResearchRunService:
                 n_span.set_attribute("vantage.run_id", str(row.public_id))
                 with tracer.start_as_current_span("provider_request") as p_span:
                     p_span.set_attribute("vantage.run_id", str(row.public_id))
-                    try:
-                        news = self.news.fetch_company_news(
-                            norm_symbol,
-                            analysis_cutoff,
-                            now,
-                            settings.NEWS_LOOKBACK_DAYS,
-                            10,
-                        )
-                    except VantageError as exc:
+                    if self.news is None:
                         news = NewsSnapshot(
                             symbol=norm_symbol,
                             items=[],
-                            provider=self.news.name,
+                            provider="none",
                             retrieved_at=now,
                             quality=ComponentQuality.FAILED,
-                            error_code=exc.code,
+                            error_code="NEWS_PROVIDER_FAILED",
                         )
+                    else:
+                        try:
+                            news = self.news.fetch_company_news(
+                                norm_symbol,
+                                analysis_cutoff,
+                                now,
+                                settings.NEWS_LOOKBACK_DAYS,
+                                10,
+                            )
+                        except VantageError as exc:
+                            news = NewsSnapshot(
+                                symbol=norm_symbol,
+                                items=[],
+                                provider=self.news.name,
+                                retrieved_at=now,
+                                quality=ComponentQuality.FAILED,
+                                error_code=exc.code,
+                            )
                 with tracer.start_as_current_span("validate_news_quality") as v_span:
                     v_span.set_attribute("vantage.run_id", str(row.public_id))
 
