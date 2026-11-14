@@ -1,6 +1,6 @@
 # Vantage Backend — Transparent Research Runs
 
-The backend executes durable, synchronous, end-of-day research runs for supported US-listed equities. It returns deterministic metrics, typed quality states, registered reasons, evidence provenance, version identifiers, and an optional bounded AI interpretation. It does not place trades or provide investment advice.
+The backend executes durable, end-of-day research runs (accepted and polled when the client sends `Prefer: respond-async`, synchronous otherwise) for supported US-listed equities. It returns deterministic metrics, typed quality states, registered reasons, evidence provenance, version identifiers, and an optional bounded AI interpretation. It does not place trades or provide investment advice.
 
 ## Stack and boundaries
 
@@ -45,10 +45,13 @@ All research routes require a valid Vantage access token. Creating a run also re
 
 Poll `GET /api/v1/research-runs/{run_id}` until `workflow_status` is no longer `running`. A run still `running` past `RUN_DEADLINE_SECONDS` is finalized as failed the next time its owner reads it.
 
-Four error codes belong to asynchronous runs. All use the `SafeError` envelope with `retryable: true` where a retry makes sense:
+Four error codes belong to asynchronous runs. Two are HTTP errors in the `SafeError` envelope, both with `Retry-After: 5` and `retryable: true`; no run is created:
 
-- `RUN_CAPACITY_EXCEEDED` (`429`, `Retry-After: 5`): all run slots are busy; no run is created
-- `SERVICE_DRAINING` (`503`, `Retry-After: 5`): the service is restarting; no run is created
+- `RUN_CAPACITY_EXCEEDED` (`429`): all run slots are busy
+- `SERVICE_DRAINING` (`503`): the service is restarting
+
+The other two appear as `error_code` on a failed run, which is still read with HTTP 200:
+
 - `RUN_DEADLINE_EXCEEDED`: a run did not finish within its time limit
 - `RUN_INTERRUPTED`: a run was interrupted by a server restart
 

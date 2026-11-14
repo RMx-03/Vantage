@@ -336,7 +336,7 @@ class ResearchRunRepository:
                     )
                     .values(
                         workflow_status=WorkflowStatus.FAILED.value,
-                        research_status=None,
+                        research_status=ResearchStatus.FAILED.value,
                         completed_at=now,
                         error_code=error_code,
                         error_message_safe=error_message_safe,

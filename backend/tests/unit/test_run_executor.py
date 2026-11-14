@@ -62,7 +62,12 @@ def test_exception_in_fn_frees_slot_and_logs_without_message(
         executor.reserve().launch(uuid4(), boom)
         assert executor.wait_idle(2) is True
     executor.reserve()
-    assert any(r.getMessage() == "detached research run failed" for r in caplog.records)
+    messages = [r.getMessage() for r in caplog.records]
+    assert any(
+        m.startswith("detached research run failed run_id=")
+        and m.endswith("error_type=RuntimeError")
+        for m in messages
+    ), messages
     for record in caplog.records:
         assert "secret-token-abc" not in record.getMessage()
         assert "secret-token-abc" not in str(record.__dict__)

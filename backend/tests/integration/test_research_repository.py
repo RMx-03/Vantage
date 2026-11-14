@@ -993,7 +993,7 @@ def test_fail_if_running_fails_once_and_never_overwrites_terminal(
     failed = repo.get_owned(user_id, running_run.public_id)
     assert failed is not None
     assert failed.workflow_status == WorkflowStatus.FAILED
-    assert failed.research_status is None
+    assert failed.research_status == ResearchStatus.FAILED
     assert failed.error_code == "RUN_INTERRUPTED"
     assert failed.error_message_safe == RUN_INTERRUPTED_MESSAGE
     assert failed.completed_at is not None

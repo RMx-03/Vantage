@@ -106,8 +106,9 @@ class RunSlot:
                 fn()
             except Exception as exc:
                 logger.error(
-                    "detached research run failed",
-                    extra={"run_id": str(run_id), "error_type": type(exc).__name__},
+                    "detached research run failed run_id=%s error_type=%s",
+                    run_id,
+                    type(exc).__name__,
                 )
             finally:
                 executor._free(run_id)

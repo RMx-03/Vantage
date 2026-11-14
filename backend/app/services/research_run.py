@@ -227,8 +227,9 @@ class ResearchRunService:
                 )
             except VantageError as exc:
                 logger.info(
-                    "detached research run ended without a result",
-                    extra={"run_id": str(row.public_id), "error_code": exc.code},
+                    "detached research run ended with error code run_id=%s error_code=%s",
+                    row.public_id,
+                    exc.code,
                 )
 
     def _execute(

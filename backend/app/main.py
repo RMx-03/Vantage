@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 import logging
 
@@ -52,11 +53,15 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Vantage backend shutting down")
     executor.begin_drain()
-    if not executor.wait_idle(settings.RUN_SHUTDOWN_GRACE_SECONDS):
+    # uvicorn stops accepting connections before lifespan shutdown, so
+    # SERVICE_DRAINING only guards unusual setups.
+    if not await asyncio.to_thread(
+        executor.wait_idle, settings.RUN_SHUTDOWN_GRACE_SECONDS
+    ):
         # Read-time expiry finalizes these runs later.
         logger.warning(
-            "shutdown left research runs in flight",
-            extra={"in_flight": executor.in_flight_count},
+            "shutdown left research runs in flight count=%s",
+            executor.in_flight_count,
         )
     executor.shutdown()
 
