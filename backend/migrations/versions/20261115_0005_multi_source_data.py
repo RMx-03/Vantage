@@ -35,6 +35,9 @@ def _runtime_role() -> str | None:
 
 
 def upgrade() -> None:
+    # Fail fast instead of queueing behind a long transaction and blocking the
+    # tables the running release reads and writes.
+    op.execute("SET LOCAL lock_timeout = '5s'")
     # Every added column is nullable, so existing rows and the running release
     # stay valid. Old runs read the new fields back as null.
     for column in _SNAPSHOT_COLUMNS:
@@ -54,11 +57,15 @@ def upgrade() -> None:
         schema=_SCHEMA,
     )
     # Every existing row is a news item, so the constraint validates cleanly.
-    op.create_check_constraint(
-        "ck_research_sources_source_type",
-        "research_sources",
-        "source_type IN ('news','filing','insider_transaction')",
-        schema=_SCHEMA,
+    # NOT VALID then VALIDATE keeps the long scan under a weaker lock.
+    op.execute(
+        "ALTER TABLE vantage_app.research_sources "
+        "ADD CONSTRAINT ck_research_sources_source_type "
+        "CHECK (source_type IN ('news','filing','insider_transaction')) NOT VALID"
+    )
+    op.execute(
+        "ALTER TABLE vantage_app.research_sources "
+        "VALIDATE CONSTRAINT ck_research_sources_source_type"
     )
 
     op.create_table(

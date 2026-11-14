@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.models import ResearchRunRow, ResearchSnapshotRow, ResearchSourceRow
 from app.db.session import SessionFactory, get_database_url
+from app.db.urls import normalize_database_url
 from tests.db_guard import require_test_database
 
 pytestmark = pytest.mark.integration
@@ -23,14 +24,31 @@ SNAPSHOT_COLUMNS = {"providers", "context_bars", "fundamentals", "macro"}
 SOURCE_COLUMNS = {"summary", "details"}
 
 
+def _migration_database_url() -> str:
+    """The URL the Alembic subprocess connects to, mirroring migrations/env.py."""
+    from app.core.config import settings
+
+    return normalize_database_url(
+        os.environ.get("MIGRATION_DATABASE_URL")
+        or os.environ.get("DATABASE_URL")
+        or getattr(settings, "MIGRATION_DATABASE_URL", None)
+        or getattr(settings, "DATABASE_URL", None)
+        or ""
+    )
+
+
 def _alembic(*args: str) -> None:
+    # Downgrading is destructive: refuse unless both the runtime URL and the
+    # URL Alembic will really use name the test database.
     require_test_database(get_database_url())
+    require_test_database(_migration_database_url())
     result = subprocess.run(
         [sys.executable, "-m", "alembic", *args],
         capture_output=True,
         text=True,
         cwd=str(BACKEND),
         env=os.environ.copy(),
+        timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -61,17 +79,33 @@ def _table_exists(table: str) -> bool:
         )
 
 
+def _check_constraint_exists() -> bool:
+    with SessionFactory() as session:
+        return (
+            session.execute(
+                text(
+                    "SELECT 1 FROM pg_constraint WHERE "
+                    "conname = 'ck_research_sources_source_type'"
+                )
+            ).scalar()
+            == 1
+        )
+
+
 def test_0005_downgrade_and_upgrade_round_trip() -> None:
+    # This downgrades the shared test database, so the suite must stay serial.
     try:
         _alembic("downgrade", PREVIOUS_REVISION)
         assert not _table_exists("provider_cache")
         assert not SNAPSHOT_COLUMNS & _columns("research_snapshots")
         assert not SOURCE_COLUMNS & _columns("research_sources")
+        assert not _check_constraint_exists()
 
         _alembic("upgrade", "head")
         assert _table_exists("provider_cache")
         assert SNAPSHOT_COLUMNS <= _columns("research_snapshots")
         assert SOURCE_COLUMNS <= _columns("research_sources")
+        assert _check_constraint_exists()
     finally:
         _alembic("upgrade", "head")
 

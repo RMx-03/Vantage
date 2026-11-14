@@ -45,6 +45,10 @@ def _only_the_test_database() -> None:
 
     try:
         require_test_database(get_database_url())
+        # Migration tests run Alembic against the owner URL, which can differ.
+        migration_url = os.environ.get("MIGRATION_DATABASE_URL")
+        if migration_url:
+            require_test_database(migration_url)
     except RuntimeError as error:
         pytest.exit(str(error), returncode=2)
 
