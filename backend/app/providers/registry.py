@@ -20,6 +20,7 @@ from app.providers.contracts import (
     NewsProvider,
     PriceCrossCheckProvider,
 )
+from app.providers.fixture_provider import FixtureProvider
 from app.providers.llm import (
     DisabledInterpretationProvider,
     GeminiInterpretationProvider,
@@ -77,6 +78,10 @@ class ProviderSet:
     not_configured: tuple[str, ...]
 
 
+def _fixture(_: Settings) -> object:
+    return FixtureProvider()
+
+
 def _yfinance(_: Settings) -> object:
     return YFinanceSnapshotProvider()
 
@@ -86,6 +91,8 @@ def default_registry() -> ProviderRegistry:
     registry = ProviderRegistry()
     registry.register("market", "yfinance", _yfinance)
     registry.register("news", "yfinance", _yfinance)
+    registry.register("market", "fixture", _fixture)
+    registry.register("news", "fixture", _fixture)
     registry.register("llm", "disabled", lambda s: DisabledInterpretationProvider())
     registry.register(
         "llm",
