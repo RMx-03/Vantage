@@ -17,6 +17,17 @@ export interface ResearchErrorView {
 
 const FALLBACK = 'Research run could not be completed. Please try again later.';
 
+// Capacity and lifecycle codes carry fixed copy. Retryability still comes from
+// the server's flag; a 503 SERVICE_DRAINING must not read as a market-data failure.
+const CODE_COPY: Record<string, string> = {
+  RUN_CAPACITY_EXCEEDED:
+    'Vantage is processing other research runs. Try again in a few seconds.',
+  SERVICE_DRAINING: 'Vantage is restarting. Try again in a few seconds.',
+  RUN_DEADLINE_EXCEEDED: 'The research run did not finish within its time limit.',
+  RUN_INTERRUPTED:
+    'The research run was interrupted by a server restart. Start it again.',
+};
+
 export function mapResearchError(err: unknown): ResearchErrorView {
   if (err instanceof ApiError) {
     const runId = err.error.run_id ?? null;
@@ -31,6 +42,11 @@ export function mapResearchError(err: unknown): ResearchErrorView {
         runId,
         requestId,
       };
+    }
+
+    const codeCopy = CODE_COPY[err.error.code];
+    if (codeCopy) {
+      return { message: codeCopy, isAuthError: false, canRetry, runId, requestId };
     }
 
     if (

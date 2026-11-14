@@ -92,3 +92,40 @@ describe('mapResearchError', () => {
     expect(view.message).toMatch(/could not be completed/i);
   });
 });
+
+describe('mapResearchError run capacity and lifecycle codes', () => {
+  it('treats a full executor as retryable with its own copy', () => {
+    const view = mapResearchError(
+      new ApiError(429, { code: 'RUN_CAPACITY_EXCEEDED', message: 'x', retryable: true })
+    );
+    expect(view.canRetry).toBe(true);
+    expect(view.message).toBe(
+      'Vantage is processing other research runs. Try again in a few seconds.'
+    );
+  });
+
+  it('treats a draining server as retryable and not as a market-data failure', () => {
+    const view = mapResearchError(
+      new ApiError(503, { code: 'SERVICE_DRAINING', message: 'x', retryable: true })
+    );
+    expect(view.canRetry).toBe(true);
+    expect(view.message).toBe('Vantage is restarting. Try again in a few seconds.');
+  });
+
+  it('does not offer retry for an interrupted run', () => {
+    const view = mapResearchError(
+      new ApiError(500, { code: 'RUN_INTERRUPTED', message: 'x', retryable: false })
+    );
+    expect(view.canRetry).toBe(false);
+    expect(view.message).toBe(
+      'The research run was interrupted by a server restart. Start it again.'
+    );
+  });
+
+  it('explains a run that exceeded its deadline', () => {
+    const view = mapResearchError(
+      new ApiError(500, { code: 'RUN_DEADLINE_EXCEEDED', message: 'x', retryable: false })
+    );
+    expect(view.message).toBe('The research run did not finish within its time limit.');
+  });
+});

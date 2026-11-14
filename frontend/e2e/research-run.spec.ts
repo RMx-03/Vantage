@@ -39,51 +39,50 @@ async function mockAuth(page: Page) {
   );
 }
 
-async function installAuthAndApiMocks(page: Page) {
+async function installAuthAndApiMocks(page: Page, postHeaders: string[] = []) {
   await mockAuth(page);
+
+  // A run is accepted as running; the first single-run read still reports it
+  // running, and every later read returns the finished run.
+  const runningOf = (run: typeof informationalRun, symbol?: string) => ({
+    ...run,
+    ...(symbol ? { symbol } : {}),
+    workflow_status: 'running',
+    research_status: null,
+  });
+  const reads = new Map<string, number>();
 
   // Mock Individual Research Run API
   await page.route('**/api/v1/research-runs/*', async (route) => {
     const url = route.request().url();
-    if (url.includes('DEGRADED') || url.includes(reviewRun.run_id)) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          ...reviewRun,
-          symbol: 'DEGRADED',
-        }),
-      });
-    } else {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(informationalRun),
-      });
-    }
+    const degraded = url.includes('DEGRADED') || url.includes(reviewRun.run_id);
+    const finished = degraded ? { ...reviewRun, symbol: 'DEGRADED' } : informationalRun;
+    const count = (reads.get(finished.run_id) ?? 0) + 1;
+    reads.set(finished.run_id, count);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        count === 1 ? runningOf(finished, degraded ? 'DEGRADED' : undefined) : finished
+      ),
+    });
   });
 
   // Mock Research Runs API
   await page.route('**/api/v1/research-runs*', async (route) => {
     const req = route.request();
     if (req.method() === 'POST') {
+      postHeaders.push(req.headers()['prefer'] ?? '');
       const data = JSON.parse(req.postData() || '{}');
-      if (data.symbol === 'DEGRADED') {
-        await route.fulfill({
-          status: 201,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            ...reviewRun,
-            symbol: 'DEGRADED',
-          }),
-        });
-      } else {
-        await route.fulfill({
-          status: 201,
-          contentType: 'application/json',
-          body: JSON.stringify(informationalRun),
-        });
-      }
+      await route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          data.symbol === 'DEGRADED'
+            ? runningOf(reviewRun, 'DEGRADED')
+            : runningOf(informationalRun)
+        ),
+      });
     } else {
       // GET list or get run
       await route.fulfill({
@@ -100,7 +99,8 @@ async function installAuthAndApiMocks(page: Page) {
 
 test.describe('Research Run Browser Journey (first-party auth and API route-mocked)', () => {
   test('creates, inspects, and reopens transparent research runs', async ({ page }) => {
-    await installAuthAndApiMocks(page);
+    const postHeaders: string[] = [];
+    await installAuthAndApiMocks(page, postHeaders);
 
     // Direct deep-link navigation, then a reload. Against the production
     // frontend container both requests are served by the Nginx SPA fallback
@@ -120,6 +120,10 @@ test.describe('Research Run Browser Journey (first-party auth and API route-mock
     // 1. Submit valid symbol
     await page.getByLabel(/US equity symbol/i).fill('AAPL');
     await page.getByRole('button', { name: /Run research/i }).click();
+
+    // The run is accepted asynchronously and shows a running state first
+    await expect(page.getByRole('status')).toContainText('Running research analysis');
+    expect(postHeaders[0]).toContain('respond-async');
 
     // 2. Verify all six levels of information hierarchy
     await expect(page.getByRole('heading', { name: 'AAPL', exact: true })).toBeVisible();
@@ -153,6 +157,7 @@ test.describe('Research Run Browser Journey (first-party auth and API route-mock
     await page.getByLabel(/US equity symbol/i).fill('DEGRADED');
     await page.getByRole('button', { name: /Run research/i }).click();
 
+    await expect(page.getByRole('status')).toContainText('Running research analysis');
     await expect(page.getByRole('heading', { name: 'DEGRADED', exact: true })).toBeVisible();
     await expect(page.getByText('AI interpretation unavailable', { exact: true })).toBeVisible();
     await expect(page.getByText('20-Session Return')).toBeVisible();

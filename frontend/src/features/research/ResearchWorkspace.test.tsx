@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ResearchWorkspace from './ResearchWorkspace';
 import { AuthProvider } from '../../context/AuthContext';
@@ -644,5 +644,155 @@ describe('ResearchWorkspace', () => {
         { replace: true }
       )
     );
+  });
+});
+
+describe('ResearchWorkspace asynchronous runs', () => {
+  const runningRun = () => ({
+    ...informationalRun,
+    workflow_status: 'running' as const,
+    research_status: null,
+    summary: null,
+    created_at: new Date().toISOString(),
+    completed_at: null,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    mockSignedIn({ id: 'user-a', email: 'test@example.com', email_verified: true });
+    authMock.user = { id: 'user-a', email: 'test@example.com' };
+    authMock.useRealProvider = false;
+    vi.mocked(api.listResearchRuns).mockResolvedValue({ items: [], next_cursor: null });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+
+  it('polls a running run until it succeeds', async () => {
+    vi.mocked(api.createResearchRun).mockResolvedValue(runningRun());
+    vi.mocked(api.getResearchRun)
+      .mockResolvedValueOnce(runningRun())
+      .mockResolvedValue(informationalRun);
+
+    renderWorkspace();
+    fireEvent.change(screen.getByLabelText(/US equity symbol/i), {
+      target: { value: 'AAPL' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Run research/i }));
+    await advance(0);
+
+    expect(screen.getByRole('status')).toHaveTextContent(/Running research analysis for AAPL/);
+    expect(screen.queryByText(informationalRun.summary!)).not.toBeInTheDocument();
+
+    await advance(2000);
+    expect(screen.getByText(informationalRun.summary!)).toBeVisible();
+    expect(vi.mocked(api.getResearchRun).mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('resumes polling when a running run is opened by URL', async () => {
+    vi.mocked(api.getResearchRun)
+      .mockResolvedValueOnce(runningRun())
+      .mockResolvedValue(informationalRun);
+
+    renderWorkspace({ route: `/app/research/${informationalRun.run_id}` });
+    await advance(0);
+    expect(screen.getByRole('status')).toHaveTextContent(/Running research analysis/);
+
+    await advance(1500);
+    expect(screen.getByText(informationalRun.summary!)).toBeVisible();
+    expect(api.createResearchRun).not.toHaveBeenCalled();
+  });
+
+  it('shows the slow-run notice after polling is exhausted', async () => {
+    vi.mocked(api.getResearchRun).mockResolvedValue(runningRun());
+
+    renderWorkspace({ route: `/app/research/${informationalRun.run_id}` });
+    await advance(155_000);
+
+    expect(screen.getByText(/This run is taking longer than expected/)).toBeVisible();
+    const before = vi.mocked(api.getResearchRun).mock.calls.length;
+    await advance(10_000);
+    expect(vi.mocked(api.getResearchRun).mock.calls.length).toBe(before);
+
+    fireEvent.click(screen.getByRole('button', { name: /Check again/i }));
+    await advance(0);
+    expect(vi.mocked(api.getResearchRun).mock.calls.length).toBe(before + 1);
+  });
+
+  it('stops polling when the workspace unmounts', async () => {
+    vi.mocked(api.getResearchRun).mockResolvedValue(runningRun());
+
+    const view = renderWorkspace({ route: `/app/research/${informationalRun.run_id}` });
+    await advance(3000);
+    view.unmount();
+    const before = vi.mocked(api.getResearchRun).mock.calls.length;
+    await advance(10_000);
+    expect(vi.mocked(api.getResearchRun).mock.calls.length).toBe(before);
+  });
+
+  it('refreshes history once when a polled run finishes', async () => {
+    vi.mocked(api.getResearchRun)
+      .mockResolvedValueOnce(runningRun())
+      .mockResolvedValue(informationalRun);
+
+    const { queryClient } = renderWorkspace({
+      route: `/app/research/${informationalRun.run_id}`,
+    });
+    await advance(0);
+    const spy = vi.spyOn(queryClient, 'invalidateQueries');
+    spy.mockClear();
+
+    await advance(1000);
+    await advance(5000);
+    const historyCalls = spy.mock.calls.filter(
+      ([filter]) =>
+        JSON.stringify((filter as { queryKey?: unknown })?.queryKey) ===
+        JSON.stringify(['research-runs', 'user-a'])
+    );
+    expect(historyCalls).toHaveLength(1);
+  });
+
+  it('renders a terminal run from an older backend and does not poll it', async () => {
+    vi.mocked(api.createResearchRun).mockResolvedValue(informationalRun);
+    vi.mocked(api.getResearchRun).mockResolvedValue(informationalRun);
+
+    renderWorkspace();
+    fireEvent.change(screen.getByLabelText(/US equity symbol/i), {
+      target: { value: 'AAPL' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Run research/i }));
+    await advance(0);
+    expect(screen.getByText(informationalRun.summary!)).toBeVisible();
+
+    // At most the single standard mount fetch; polling must add nothing.
+    const afterMount = vi.mocked(api.getResearchRun).mock.calls.length;
+    expect(afterMount).toBeLessThanOrEqual(1);
+    await advance(3500);
+    expect(vi.mocked(api.getResearchRun).mock.calls.length).toBe(afterMount);
+    expect(screen.getByText(informationalRun.summary!)).toBeVisible();
+  });
+
+  it('keeps the running panel when a poll fails, then shows the result', async () => {
+    vi.mocked(api.getResearchRun)
+      .mockResolvedValueOnce(runningRun())
+      .mockRejectedValueOnce(new Error('connection reset'))
+      .mockResolvedValue(informationalRun);
+
+    renderWorkspace({ route: `/app/research/${informationalRun.run_id}` });
+    await advance(0);
+    expect(screen.getByRole('status')).toHaveTextContent(/Running research analysis/);
+
+    await advance(1000);
+    await advance(50);
+    expect(vi.mocked(api.getResearchRun).mock.calls.length).toBe(2);
+    expect(screen.queryByText(/Failed to load research run/)).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/Running research analysis/);
+
+    await advance(1500);
+    expect(screen.getByText(informationalRun.summary!)).toBeVisible();
+    expect(screen.queryByText(/Failed to load research run/)).not.toBeInTheDocument();
   });
 });

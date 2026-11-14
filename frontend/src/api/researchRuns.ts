@@ -78,6 +78,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const createResearchRun = (symbol: string): Promise<ResearchRun> =>
   request<ResearchRun>('/research-runs', {
     method: 'POST',
+    headers: { Prefer: 'respond-async' },
     body: JSON.stringify({ symbol: symbol.trim().toUpperCase() }),
   });
 

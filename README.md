@@ -53,6 +53,8 @@ flowchart LR
 4. **Policy.** Assigns the research status and reasons from the metrics and data quality.
 5. **Saved run.** The whole record is stored against your account and can be reopened from your history.
 
+A run starts in the background and the page polls it until it finishes, so a slow provider no longer holds a request open; the result appears when the run completes.
+
 Each run also emits an OpenTelemetry trace (optionally exported to Langfuse), so an engineer can follow a run ID through every step.
 
 ## What it is not

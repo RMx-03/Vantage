@@ -1,6 +1,6 @@
 # Vantage Backend — Transparent Research Runs
 
-The backend executes durable, synchronous, end-of-day research runs for supported US-listed equities. It returns deterministic metrics, typed quality states, registered reasons, evidence provenance, version identifiers, and an optional bounded AI interpretation. It does not place trades or provide investment advice.
+The backend executes durable, end-of-day research runs (accepted and polled when the client sends `Prefer: respond-async`, synchronous otherwise) for supported US-listed equities. It returns deterministic metrics, typed quality states, registered reasons, evidence provenance, version identifiers, and an optional bounded AI interpretation. It does not place trades or provide investment advice.
 
 ## Stack and boundaries
 
@@ -38,9 +38,22 @@ The refresh cookie is scoped to `Path=/api/v1/auth`. `refresh` and `logout` reje
 
 All research routes require a valid Vantage access token. Creating a run also requires a verified email address; an unverified account receives `403`.
 
-- `POST /api/v1/research-runs` creates and completes one run synchronously
+- `POST /api/v1/research-runs` creates and completes one run synchronously (`201`)
+- `POST /api/v1/research-runs` with `Prefer: respond-async` accepts the run and returns `202` with a `running` run, a `Location` header and `Preference-Applied: respond-async`; the run executes in the background
 - `GET /api/v1/research-runs/{run_id}` retrieves an owner-scoped run
 - `GET /api/v1/research-runs?limit=20&before=...` lists owner-scoped history
+
+Poll `GET /api/v1/research-runs/{run_id}` until `workflow_status` is no longer `running`. A run still `running` past `RUN_DEADLINE_SECONDS` is finalized as failed the next time its owner reads it.
+
+Four error codes belong to asynchronous runs. Two are HTTP errors in the `SafeError` envelope, both with `Retry-After: 5` and `retryable: true`; no run is created:
+
+- `RUN_CAPACITY_EXCEEDED` (`429`): all run slots are busy
+- `SERVICE_DRAINING` (`503`): the service is restarting
+
+The other two appear as `error_code` on a failed run, which is still read with HTTP 200:
+
+- `RUN_DEADLINE_EXCEEDED`: a run did not finish within its time limit
+- `RUN_INTERRUPTED`: a run was interrupted by a server restart
 
 Errors use the shared `SafeError` envelope. The incompatible legacy `/api/v1/analyze` route is intentionally absent.
 

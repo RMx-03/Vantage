@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 import logging
 
@@ -14,6 +15,7 @@ from app.core.config import (
     validate_email_settings,
 )
 from app.domain.errors import RUN_ALREADY_FINALIZED, SafeError, VantageError
+from app.services.run_executor import get_run_executor
 from app.telemetry.tracing import configure_telemetry, get_tracer
 
 # ---------------------------------------------------------------------------
@@ -41,11 +43,27 @@ async def lifespan(app: FastAPI):
     validate_auth_settings(settings)
     validate_email_settings(settings)
     configure_telemetry(app)
+    # Each lifespan owns a fresh executor, so a drained one never leaks into
+    # the next startup in the same process.
+    get_run_executor.cache_clear()
+    executor = get_run_executor()
     logger.info("Vantage backend started")
     logger.info("Swagger UI available at http://localhost:8000/docs")
     logger.info("Ollama endpoint configured at %s", settings.OLLAMA_BASE_URL)
     yield
     logger.info("Vantage backend shutting down")
+    executor.begin_drain()
+    # uvicorn stops accepting connections before lifespan shutdown, so
+    # SERVICE_DRAINING only guards unusual setups.
+    if not await asyncio.to_thread(
+        executor.wait_idle, settings.RUN_SHUTDOWN_GRACE_SECONDS
+    ):
+        # Read-time expiry finalizes these runs later.
+        logger.warning(
+            "shutdown left research runs in flight count=%s",
+            executor.in_flight_count,
+        )
+    executor.shutdown()
 
 
 # ---------------------------------------------------------------------------

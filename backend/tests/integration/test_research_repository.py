@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import ResearchRunRow
 from app.db.session import SessionFactory
-from app.domain.errors import VantageError
+from app.domain.errors import RUN_INTERRUPTED, RUN_INTERRUPTED_MESSAGE, VantageError
 from app.domain.research import (
     AIInterpretation,
     ComponentQuality,
@@ -923,3 +923,118 @@ def test_read_path_serves_a_safe_stored_url_byte_identical(
     from app.domain.urls import normalize_url
 
     assert normalize_url(unnormalized) != unnormalized
+
+
+def _age_run(run_id: int, seconds: int) -> None:
+    with SessionFactory() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE vantage_app.research_runs "
+                "SET started_at = started_at - make_interval(secs => :secs) "
+                "WHERE id = :id"
+            ),
+            {"secs": seconds, "id": run_id},
+        )
+
+
+def test_list_stale_running_returns_only_old_running_rows(
+    repo: ResearchRunRepository,
+    user_id: UUID,
+    versions: VersionInfo,
+    completed_run,
+) -> None:
+    stale = repo.create_running(user_id=user_id, symbol="OLD", versions=versions)
+    fresh = repo.create_running(user_id=user_id, symbol="NEW", versions=versions)
+    _age_run(stale.id, 200)
+    _age_run(completed_run.id, 200)
+
+    found = repo.list_stale_running(
+        started_before=datetime.now(UTC) - timedelta(seconds=120)
+    )
+
+    assert stale.public_id in found
+    assert fresh.public_id not in found
+    assert completed_run.public_id not in found
+
+
+def test_list_stale_running_scopes_to_user(
+    repo: ResearchRunRepository,
+    user_id: UUID,
+    other_user_id: UUID,
+    versions: VersionInfo,
+) -> None:
+    mine = repo.create_running(user_id=user_id, symbol="MINE", versions=versions)
+    theirs = repo.create_running(
+        user_id=other_user_id, symbol="THEIRS", versions=versions
+    )
+    _age_run(mine.id, 200)
+    _age_run(theirs.id, 200)
+    cutoff = datetime.now(UTC) - timedelta(seconds=120)
+
+    scoped = repo.list_stale_running(started_before=cutoff, user_id=user_id)
+    everyone = repo.list_stale_running(started_before=cutoff, user_id=None)
+
+    assert mine.public_id in scoped
+    assert theirs.public_id not in scoped
+    assert {mine.public_id, theirs.public_id} <= set(everyone)
+
+
+def test_fail_if_running_fails_once_and_never_overwrites_terminal(
+    repo: ResearchRunRepository, running_run, completed_run, user_id: UUID
+) -> None:
+    now = datetime.now(UTC)
+    kwargs = {
+        "error_code": RUN_INTERRUPTED,
+        "error_message_safe": RUN_INTERRUPTED_MESSAGE,
+        "now": now,
+    }
+
+    assert repo.fail_if_running(public_id=running_run.public_id, **kwargs) is True
+    failed = repo.get_owned(user_id, running_run.public_id)
+    assert failed is not None
+    assert failed.workflow_status == WorkflowStatus.FAILED
+    assert failed.research_status == ResearchStatus.FAILED
+    assert failed.error_code == "RUN_INTERRUPTED"
+    assert failed.error_message_safe == RUN_INTERRUPTED_MESSAGE
+    assert failed.completed_at is not None
+
+    assert repo.fail_if_running(public_id=running_run.public_id, **kwargs) is False
+
+    before = repo.get_owned(user_id, completed_run.public_id)
+    assert repo.fail_if_running(public_id=completed_run.public_id, **kwargs) is False
+    after = repo.get_owned(user_id, completed_run.public_id)
+    assert before is not None and after is not None
+    assert after.workflow_status == WorkflowStatus.SUCCEEDED
+    assert after.error_code is None
+    assert after == before
+
+
+def test_finalize_success_after_fail_if_running_raises_already_finalized(
+    repo: ResearchRunRepository, running_run, user_id: UUID
+) -> None:
+    assert repo.fail_if_running(
+        public_id=running_run.public_id,
+        error_code=RUN_INTERRUPTED,
+        error_message_safe=RUN_INTERRUPTED_MESSAGE,
+        now=datetime.now(UTC),
+    )
+    quality = DataQuality(
+        overall=OverallQuality.SUFFICIENT,
+        prices=ComponentQuality.FRESH,
+        news=ComponentQuality.FRESH,
+        model=ModelQuality.HEALTHY,
+    )
+
+    with pytest.raises(VantageError) as exc:
+        repo.finalize_success(
+            internal_id=running_run.id,
+            user_id=user_id,
+            research_status=ResearchStatus.INFORMATIONAL,
+            as_of=datetime.now(UTC),
+            reasons=[],
+            metrics=[],
+            data_quality=quality,
+            warnings=[],
+            summary="Late result",
+        )
+    assert exc.value.code == "RUN_ALREADY_FINALIZED"

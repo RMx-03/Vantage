@@ -1,3 +1,4 @@
+import time
 from datetime import UTC, date, datetime
 from typing import Any
 from unittest.mock import MagicMock
@@ -41,6 +42,7 @@ from app.services.research_run import (
 )
 from app.repositories.users import UserRepository
 from app.services.policy import PolicyResult
+from app.services.run_executor import RunExecutor, get_run_executor
 from app.providers.llm import build_interpretation_provider
 from app.agents.research_graph import create_research_graph
 
@@ -970,3 +972,147 @@ def test_legacy_hostile_stored_url_is_dropped_by_the_read_path(
 
     assert refetched.status_code == 200
     assert [s["url"] for s in refetched.json()["sources"]] == [unnormalized]
+
+
+# ---------------------------------------------------------------------------
+# Asynchronous opt-in
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def executor(client: TestClient):
+    # Depends on `client` so the override survives its teardown ordering.
+    pool = RunExecutor(max_workers=2)
+    app.dependency_overrides[get_run_executor] = lambda: pool
+    yield pool
+    assert pool.wait_idle(5)
+    pool.shutdown()
+
+
+def test_post_with_prefer_async_returns_202_running_with_location(
+    client: TestClient, auth_headers: dict, executor: RunExecutor
+) -> None:
+    response = client.post(
+        "/api/v1/research-runs",
+        json={"symbol": "AAPL"},
+        headers={**auth_headers, "Prefer": "respond-async"},
+    )
+    assert response.status_code == 202
+    body = response.json()
+    assert body["workflow_status"] == "running"
+    assert response.headers["Location"].endswith(f"/research-runs/{body['run_id']}")
+    assert response.headers["Preference-Applied"] == "respond-async"
+
+    final = body
+    for _ in range(50):
+        final = client.get(
+            f"/api/v1/research-runs/{body['run_id']}", headers=auth_headers
+        ).json()
+        if final["workflow_status"] != "running":
+            break
+        time.sleep(0.1)
+    assert final["workflow_status"] == "succeeded"
+
+
+def test_post_without_prefer_stays_synchronous_201(
+    client: TestClient, auth_headers: dict, executor: RunExecutor
+) -> None:
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
+    assert response.status_code == 201
+    assert response.json()["workflow_status"] in {"succeeded", "failed"}
+    assert "Preference-Applied" not in response.headers
+
+
+def test_capacity_exceeded_returns_429_retry_after_and_no_row(
+    client: TestClient, auth_headers: dict
+) -> None:
+    full = RunExecutor(max_workers=1)
+    slot = full.reserve()
+    app.dependency_overrides[get_run_executor] = lambda: full
+    try:
+        before = client.get("/api/v1/research-runs", headers=auth_headers).json()
+        response = client.post(
+            "/api/v1/research-runs",
+            json={"symbol": "AAPL"},
+            headers={**auth_headers, "Prefer": "respond-async"},
+        )
+        after = client.get("/api/v1/research-runs", headers=auth_headers).json()
+    finally:
+        slot.release()
+        full.shutdown()
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "5"
+    detail = response.json()["detail"]
+    assert detail["code"] == "RUN_CAPACITY_EXCEEDED"
+    assert detail["retryable"] is True
+    assert after["items"] == before["items"]
+
+
+def test_draining_returns_503_retry_after(
+    client: TestClient, auth_headers: dict
+) -> None:
+    draining = RunExecutor(max_workers=1)
+    draining.begin_drain()
+    app.dependency_overrides[get_run_executor] = lambda: draining
+    try:
+        response = client.post(
+            "/api/v1/research-runs",
+            json={"symbol": "AAPL"},
+            headers={**auth_headers, "Prefer": "respond-async"},
+        )
+    finally:
+        draining.shutdown()
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "5"
+    detail = response.json()["detail"]
+    assert detail["code"] == "SERVICE_DRAINING"
+    assert detail["retryable"] is True
+
+
+def _orphan(tracking_repo, service, user_id: UUID) -> UUID:
+    row = tracking_repo.create_running(
+        user_id=user_id, symbol="AAPL", versions=service.versions
+    )
+    with SessionFactory() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE vantage_app.research_runs "
+                "SET started_at = now() - interval '200 seconds' "
+                "WHERE public_id = :p"
+            ),
+            {"p": row.public_id},
+        )
+    return row.public_id
+
+
+def test_get_expires_orphaned_running_run(
+    client: TestClient,
+    auth_headers: dict,
+    executor: RunExecutor,
+    tracking_repo,
+    service,
+    test_user_id: UUID,
+) -> None:
+    run_id = _orphan(tracking_repo, service, test_user_id)
+    response = client.get(f"/api/v1/research-runs/{run_id}", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["workflow_status"] == "failed"
+    assert body["error_code"] == "RUN_INTERRUPTED"
+
+
+def test_list_expires_orphaned_running_runs(
+    client: TestClient,
+    auth_headers: dict,
+    executor: RunExecutor,
+    tracking_repo,
+    service,
+    test_user_id: UUID,
+) -> None:
+    run_id = _orphan(tracking_repo, service, test_user_id)
+    page = client.get("/api/v1/research-runs", headers=auth_headers).json()
+    item = next(i for i in page["items"] if i["run_id"] == str(run_id))
+    assert item["workflow_status"] == "failed"
+    assert item["error_code"] == "RUN_INTERRUPTED"
