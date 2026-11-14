@@ -652,7 +652,9 @@ def test_interpretation_and_provenance_round_trip(
         "news_coverage_start",
         "news_coverage_end",
         "news_quality",
+        "providers",
     }
+    assert run.snapshot.providers is None
     assert run.snapshot.market_provider == market.provider
     assert run.snapshot.market_content_hash == market.content_hash
     assert run.snapshot.market_as_of == market.as_of
