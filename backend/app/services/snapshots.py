@@ -2,25 +2,73 @@ import hashlib
 import json
 from typing import Any
 
-from app.domain.research import MarketSnapshot, NewsSnapshot
+from app.domain.research import (
+    DailyBar,
+    FundamentalsSnapshot,
+    MacroSnapshot,
+    MarketSnapshot,
+    NewsSnapshot,
+)
 
 
-def combined_snapshot_hash(market: MarketSnapshot, news: NewsSnapshot) -> str:
-    """Hash accepted market and news content independent of provider item ordering."""
+def _bar_fields(bar: DailyBar) -> dict[str, Any]:
+    return {
+        "session_date": bar.session_date.isoformat(),
+        "open": bar.open,
+        "high": bar.high,
+        "low": bar.low,
+        "close": bar.close,
+        "adjusted_close": bar.adjusted_close,
+        "volume": bar.volume,
+        "currency": bar.currency,
+        "adjustment_state": bar.adjustment_state,
+    }
+
+
+def _without_retrieved_at(value: Any) -> Any:
+    """Retrieval time is not content; drop it at every nesting level."""
+    if isinstance(value, dict):
+        return {
+            key: _without_retrieved_at(item)
+            for key, item in value.items()
+            if key != "retrieved_at"
+        }
+    if isinstance(value, list):
+        return [_without_retrieved_at(item) for item in value]
+    return value
+
+
+def combined_snapshot_hash(
+    market: MarketSnapshot,
+    news: NewsSnapshot,
+    *,
+    fundamentals: FundamentalsSnapshot | None = None,
+    macro: MacroSnapshot | None = None,
+) -> str:
+    """Hash accepted inputs independent of provider item ordering.
+
+    New inputs (context bars, fundamentals, macro, richer news fields) enter the
+    payload only when present, so existing-shape snapshots hash as they always did.
+    """
     news_items: list[dict[str, Any]] = []
     for item in sorted(news.items, key=lambda value: value.evidence_id):
-        news_items.append(
-            {
-                "evidence_id": item.evidence_id,
-                "provider": item.provider,
-                "publisher": item.publisher,
-                "title": item.title,
-                "url": item.url,
-                "event_time": item.event_time.isoformat() if item.event_time else None,
-                "content_hash": item.content_hash,
-            }
-        )
-    payload = {
+        entry: dict[str, Any] = {
+            "evidence_id": item.evidence_id,
+            "provider": item.provider,
+            "publisher": item.publisher,
+            "title": item.title,
+            "url": item.url,
+            "event_time": item.event_time.isoformat() if item.event_time else None,
+            "content_hash": item.content_hash,
+        }
+        if item.source_type != "news":
+            entry["source_type"] = item.source_type
+        if item.summary is not None:
+            entry["summary"] = item.summary
+        if item.details is not None:
+            entry["details"] = item.details.model_dump(mode="json")
+        news_items.append(entry)
+    payload: dict[str, Any] = {
         "symbol": market.symbol,
         "market_content_hash": market.content_hash,
         "market_quality": market.quality.value,
@@ -39,5 +87,21 @@ def combined_snapshot_hash(market: MarketSnapshot, news: NewsSnapshot) -> str:
         else None,
         "news_items": news_items,
     }
+    if market.context_bars:
+        payload["context_bars"] = {
+            symbol: [
+                _bar_fields(bar)
+                for bar in sorted(
+                    market.context_bars[symbol], key=lambda b: b.session_date
+                )
+            ]
+            for symbol in sorted(market.context_bars)
+        }
+    if fundamentals is not None:
+        payload["fundamentals"] = _without_retrieved_at(
+            fundamentals.model_dump(mode="json")
+        )
+    if macro is not None:
+        payload["macro"] = _without_retrieved_at(macro.model_dump(mode="json"))
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
