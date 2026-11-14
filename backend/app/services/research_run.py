@@ -31,9 +31,10 @@ from app.providers.yfinance_provider import (
     snapshot_hash as market_snapshot_hash,
     trailing_xnys_sessions,
 )
-from app.repositories.research_runs import ResearchRunRepository
+from app.repositories.research_runs import ResearchRunRepository, RunningResearchRun
 from app.services.metrics import METRICS_VERSION
 from app.services.policy import POLICY_VERSION, PolicyResult
+from app.services.run_executor import RunExecutor
 from app.telemetry.redaction import user_hash
 from app.telemetry.tracing import get_tracer
 
@@ -43,6 +44,15 @@ RESPONSE_SCHEMA_VERSION: Literal["research-run-response-v2"] = (
     "research-run-response-v2"
 )
 WORKFLOW_VERSION: Literal["eod-research-v1"] = "eod-research-v1"
+
+
+def _recording_root_span(root_span: Any) -> Any:
+    """Fall back to the current span when it records, as ``create`` always has."""
+    if root_span is None:
+        current_span = trace.get_current_span()
+        if current_span.is_recording():
+            return current_span
+    return root_span
 
 
 class ResearchRunService:
@@ -75,31 +85,83 @@ class ResearchRunService:
         now: datetime,
         root_span: Any = None,
     ) -> ResearchRun:
-        tracer = get_tracer()
         norm_symbol = symbol.strip().upper()
+        root_span = _recording_root_span(root_span)
+        row = self._create_row(
+            user_id=user_id, norm_symbol=norm_symbol, root_span=root_span
+        )
+        return self._execute(
+            row,
+            user_id=user_id,
+            norm_symbol=norm_symbol,
+            now=now,
+            root_span=root_span,
+        )
 
-        if root_span is None:
-            current_span = trace.get_current_span()
-            if current_span.is_recording():
-                root_span = current_span
+    def start_async(
+        self,
+        *,
+        user_id: UUID,
+        symbol: str,
+        now: datetime,
+        executor: RunExecutor,
+        root_span: Any = None,
+    ) -> ResearchRun:
+        """Create a running row and execute it on ``executor``, off the request.
 
+        Capacity is reserved before the row exists, so a refused start leaves
+        nothing behind. Returns the run as stored at hand-off.
+        """
+        slot = executor.reserve()
+        try:
+            norm_symbol = symbol.strip().upper()
+            request_span_context = (
+                root_span.get_span_context()
+                if root_span is not None
+                else trace.get_current_span().get_span_context()
+            )
+            root_span = _recording_root_span(root_span)
+            row = self._create_row(
+                user_id=user_id, norm_symbol=norm_symbol, root_span=root_span
+            )
+        except BaseException:
+            slot.release()
+            raise
+
+        def run_detached() -> None:
+            self._execute_detached(
+                row,
+                user_id=user_id,
+                norm_symbol=norm_symbol,
+                now=now,
+                request_span_context=request_span_context,
+            )
+
+        slot.launch(row.public_id, run_detached)
+
+        run = self.repo.get_owned(user_id, row.public_id)
+        if run is None:
+            raise VantageError(
+                code="RUN_NOT_FOUND",
+                safe_message="Research run not found.",
+                run_id=str(row.public_id),
+            )
+        return run
+
+    def _create_row(
+        self,
+        *,
+        user_id: UUID,
+        norm_symbol: str,
+        root_span: Any,
+    ) -> RunningResearchRun:
+        tracer = get_tracer()
         trace_id_hex = None
         if root_span is not None:
             span_ctx = root_span.get_span_context()
             if span_ctx and span_ctx.trace_id:
                 trace_id_hex = f"{span_ctx.trace_id:032x}"
-            root_span.set_attribute(
-                "vantage.user_hash", user_hash(user_id, settings.TELEMETRY_USER_SALT)
-            )
-            root_span.set_attribute("vantage.instrument_symbol", norm_symbol)
-            root_span.set_attribute("vantage.workflow_version", self.versions.workflow)
-            root_span.set_attribute(
-                "vantage.response_schema_version", self.versions.response_schema
-            )
-            root_span.set_attribute("gen_ai.provider.name", self.llm.name)
-            root_span.set_attribute(
-                "gen_ai.request.model", getattr(self.llm, "model", "default")
-            )
+            self._tag_root_span(root_span, user_id=user_id, norm_symbol=norm_symbol)
 
         with tracer.start_as_current_span("create_run_record") as c_span:
             row = self.repo.create_running(
@@ -112,7 +174,71 @@ class ResearchRunService:
 
         if root_span is not None:
             root_span.set_attribute("vantage.run_id", str(row.public_id))
+        return row
 
+    def _tag_root_span(self, span: Any, *, user_id: UUID, norm_symbol: str) -> None:
+        span.set_attribute(
+            "vantage.user_hash", user_hash(user_id, settings.TELEMETRY_USER_SALT)
+        )
+        span.set_attribute("vantage.instrument_symbol", norm_symbol)
+        span.set_attribute("vantage.workflow_version", self.versions.workflow)
+        span.set_attribute(
+            "vantage.response_schema_version", self.versions.response_schema
+        )
+        span.set_attribute("gen_ai.provider.name", self.llm.name)
+        span.set_attribute(
+            "gen_ai.request.model", getattr(self.llm, "model", "default")
+        )
+
+    def _execute_detached(
+        self,
+        row: RunningResearchRun,
+        *,
+        user_id: UUID,
+        norm_symbol: str,
+        now: datetime,
+        request_span_context: Any,
+    ) -> None:
+        """Run ``_execute`` on a worker thread under its own linked root span.
+
+        ``_execute`` persists every ``VantageError`` before raising it, and a
+        late finish after the stale sweep surfaces as ``RUN_ALREADY_FINALIZED``,
+        so those end here. Anything else propagates to the slot's logger.
+        """
+        links = (
+            [trace.Link(request_span_context)]
+            if request_span_context is not None and request_span_context.is_valid
+            else []
+        )
+        with get_tracer().start_as_current_span(
+            "research_run_execute", links=links
+        ) as span:
+            self._tag_root_span(span, user_id=user_id, norm_symbol=norm_symbol)
+            span.set_attribute("vantage.run_id", str(row.public_id))
+            try:
+                self._execute(
+                    row,
+                    user_id=user_id,
+                    norm_symbol=norm_symbol,
+                    now=now,
+                    root_span=span,
+                )
+            except VantageError as exc:
+                logger.info(
+                    "detached research run ended without a result",
+                    extra={"run_id": str(row.public_id), "error_code": exc.code},
+                )
+
+    def _execute(
+        self,
+        row: RunningResearchRun,
+        *,
+        user_id: UUID,
+        norm_symbol: str,
+        now: datetime,
+        root_span: Any,
+    ) -> ResearchRun:
+        tracer = get_tracer()
         try:
             analysis_cutoff = latest_completed_xnys_close(now)
             sessions = trailing_xnys_sessions(analysis_cutoff.date())
