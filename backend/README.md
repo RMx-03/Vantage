@@ -84,6 +84,10 @@ Other settings that matter in a deployment:
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP delivery. For Gmail: `smtp.gmail.com`, `587` (STARTTLS; `465` uses implicit TLS), the account address and a Google app password. TLS is always negotiated before the password is sent. |
 | `BREVO_API_KEY` | A Brevo API key (`xkeysib-…`), not an SMTP key. |
 | `EMAIL_FROM` | The sender. With Gmail, the account address or a verified alias; with Brevo, a sender verified there. |
+| `MARKET_PROVIDER`, `NEWS_PROVIDERS`, `FILINGS_PROVIDER`, `MACRO_PROVIDER`, `PRICE_CROSSCHECK_PROVIDER` | Which provider serves each data role. Defaults: `yfinance`, `yfinance` (comma list), `none`, `none`, `none`. This release ships `yfinance` and `fixture` only; the other provider names arrive with their providers. |
+| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, `FINNHUB_API_KEY`, `FRED_API_KEY`, `TIINGO_API_KEY` | Provider credentials, empty by default and redacted. A missing key leaves that role not configured; it does not stop startup. Not used until their providers arrive. |
+| `SEC_USER_AGENT` | User-Agent for SEC EDGAR; the SEC requires it and a contact in it. No default; redacted. |
+| `PROVIDER_TIMEOUT_SECONDS` | Per-request timeout for data providers (default `6`). |
 | `APP_BASE_URL` | The frontend origin that links in emails point to. |
 | `EMAIL_VERIFICATION_TTL_SECONDS`, `PASSWORD_RESET_TTL_SECONDS` | Link lifetimes; the email text states the same values. |
 
