@@ -7,7 +7,7 @@ import httpx
 from groq import APIConnectionError
 from pydantic import ValidationError
 
-from app.core.config import GROQ_STRICT_JSON_SCHEMA_MODELS, Settings
+from app.core.config import GROQ_STRICT_JSON_SCHEMA_MODELS
 from app.domain.errors import VantageError
 from app.domain.research import (
     AIInterpretation,
@@ -421,35 +421,3 @@ class OllamaInterpretationProvider(InterpretationProvider):
                 safe_message="Failed to parse Ollama response.",
             ) from exc
         return validate_interpretation(content, allowed_evidence_ids)
-
-
-def build_interpretation_provider(settings: Settings) -> InterpretationProvider:
-    provider = settings.LLM_PROVIDER.lower().strip()
-    if provider == "disabled":
-        return DisabledInterpretationProvider()
-    if provider == "gemini":
-        return GeminiInterpretationProvider(
-            api_key=settings.GEMINI_API_KEY,
-            model=settings.GEMINI_MODEL,
-            timeout_seconds=settings.LLM_TIMEOUT_SECONDS,
-            max_retries=settings.LLM_MAX_RETRIES,
-        )
-    if provider == "groq":
-        return GroqInterpretationProvider(
-            api_key=settings.GROQ_API_KEY,
-            model=settings.GROQ_MODEL,
-            json_schema_models=settings.GROQ_JSON_SCHEMA_MODELS,
-            timeout_seconds=settings.LLM_TIMEOUT_SECONDS,
-            max_retries=settings.LLM_MAX_RETRIES,
-        )
-    if provider == "ollama":
-        return OllamaInterpretationProvider(
-            base_url=settings.OLLAMA_BASE_URL,
-            model=settings.OLLAMA_MODEL,
-            timeout_seconds=settings.LLM_TIMEOUT_SECONDS,
-            max_retries=settings.LLM_MAX_RETRIES,
-        )
-    raise VantageError(
-        code="CONFIG_ERROR",
-        safe_message="The configured AI interpretation provider is unsupported.",
-    )

@@ -43,7 +43,7 @@ from app.services.research_run import (
 from app.repositories.users import UserRepository
 from app.services.policy import PolicyResult
 from app.services.run_executor import RunExecutor, get_run_executor
-from app.providers.llm import build_interpretation_provider
+from app.providers.registry import build_interpretation_provider
 from app.agents.research_graph import create_research_graph
 
 

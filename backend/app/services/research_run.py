@@ -24,9 +24,8 @@ from app.providers.contracts import (
     NewsProvider,
 )
 from app.prompts.research_interpretation import PROMPT_VERSION
-from app.providers.llm import build_interpretation_provider
+from app.providers.registry import ProviderSet, build_providers
 from app.providers.yfinance_provider import (
-    YFinanceSnapshotProvider,
     latest_completed_xnys_close,
     snapshot_hash as market_snapshot_hash,
     trailing_xnys_sessions,
@@ -63,11 +62,28 @@ class ResearchRunService:
         news_provider: NewsProvider | None = None,
         interpretation_provider: InterpretationProvider | None = None,
         versions: VersionInfo | None = None,
+        providers: ProviderSet | None = None,
     ) -> None:
         self.repo = repo or ResearchRunRepository()
-        self.market = market_provider or YFinanceSnapshotProvider()
-        self.news = news_provider or YFinanceSnapshotProvider()
-        self.llm = interpretation_provider or build_interpretation_provider(settings)
+        explicit = (market_provider, news_provider, interpretation_provider)
+        if providers is None and all(p is not None for p in explicit):
+            # Fully explicit wiring never touches settings or the registry.
+            providers = ProviderSet(
+                market=market_provider,
+                news=(news_provider,),  # type: ignore[arg-type]
+                filings=None,
+                fundamentals=None,
+                macro=None,
+                crosscheck=None,
+                llm=interpretation_provider,  # type: ignore[arg-type]
+                not_configured=("filings", "fundamentals", "macro", "crosscheck"),
+            )
+        self.providers = providers or build_providers(settings)
+        self.market: MarketDataProvider | None = (
+            market_provider or self.providers.market
+        )
+        self.news: NewsProvider = news_provider or self.providers.news[0]
+        self.llm = interpretation_provider or self.providers.llm
         self.versions = versions or VersionInfo(
             response_schema=RESPONSE_SCHEMA_VERSION,
             workflow=WORKFLOW_VERSION,
@@ -243,6 +259,11 @@ class ResearchRunService:
     ) -> ResearchRun:
         tracer = get_tracer()
         try:
+            if self.market is None:
+                raise VantageError(
+                    code="MARKET_DATA_PROVIDER_FAILED",
+                    safe_message="Market data provider was unavailable.",
+                )
             analysis_cutoff = latest_completed_xnys_close(now)
             sessions = trailing_xnys_sessions(analysis_cutoff.date())
             start_date = sessions[0]
