@@ -5,7 +5,7 @@ import json
 from typing import Any, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import selectinload
 
 from app.db.models import ResearchRunRow, ResearchSnapshotRow, ResearchSourceRow
@@ -301,6 +301,48 @@ class ResearchRunRepository:
                 row.error_message_safe = error_message_safe
                 session.flush()
                 return self._row_to_domain(row)
+
+    def list_stale_running(
+        self,
+        *,
+        started_before: datetime,
+        user_id: UUID | None = None,
+    ) -> list[UUID]:
+        with SessionFactory() as session:
+            stmt = select(ResearchRunRow.public_id).where(
+                ResearchRunRow.workflow_status == WorkflowStatus.RUNNING.value,
+                ResearchRunRow.started_at < started_before,
+            )
+            if user_id is not None:
+                stmt = stmt.where(ResearchRunRow.user_id == user_id)
+            return list(session.scalars(stmt.order_by(ResearchRunRow.id)).all())
+
+    def fail_if_running(
+        self,
+        *,
+        public_id: UUID,
+        error_code: str,
+        error_message_safe: str,
+        now: datetime,
+    ) -> bool:
+        """Fail a run only if it is still running, in one atomic UPDATE."""
+        with SessionFactory() as session:
+            with session.begin():
+                result = session.execute(
+                    update(ResearchRunRow)
+                    .where(
+                        ResearchRunRow.public_id == public_id,
+                        ResearchRunRow.workflow_status == WorkflowStatus.RUNNING.value,
+                    )
+                    .values(
+                        workflow_status=WorkflowStatus.FAILED.value,
+                        research_status=None,
+                        completed_at=now,
+                        error_code=error_code,
+                        error_message_safe=error_message_safe,
+                    )
+                )
+                return bool(result.rowcount)  # type: ignore[attr-defined]
 
     def get_owned(
         self,
