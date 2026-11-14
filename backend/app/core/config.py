@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     LLM_PROVIDER: str = "ollama"
     LLM_TIMEOUT_SECONDS: int = Field(default=30, gt=0)
+    RUN_EXECUTOR_MAX_WORKERS: int = Field(default=4, gt=0)
+    RUN_DEADLINE_SECONDS: int = Field(default=120, gt=0)
+    RUN_SHUTDOWN_GRACE_SECONDS: int = Field(default=25, gt=0)
     LLM_MAX_RETRIES: int = Field(default=1, ge=0)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "vantage-fin"
