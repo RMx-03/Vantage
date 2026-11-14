@@ -1,7 +1,7 @@
 from datetime import datetime
 from functools import lru_cache
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import UUID
 from opentelemetry import trace
 
@@ -15,7 +15,9 @@ from app.domain.research import (
     ModelInfo,
     ModelQuality,
     NewsSnapshot,
+    ProviderRecord,
     ResearchRun,
+    RoleQuality,
     VersionInfo,
 )
 from app.providers.contracts import (
@@ -352,13 +354,42 @@ class ResearchRunService:
                     event_time=item.event_time,
                     retrieved_at=item.retrieved_at,
                     content_hash=item.content_hash,
-                    source_type="news",
+                    source_type=item.source_type,
+                    summary=item.summary,
+                    details=item.details,
                 )
                 for item in news.items
             ]
             # Persist snapshot before invoking graph
+            provider_records = [
+                ProviderRecord(
+                    role="market",
+                    provider=market.provider,
+                    retrieved_at=market.retrieved_at,
+                    quality=RoleQuality(market.quality.value),
+                    error_code=market.error_code,
+                    content_hash=market.content_hash,
+                ),
+                ProviderRecord(
+                    role="news",
+                    provider=None if self.news is None else news.provider,
+                    retrieved_at=news.retrieved_at,
+                    quality=RoleQuality(news.quality.value),
+                    error_code=news.error_code,
+                ),
+                *(
+                    ProviderRecord(
+                        role=cast(Any, role),
+                        provider=None,
+                        retrieved_at=None,
+                        quality=RoleQuality.NOT_CONFIGURED,
+                    )
+                    for role in self.providers.not_configured
+                    if role not in ("market", "news")
+                ),
+            ]
             snapshot_hash = self.repo.save_snapshot(
-                row.id, user_id, market, news, sources
+                row.id, user_id, market, news, sources, providers=provider_records
             )
             if root_span is not None:
                 root_span.set_attribute("vantage.snapshot_hash", snapshot_hash)

@@ -21,16 +21,21 @@ from app.domain.research import (
     ComponentQuality,
     DailyBar,
     DataQuality,
+    EvidenceDetails,
     EvidenceSource,
+    FundamentalsSnapshot,
+    MacroSnapshot,
     MarketSnapshot,
     ModelInfo,
     ModelQuality,
     NewsSnapshot,
     OverallQuality,
+    ProviderRecord,
     Reason,
     ResearchMetric,
     ResearchRun,
     ResearchStatus,
+    RoleQuality,
     SnapshotProvenance,
     VersionInfo,
     WorkflowStatus,
@@ -1040,3 +1045,124 @@ def test_finalize_success_after_fail_if_running_raises_already_finalized(
             summary="Late result",
         )
     assert exc.value.code == "RUN_ALREADY_FINALIZED"
+
+
+def test_new_snapshot_fields_round_trip(
+    repo: ResearchRunRepository, running_run, valid_snapshot, user_id: UUID
+) -> None:
+    market, news, _ = valid_snapshot
+    now = datetime.now(UTC)
+    market = market.model_copy(update={"context_bars": {"SPY": market.bars}})
+    providers = [
+        ProviderRecord(
+            role="market",
+            provider="fixture",
+            retrieved_at=now,
+            quality=RoleQuality.FRESH,
+            content_hash="a" * 64,
+        ),
+        ProviderRecord(
+            role="filings",
+            provider=None,
+            retrieved_at=None,
+            quality=RoleQuality.NOT_CONFIGURED,
+        ),
+    ]
+    fundamentals = FundamentalsSnapshot(
+        symbol="AAPL",
+        provider="sec",
+        retrieved_at=now,
+        quality=ComponentQuality.FRESH,
+        revenue=100.0,
+    )
+    macro = MacroSnapshot(
+        provider="fred", retrieved_at=now, quality=ComponentQuality.FRESH
+    )
+    filing = EvidenceSource(
+        evidence_id="ev-f",
+        provider="sec",
+        title="8-K filing",
+        retrieved_at=now,
+        content_hash="c" * 64,
+        source_type="filing",
+        summary="Item 2.02 results",
+        details=EvidenceDetails(form_type="8-K", item_codes=["2.02"]),
+    )
+    content_hash = repo.save_snapshot(
+        running_run.id,
+        user_id,
+        market,
+        news,
+        [filing],
+        providers=providers,
+        fundamentals=fundamentals,
+        macro=macro,
+    )
+    assert content_hash == combined_snapshot_hash(
+        market, news, fundamentals=fundamentals, macro=macro
+    )
+
+    stored = repo.get_owned(user_id=user_id, public_id=running_run.public_id)
+
+    assert stored is not None and stored.snapshot is not None
+    assert stored.snapshot.providers == providers
+    assert len(stored.sources) == 1
+    source = stored.sources[0]
+    assert source.source_type == "filing"
+    assert source.summary == "Item 2.02 results"
+    assert source.details == filing.details
+    with SessionFactory() as session:
+        row = session.execute(
+            text(
+                "SELECT context_bars, fundamentals, macro "
+                "FROM vantage_app.research_snapshots WHERE run_id = :r"
+            ),
+            {"r": running_run.id},
+        ).one()
+    assert list(row.context_bars) == ["SPY"]
+    assert row.fundamentals["provider"] == "sec"
+    assert row.macro["provider"] == "fred"
+
+
+def test_pre_0005_rows_map_new_fields_to_null(
+    repo: ResearchRunRepository, running_run, valid_snapshot, user_id: UUID
+) -> None:
+    market, news, sources = valid_snapshot
+    repo.save_snapshot(running_run.id, user_id, market, news, sources)
+    with SessionFactory() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE vantage_app.research_snapshots SET providers = NULL, "
+                "context_bars = NULL, fundamentals = NULL, macro = NULL "
+                "WHERE run_id = :r"
+            ),
+            {"r": running_run.id},
+        )
+        session.execute(
+            text(
+                "UPDATE vantage_app.research_sources SET summary = NULL, "
+                "details = NULL WHERE snapshot_id = (SELECT id FROM "
+                "vantage_app.research_snapshots WHERE run_id = :r)"
+            ),
+            {"r": running_run.id},
+        )
+
+    stored = repo.get_owned(user_id=user_id, public_id=running_run.public_id)
+    listed = repo.list_owned(user_id).items
+
+    for run in (stored, *[r for r in listed if r.run_id == running_run.public_id]):
+        assert run is not None and run.snapshot is not None
+        assert run.snapshot.providers is None
+        assert run.sources
+        for source in run.sources:
+            assert source.summary is None
+            assert source.details is None
+            assert source.source_type == "news"
+
+
+def test_yfinance_shaped_run_hash_unchanged(
+    repo: ResearchRunRepository, running_run, valid_snapshot, user_id: UUID
+) -> None:
+    market, news, sources = valid_snapshot
+    content_hash = repo.save_snapshot(running_run.id, user_id, market, news, sources)
+    assert content_hash == combined_snapshot_hash(market, news)
