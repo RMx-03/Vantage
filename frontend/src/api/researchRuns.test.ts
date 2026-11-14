@@ -161,3 +161,16 @@ describe('authenticated requests', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('asynchronous start', () => {
+  it('asks for an asynchronous run and resolves a 202 body as the run', async () => {
+    authClient.setAccessToken('access-token', 900);
+    const running = { ...informationalRun, workflow_status: 'running' };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(running, 202));
+
+    await expect(createResearchRun('AAPL')).resolves.toEqual(running);
+
+    const init = fetchSpy.mock.calls[0][1] as RequestInit;
+    expect(new Headers(init.headers).get('Prefer')).toBe('respond-async');
+  });
+});

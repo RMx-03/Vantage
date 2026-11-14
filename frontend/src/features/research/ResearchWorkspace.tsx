@@ -11,6 +11,8 @@ import { createResearchRun, listResearchRuns, getResearchRun } from '../../api/r
 import { useAuth } from '../../context/AuthContext';
 import type { ResearchRun } from '../../types/research';
 import ResearchResult from './ResearchResult';
+import RunningPanel from './RunningPanel';
+import { isPollingExhausted, runPollInterval } from './runPolling';
 import ResearchHistory from './ResearchHistory';
 import ResearchError from './ResearchError';
 import SymbolSearchForm from './SymbolSearchForm';
@@ -73,6 +75,8 @@ function OwnerWorkspace({
 
   const {
     data: routeRun,
+    // Tracked so an unchanged poll result still re-renders and refreshes the count.
+    dataUpdatedAt: routeRunUpdatedAt,
     isLoading: isRouteRunLoading,
     isError: isRouteRunError,
     error: routeRunError,
@@ -81,9 +85,32 @@ function OwnerWorkspace({
     queryKey: ['research-run', ownerId, runId],
     queryFn: () => getResearchRun(runId!),
     enabled: ownerId !== null && Boolean(runId),
+    refetchInterval: (query) =>
+      runPollInterval(query.state.data, query.state.dataUpdateCount),
   });
 
   const selectedRun: ResearchRun | null = routeRun ?? null;
+  const routeUpdateCount =
+    routeRunUpdatedAt >= 0
+      ? (queryClient.getQueryState(['research-run', ownerId, runId])?.dataUpdateCount ?? 0)
+      : 0;
+
+  // Refresh history once when a run we saw running reaches a terminal status.
+  const seenStatusRef = useRef<{ id: string; status: string } | null>(null);
+  const routeRunId = routeRun?.run_id;
+  const routeRunStatus = routeRun?.workflow_status;
+  useEffect(() => {
+    if (!routeRunId || !routeRunStatus) return;
+    const seen = seenStatusRef.current;
+    if (
+      seen?.id === routeRunId &&
+      seen.status === 'running' &&
+      routeRunStatus !== 'running'
+    ) {
+      void queryClient.invalidateQueries({ queryKey: ['research-runs', ownerId] });
+    }
+    seenStatusRef.current = { id: routeRunId, status: routeRunStatus };
+  }, [routeRunId, routeRunStatus, ownerId, queryClient]);
   const isHistorical = Boolean(runId) && runId !== liveRunId;
 
   const { data: historyData } = useInfiniteQuery({
@@ -227,9 +254,16 @@ function OwnerWorkspace({
           !mutation.isError &&
           !isRouteRunLoading &&
           !isRouteRunError &&
-          selectedRun && (
-          <ResearchResult run={selectedRun} historical={isHistorical} />
-        )}
+          selectedRun &&
+          (selectedRun.workflow_status === 'running' ? (
+            <RunningPanel
+              run={selectedRun}
+              exhausted={isPollingExhausted(selectedRun, routeUpdateCount)}
+              onCheckAgain={() => void refetchRouteRun()}
+            />
+          ) : (
+            <ResearchResult run={selectedRun} historical={isHistorical} />
+          ))}
 
         {!mutation.isPending &&
           !mutation.isError &&
