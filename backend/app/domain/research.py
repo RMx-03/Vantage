@@ -36,6 +36,18 @@ class ComponentQuality(StrEnum):
     FAILED = "failed"
 
 
+class RoleQuality(StrEnum):
+    FRESH = "fresh"
+    PARTIAL = "partial"
+    STALE = "stale"
+    MISSING = "missing"
+    FAILED = "failed"
+    NOT_CONFIGURED = "not_configured"
+
+
+SourceType = Literal["news", "filing", "insider_transaction"]
+
+
 class ModelQuality(StrEnum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
@@ -148,10 +160,21 @@ class MarketSnapshot(StrictModel):
     latest_completed_session: date
     content_hash: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
     quality: ComponentQuality = ComponentQuality.FRESH
+    context_bars: dict[str, list[DailyBar]] = Field(default_factory=dict)
     volume_quality: ComponentQuality = ComponentQuality.FRESH
     error_code: str | None = None
     missing_value_count: int = Field(default=0, ge=0)
     duplicate_session_count: int = Field(default=0, ge=0)
+
+
+class EvidenceDetails(StrictModel):
+    providers: list[str] = Field(default_factory=list)
+    company_specific: bool | None = None
+    form_type: str | None = None
+    item_codes: list[str] = Field(default_factory=list)
+    transaction_code: str | None = None
+    direction: Literal["acquired", "disposed"] | None = None
+    parse_state: Literal["parsed", "unparsed", "not_fetched"] | None = None
 
 
 class NewsItem(StrictModel):
@@ -163,6 +186,9 @@ class NewsItem(StrictModel):
     event_time: datetime | None = None
     retrieved_at: datetime
     content_hash: str | None = None
+    source_type: SourceType = "news"
+    summary: str | None = Field(default=None, max_length=2000)
+    details: EvidenceDetails | None = None
 
 
 class NewsSnapshot(StrictModel):
@@ -176,8 +202,76 @@ class NewsSnapshot(StrictModel):
     error_code: str | None = None
 
 
+class FilingsSnapshot(StrictModel):
+    symbol: Symbol
+    items: list[NewsItem]
+    provider: str
+    retrieved_at: datetime
+    quality: ComponentQuality
+    error_code: str | None = None
+    cik: str | None = None
+    company_name: str | None = None
+    sic_code: str | None = None
+    coverage_start: datetime | None = None
+    coverage_end: datetime | None = None
+    insider_filing_count: int = Field(default=0, ge=0)
+
+
+class FundamentalsSnapshot(StrictModel):
+    symbol: Symbol
+    provider: str
+    retrieved_at: datetime
+    quality: ComponentQuality
+    error_code: str | None = None
+    fiscal_year: int | None = None
+    period_end: date | None = None
+    form: str | None = None
+    revenue: float | None = Field(default=None, allow_inf_nan=False)
+    prior_revenue: float | None = Field(default=None, allow_inf_nan=False)
+    net_income: float | None = Field(default=None, allow_inf_nan=False)
+    revenue_concept: str | None = None
+
+
+class MacroObservation(StrictModel):
+    series_id: str
+    value: float | None = Field(allow_inf_nan=False)
+    observation_date: date | None
+    quality: ComponentQuality
+
+
+class MacroSnapshot(StrictModel):
+    provider: str
+    retrieved_at: datetime
+    quality: ComponentQuality
+    error_code: str | None = None
+    observations: list[MacroObservation] = Field(default_factory=list)
+
+
+class CrossCheckClose(StrictModel):
+    session_date: date
+    adjusted_close: float = Field(gt=0, allow_inf_nan=False)
+
+
+class PriceCrossCheckSnapshot(StrictModel):
+    symbol: Symbol
+    provider: str
+    retrieved_at: datetime
+    quality: ComponentQuality
+    error_code: str | None = None
+    closes: list[CrossCheckClose] = Field(default_factory=list)
+
+
 class EvidenceSource(NewsItem):
-    source_type: Literal["news"] = "news"
+    """Public API name for a persisted evidence item."""
+
+
+class ProviderRecord(StrictModel):
+    role: Literal["market", "news", "filings", "fundamentals", "macro", "crosscheck"]
+    provider: str | None
+    retrieved_at: datetime | None
+    quality: RoleQuality
+    error_code: str | None = None
+    content_hash: str | None = None
 
 
 class DataQuality(StrictModel):
@@ -185,6 +279,10 @@ class DataQuality(StrictModel):
     prices: ComponentQuality
     news: ComponentQuality
     model: ModelQuality
+    filings: RoleQuality | None = None
+    fundamentals: RoleQuality | None = None
+    macro: RoleQuality | None = None
+    crosscheck: RoleQuality | None = None
 
 
 class SnapshotProvenance(StrictModel):
@@ -206,6 +304,7 @@ class SnapshotProvenance(StrictModel):
     news_coverage_start: datetime | None = None
     news_coverage_end: datetime | None = None
     news_quality: ComponentQuality
+    providers: list[ProviderRecord] | None = None
 
 
 class ModelInfo(StrictModel):

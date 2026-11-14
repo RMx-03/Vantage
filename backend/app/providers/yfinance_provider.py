@@ -92,7 +92,12 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
         start_session: date,
         end_session: date,
         retrieved_at: datetime,
+        *,
+        context_symbols: tuple[str, ...] = (),
     ) -> MarketSnapshot:
+        del (
+            context_symbols
+        )  # yfinance serves no context series; context_bars stays empty
         normalized_symbol = symbol.strip().upper()
         now = retrieved_at.astimezone(UTC)
 

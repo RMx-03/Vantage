@@ -97,6 +97,7 @@ def test_research_run_contract_exposes_v2_interpretation_and_provenance() -> Non
         "news_coverage_start",
         "news_coverage_end",
         "news_quality",
+        "providers",
     }
 
 
