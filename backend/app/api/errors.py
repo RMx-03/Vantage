@@ -6,14 +6,25 @@ response itself. Headers set on an injected Response are discarded once an
 exception handler takes over, so re-raising is not an option there.
 """
 
+from collections.abc import Mapping
+
 from fastapi import status
 from fastapi.responses import JSONResponse
 
-from app.domain.errors import RUN_ALREADY_FINALIZED, SafeError, VantageError
+from app.domain.errors import (
+    RUN_ALREADY_FINALIZED,
+    RUN_CAPACITY_EXCEEDED,
+    SERVICE_DRAINING,
+    SafeError,
+    VantageError,
+)
 
 
 def vantage_error_response(
-    exc: VantageError, *, status_code: int | None = None
+    exc: VantageError,
+    *,
+    status_code: int | None = None,
+    headers: Mapping[str, str] | None = None,
 ) -> JSONResponse:
     if status_code is None:
         status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -25,6 +36,10 @@ def vantage_error_response(
             status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         elif exc.code in {"RUN_NOT_FOUND", "NOT_FOUND"}:
             status_code = status.HTTP_404_NOT_FOUND
+        elif exc.code == RUN_CAPACITY_EXCEEDED:
+            status_code = status.HTTP_429_TOO_MANY_REQUESTS
+        elif exc.code == SERVICE_DRAINING:
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         elif exc.code == RUN_ALREADY_FINALIZED:
             status_code = status.HTTP_409_CONFLICT
         elif exc.code in {
@@ -58,4 +73,5 @@ def vantage_error_response(
     return JSONResponse(
         status_code=status_code,
         content={"detail": safe_error.model_dump()},
+        headers=dict(headers) if headers else None,
     )

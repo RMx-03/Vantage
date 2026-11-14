@@ -68,6 +68,10 @@ class RunExecutor:
         with self._cond:
             return self._cond.wait_for(lambda: self._held == 0, timeout=timeout)
 
+    def shutdown(self, wait: bool = False) -> None:
+        """Stop the worker pool. Later launches fail instead of hanging."""
+        self._pool.shutdown(wait=wait)
+
     def _free(self, run_id: UUID | None) -> None:
         with self._cond:
             if run_id is not None:

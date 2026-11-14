@@ -883,8 +883,26 @@
         ]
       },
       "post": {
-        "description": "Create and synchronously execute a durable, bounded research run.",
+        "description": "Create a durable, bounded research run.\n\nExecutes synchronously and returns 201 by default. With\n`Prefer: respond-async` the run is accepted (202) and executes in the\nbackground; poll `GET /research-runs/{run_id}` for the outcome.",
         "operationId": "create_run_api_v1_research_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "prefer",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prefer"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -905,6 +923,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRun"
+                }
+              }
+            },
+            "description": "Run accepted; poll GET /research-runs/{run_id}"
           },
           "422": {
             "content": {

@@ -86,3 +86,11 @@ def test_wait_idle_returns_false_on_timeout() -> None:
     assert executor.wait_idle(0.05) is False
     gate.set()
     assert executor.wait_idle(2) is True
+
+
+def test_launch_after_shutdown_raises_and_frees_the_slot() -> None:
+    executor = RunExecutor(max_workers=1)
+    executor.shutdown()
+    with pytest.raises(RuntimeError):
+        executor.reserve().launch(uuid4(), lambda: None)
+    assert executor.in_flight_count == 0
