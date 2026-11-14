@@ -280,6 +280,91 @@ def test_start_async_at_capacity_creates_no_row(
         assert single.wait_idle(5)
 
 
+class _InlineSlot:
+    """Runs the detached work inline at launch, the fastest possible finish."""
+
+    def __init__(self, executor: "_InlineExecutor") -> None:
+        self._executor = executor
+
+    def launch(self, run_id: UUID, fn: Any) -> None:
+        self._executor.launched = True
+        fn()
+
+    def release(self) -> None:
+        self._executor.released = True
+
+
+class _InlineExecutor:
+    def __init__(self) -> None:
+        self.launched = False
+        self.released = False
+
+    def reserve(self) -> _InlineSlot:
+        return _InlineSlot(self)
+
+
+def test_start_async_returns_running_even_when_run_finishes_instantly(
+    service: ResearchRunService,
+    repo: TrackingRepo,
+    llm: GatedInterpreter,
+    user_id: UUID,
+) -> None:
+    llm.gate.set()
+    inline = _InlineExecutor()
+
+    run = service.start_async(
+        user_id=user_id,
+        symbol="AAPL",
+        now=NOW,
+        executor=inline,  # type: ignore[arg-type]
+    )
+
+    assert inline.launched
+    assert run.workflow_status == WorkflowStatus.RUNNING
+    finished = repo.get_owned(user_id, run.run_id)
+    assert finished is not None
+    assert finished.workflow_status == WorkflowStatus.SUCCEEDED
+
+
+def test_start_async_with_ungated_model_returns_running_then_succeeds(
+    service: ResearchRunService,
+    repo: TrackingRepo,
+    executor: RunExecutor,
+    llm: GatedInterpreter,
+    user_id: UUID,
+) -> None:
+    llm.gate.set()
+
+    run = service.start_async(
+        user_id=user_id, symbol="AAPL", now=NOW, executor=executor
+    )
+    assert executor.wait_idle(5)
+
+    assert run.workflow_status == WorkflowStatus.RUNNING
+    finished = repo.get_owned(user_id, run.run_id)
+    assert finished is not None
+    assert finished.workflow_status == WorkflowStatus.SUCCEEDED
+
+
+def test_start_async_read_back_failure_releases_slot_without_launch(
+    service: ResearchRunService,
+    repo: TrackingRepo,
+    executor: RunExecutor,
+    user_id: UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def broken(user_id: UUID, public_id: UUID) -> None:
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(repo, "get_owned", broken)
+
+    with pytest.raises(RuntimeError):
+        service.start_async(user_id=user_id, symbol="AAPL", now=NOW, executor=executor)
+
+    assert executor.in_flight_count == 0
+    assert repo.events.count("create_running") == 1
+
+
 def test_start_async_row_failure_releases_slot(
     service: ResearchRunService,
     repo: TrackingRepo,

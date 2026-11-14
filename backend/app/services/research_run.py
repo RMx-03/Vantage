@@ -110,7 +110,8 @@ class ResearchRunService:
         """Create a running row and execute it on ``executor``, off the request.
 
         Capacity is reserved before the row exists, so a refused start leaves
-        nothing behind. Returns the run as stored at hand-off.
+        nothing behind. The returned run is read before launch, so it is always
+        ``running``.
         """
         slot = executor.reserve()
         try:
@@ -124,6 +125,15 @@ class ResearchRunService:
             row = self._create_row(
                 user_id=user_id, norm_symbol=norm_symbol, root_span=root_span
             )
+            # Read back before launching, so the caller always gets the run as
+            # `running`, however quickly the detached execution finishes.
+            run = self.repo.get_owned(user_id, row.public_id)
+            if run is None:
+                raise VantageError(
+                    code="RUN_NOT_FOUND",
+                    safe_message="Research run not found.",
+                    run_id=str(row.public_id),
+                )
         except BaseException:
             slot.release()
             raise
@@ -138,14 +148,6 @@ class ResearchRunService:
             )
 
         slot.launch(row.public_id, run_detached)
-
-        run = self.repo.get_owned(user_id, row.public_id)
-        if run is None:
-            raise VantageError(
-                code="RUN_NOT_FOUND",
-                safe_message="Research run not found.",
-                run_id=str(row.public_id),
-            )
         return run
 
     def _create_row(
