@@ -1,0 +1,71 @@
+"""SIC code to SPDR sector ETF table: pinned cases and structural invariants."""
+
+from __future__ import annotations
+
+import pytest
+
+from app.services import sectors
+from app.services.sectors import SECTOR_ETFS, SECTOR_MAP_VERSION, sic_to_sector_etf
+
+
+@pytest.mark.parametrize(
+    ("sic", "etf"),
+    [
+        ("3571", "XLK"),
+        ("7372", "XLK"),
+        ("3674", "XLK"),
+        ("7370", "XLC"),
+        ("7841", "XLC"),
+        ("4813", "XLC"),
+        ("6021", "XLF"),
+        ("6311", "XLF"),
+        ("2834", "XLV"),
+        ("8062", "XLV"),
+        ("2911", "XLE"),
+        ("1311", "XLE"),
+        ("3721", "XLI"),
+        ("4011", "XLI"),
+        ("3711", "XLY"),
+        ("5961", "XLY"),
+        ("5812", "XLY"),
+        ("5331", "XLP"),
+        ("2080", "XLP"),
+        ("4911", "XLU"),
+        ("2821", "XLB"),
+        ("1040", "XLB"),
+        ("6798", "XLRE"),
+        (" 3571 ", "XLK"),
+        ("711", None),
+    ],
+)
+def test_pinned_cases(sic: str, etf: str | None) -> None:
+    assert sic_to_sector_etf(sic) == etf
+
+
+@pytest.mark.parametrize(
+    "value", ["9995", "", None, "abc", "35a1", "12", "12345", "-3571", "  "]
+)
+def test_unmapped_or_invalid_is_none(value: str | None) -> None:
+    assert sic_to_sector_etf(value) is None
+
+
+def test_version_and_etf_set() -> None:
+    assert SECTOR_MAP_VERSION == "sic-spdr-v1"
+    assert len(set(SECTOR_ETFS)) == 11
+
+
+def test_every_range_is_well_formed() -> None:
+    assert sectors._RANGES
+    for low, high, etf in sectors._RANGES:
+        assert low <= high
+        assert etf in SECTOR_ETFS
+
+
+def test_ranges_do_not_overlap() -> None:
+    ordered = sorted(sectors._RANGES)
+    for (_, prev_high, _), (low, _, _) in zip(ordered, ordered[1:], strict=False):
+        assert prev_high < low
+
+
+def test_every_etf_is_used() -> None:
+    assert {etf for _, _, etf in sectors._RANGES} == set(SECTOR_ETFS)
