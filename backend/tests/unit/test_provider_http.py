@@ -54,6 +54,8 @@ def trigger(http: ProviderHttp, kind: str) -> ProviderHttpError:
             route.respond(429, text=SECRET)
         elif kind == "unavailable":
             route.mock(side_effect=httpx.ConnectError(f"failed for {SECRET}"))
+        elif kind == "timeout":
+            route.mock(side_effect=httpx.ReadTimeout(f"timed out for {SECRET}"))
         elif kind == "rejected":
             route.respond(418, text=SECRET)
         elif kind == "not_found":
@@ -221,18 +223,19 @@ def test_limiter_refusal_sends_no_request() -> None:
     assert route.call_count == 1
 
 
-@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("kind", [*KINDS, "timeout"])
 def test_errors_never_carry_the_key(
     kind: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.DEBUG)
     err = trigger(make_http(FakeTime()), kind)
-    assert err.kind == kind
-    assert str(err) == kind
+    assert err.kind == ("unavailable" if kind == "timeout" else kind)
+    assert str(err) == err.kind
+    assert err.__context__ is None
+    assert SECRET not in repr(err.__context__)
     assert SECRET not in str(err)
     assert SECRET not in repr(err)
     assert err.__cause__ is None
-    assert err.__suppress_context__ is True
     assert SECRET not in caplog.text
     assert "api_key" not in caplog.text
     assert "X-Key" not in caplog.text
@@ -246,8 +249,14 @@ def test_fail_produces_a_safe_vantage_error(
     messages = {k: f"Provider problem: {k}." for k in KINDS}
     provider_err = trigger(make_http(FakeTime()), kind)
     with pytest.raises(VantageError) as info:
-        raise fail("PROVIDER_TEST", messages, provider_err) from None
+        try:
+            raise provider_err
+        except ProviderHttpError as caught:
+            raise fail("PROVIDER_TEST", messages, caught) from None
     e = info.value
+    assert e.__context__ is provider_err
+    assert provider_err.__context__ is None
+    assert SECRET not in repr(e.__context__)
     assert e.code == "PROVIDER_TEST"
     assert e.safe_message == messages[kind]
     assert e.retryable is (kind in {"rate_limited", "unavailable"})

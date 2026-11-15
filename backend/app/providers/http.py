@@ -2,7 +2,8 @@
 
 Errors carry only a fixed kind and a status code. They never include a URL, query
 parameters, headers or httpx exception text, so an API key cannot reach a message, a
-repr, an exception chain or a log line. Every raise uses ``from None``.
+repr, an exception chain or a log line. Raises happen outside any ``except`` block, so
+both ``__cause__`` and ``__context__`` are None.
 """
 
 import logging
@@ -73,7 +74,7 @@ class RateLimiter:
                     return
                 wait = self._calls[0] + self._period - now
             if waited + wait > self._max_wait:
-                raise _error("rate_limited") from None
+                raise _error("rate_limited")
             self._sleep(wait)
             waited += wait
 
@@ -119,7 +120,9 @@ class ProviderHttp:
         try:
             return response.json()
         except ValueError:
-            raise _error("malformed", response.status_code) from None
+            pass
+        # Raised outside the except block so no exception is left in __context__.
+        raise _error("malformed", response.status_code)
 
     def get_text(self, url: str, *, params: Mapping[str, str] | None = None) -> str:
         return self._get(url, params).text
@@ -152,7 +155,7 @@ class ProviderHttp:
                 self._sleep(retry_delay)
                 attempt += 1
                 continue
-            raise _error(kind, status) from None
+            raise _error(kind, status)
 
 
 def _retry_after(response: httpx.Response, default: float) -> float:
@@ -165,7 +168,11 @@ def _retry_after(response: httpx.Response, default: float) -> float:
 def fail(
     code: str, messages: Mapping[str, str], err: ProviderHttpError
 ) -> VantageError:
-    """Build the safe domain error. Callers write ``raise fail(...) from None``."""
+    """Build the safe domain error.
+
+    Callers write ``raise fail(...) from None``. If they do so inside an ``except
+    ProviderHttpError`` block, the context is that error, which carries no secret.
+    """
     return VantageError(
         code=code,
         safe_message=messages[err.kind],
