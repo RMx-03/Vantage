@@ -1,0 +1,491 @@
+"""SEC EDGAR filings and Form 4 insider-transaction provider.
+
+The configured User-Agent travels only in the request header. It is held by the HTTP
+client and appears in no attribute, repr, message, cache payload or log line. The cache
+holds reduced data only: the ticker map, a few submissions fields and Form 4 parse
+fields. It never holds a raw document.
+"""
+
+import logging
+import re
+import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
+from zoneinfo import ZoneInfo
+
+import httpx
+from defusedxml import ElementTree
+from defusedxml.common import DefusedXmlException
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.domain.research import (
+    ComponentQuality,
+    EvidenceDetails,
+    FilingsSnapshot,
+    NewsItem,
+)
+from app.providers.cache import ProviderCache
+from app.providers.http import ProviderHttp, ProviderHttpError, RateLimiter, fail
+
+logger = logging.getLogger(__name__)
+
+EDGAR_LIMITER = RateLimiter(8, 1.0)
+
+TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
+ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{folder}/{name}"
+
+FILING_FORMS = ("8-K", "8-K/A", "10-Q", "10-Q/A", "10-K", "10-K/A")
+INSIDER_FORMS = ("4", "4/A")
+INSIDER_LOOKBACK_DAYS = 90
+FORM4_FETCH_LIMIT = 10
+SUBMISSIONS_KEEP_DAYS = 400
+
+ERROR_CODE = "FILINGS_PROVIDER_FAILED"
+MESSAGES = {
+    "auth": "SEC EDGAR refused the request; check SEC_USER_AGENT.",
+    "rate_limited": "SEC EDGAR rate limit was reached.",
+    "unavailable": "SEC filings could not be retrieved.",
+    "rejected": "SEC filings could not be retrieved.",
+    "not_found": "SEC filings could not be retrieved.",
+    "malformed": "SEC filings could not be retrieved.",
+}
+
+_NY = ZoneInfo("America/New_York")
+_XSL_PREFIX = re.compile(r"^xslF345X\d\d/")
+_ROW_KEYS = (
+    "accessionNumber",
+    "filingDate",
+    "acceptanceDateTime",
+    "form",
+    "items",
+    "primaryDocument",
+)
+_OWNER_MAX = 120
+
+Row = dict[str, str]
+
+
+class EdgarProvider:
+    name: str = "edgar"
+
+    def __init__(
+        self,
+        user_agent: str,
+        cache: ProviderCache,
+        *,
+        timeout_seconds: float,
+        transport: httpx.BaseTransport | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._cache = cache
+        self._http = ProviderHttp(
+            timeout_seconds=timeout_seconds,
+            limiter=EDGAR_LIMITER,
+            headers={"User-Agent": user_agent},
+            transport=transport,
+            sleep=sleep,
+        )
+
+    def __repr__(self) -> str:
+        return "EdgarProvider()"
+
+    # ------------------------------------------------------------------ cache
+
+    def _cache_get(self, key: str, valid_for: date) -> Any | None:
+        try:
+            entry = self._cache.get(self.name, key, valid_for)
+        except SQLAlchemyError:
+            logger.warning("provider_cache_unavailable")
+            return None
+        return entry.payload if entry is not None else None
+
+    def _cache_put(
+        self,
+        key: str,
+        valid_for: date,
+        payload: Any,
+        retrieved_at: datetime,
+        *,
+        immutable: bool = False,
+    ) -> None:
+        try:
+            self._cache.put(
+                self.name, key, valid_for, payload, retrieved_at, immutable=immutable
+            )
+        except SQLAlchemyError:
+            logger.warning("provider_cache_unavailable")
+
+    # ------------------------------------------------------------------ fetch
+
+    def fetch_filing_evidence(
+        self,
+        symbol: str,
+        cutoff: datetime,
+        retrieved_at: datetime,
+        lookback_days: int,
+    ) -> FilingsSnapshot:
+        primary = symbol.strip().upper()
+        cutoff_utc = cutoff.astimezone(UTC)
+        retrieved_utc = retrieved_at.astimezone(UTC)
+        cutoff_date = cutoff_utc.astimezone(_NY).date()
+        base: dict[str, Any] = {
+            "symbol": primary,
+            "provider": self.name,
+            "retrieved_at": retrieved_utc,
+            "coverage_start": cutoff_utc - timedelta(days=INSIDER_LOOKBACK_DAYS),
+            "coverage_end": cutoff_utc,
+        }
+        missing = FilingsSnapshot(
+            **base,
+            quality=ComponentQuality.MISSING,
+            error_code="NO_SEC_FILER_RECORD",
+            items=[],
+        )
+
+        try:
+            deadline = self._http.deadline()
+            tickers = self._ticker_map(cutoff_date, retrieved_utc, deadline)
+            entry = tickers.get(primary.replace(".", "-"))
+            if entry is None:
+                found = False
+                cik, title = 0, ""
+            else:
+                found = True
+                cik, title = entry
+            submissions = None
+            if found:
+                submissions = self._submissions(
+                    cik, cutoff_utc, cutoff_date, retrieved_utc, deadline
+                )
+        except ProviderHttpError as err:
+            raise fail(ERROR_CODE, MESSAGES, err) from None
+        if not found or submissions is None:
+            return missing
+
+        rows: list[Row] = submissions["filings"]
+        filings = self._filing_items(
+            rows, cik, cutoff_utc, cutoff_date, retrieved_utc, lookback_days
+        )
+        insiders = self._insider_items(rows, cik, cutoff_utc, retrieved_utc, deadline)
+        all_items = sorted(
+            [*filings, *insiders],
+            key=lambda i: (i.event_time or cutoff_utc, i.evidence_id),
+            reverse=True,
+        )
+        return FilingsSnapshot(
+            **base,
+            quality=ComponentQuality.FRESH,
+            items=all_items,
+            cik=f"{cik:010d}",
+            company_name=submissions["name"] or title or None,
+            sic_code=submissions["sic"],
+            insider_filing_count=len(insiders),
+        )
+
+    def _ticker_map(
+        self, cutoff_date: date, retrieved_at: datetime, deadline: float
+    ) -> dict[str, tuple[int, str]]:
+        cached = self._cache_get("company_tickers", cutoff_date)
+        if isinstance(cached, dict):
+            return {
+                k: (v[0], v[1])
+                for k, v in cached.items()
+                if isinstance(v, list) and len(v) == 2
+            }
+        payload = self._http.get_json(TICKERS_URL, deadline=deadline)
+        if not isinstance(payload, dict):
+            raise ProviderHttpError("malformed")
+        reduced: dict[str, list[Any]] = {}
+        for raw in payload.values():
+            if not isinstance(raw, dict):
+                continue
+            cik, ticker, title = raw.get("cik_str"), raw.get("ticker"), raw.get("title")
+            if isinstance(cik, bool) or not isinstance(cik, int):
+                continue
+            if not isinstance(ticker, str) or not ticker.strip():
+                continue
+            reduced.setdefault(
+                ticker.strip().upper(), [cik, title if isinstance(title, str) else ""]
+            )
+        if not reduced:
+            raise ProviderHttpError("malformed")
+        self._cache_put("company_tickers", cutoff_date, reduced, retrieved_at)
+        return {k: (v[0], v[1]) for k, v in reduced.items()}
+
+    def _submissions(
+        self,
+        cik: int,
+        cutoff_utc: datetime,
+        cutoff_date: date,
+        retrieved_at: datetime,
+        deadline: float,
+    ) -> dict[str, Any] | None:
+        key = f"submissions:{cik}"
+        cached = self._cache_get(key, cutoff_date)
+        if isinstance(cached, dict) and isinstance(cached.get("filings"), list):
+            return cached
+        try:
+            payload = self._http.get_json(
+                SUBMISSIONS_URL.format(cik=cik), deadline=deadline
+            )
+        except ProviderHttpError as err:
+            if err.kind == "not_found":
+                return None
+            raise
+        if not isinstance(payload, dict):
+            raise ProviderHttpError("malformed")
+        reduced = {
+            "name": _text(payload.get("name")),
+            "sic": _text(payload.get("sic")),
+            "filings": _reduce_rows(payload, cutoff_date),
+        }
+        self._cache_put(key, cutoff_date, reduced, retrieved_at)
+        return reduced
+
+    # ----------------------------------------------------------------- filings
+
+    def _filing_items(
+        self,
+        rows: list[Row],
+        cik: int,
+        cutoff_utc: datetime,
+        cutoff_date: date,
+        retrieved_at: datetime,
+        lookback_days: int,
+    ) -> list[NewsItem]:
+        earliest = cutoff_date - timedelta(days=lookback_days)
+        out: list[NewsItem] = []
+        for row in rows:
+            if row.get("form") not in FILING_FORMS:
+                continue
+            accepted = _accepted(row)
+            filed = _filed(row)
+            if accepted is None or filed is None or accepted > cutoff_utc:
+                continue
+            if not earliest <= filed <= cutoff_date:
+                continue
+            codes = [c.strip() for c in row.get("items", "").split(",") if c.strip()]
+            form = row["form"]
+            title = f"Form {form}"
+            if codes:
+                title += f" (Items {', '.join(codes)})"
+            out.append(
+                _item(
+                    row,
+                    cik,
+                    title,
+                    "filing",
+                    accepted,
+                    retrieved_at,
+                    EvidenceDetails(
+                        providers=[self.name], form_type=form, item_codes=codes
+                    ),
+                )
+            )
+        return out
+
+    # ---------------------------------------------------------------- insiders
+
+    def _insider_items(
+        self,
+        rows: list[Row],
+        cik: int,
+        cutoff_utc: datetime,
+        retrieved_at: datetime,
+        deadline: float,
+    ) -> list[NewsItem]:
+        earliest = cutoff_utc - timedelta(days=INSIDER_LOOKBACK_DAYS)
+        selected: list[tuple[Row, datetime]] = []
+        for row in rows:
+            if row.get("form") not in INSIDER_FORMS:
+                continue
+            accepted = _accepted(row)
+            if accepted is None or not earliest < accepted <= cutoff_utc:
+                continue
+            selected.append((row, accepted))
+        selected.sort(key=lambda p: (p[1], p[0]["accessionNumber"]), reverse=True)
+
+        to_fetch = selected[:FORM4_FETCH_LIMIT]
+        if to_fetch:
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                parsed = list(
+                    pool.map(
+                        lambda p: self._form4(p[0], cik, retrieved_at, deadline),
+                        to_fetch,
+                    )
+                )
+        else:
+            parsed = []
+
+        out: list[NewsItem] = []
+        for index, (row, accepted) in enumerate(selected):
+            fields: dict[str, Any] | None = None
+            if index < FORM4_FETCH_LIMIT:
+                state = "unparsed"
+                result = parsed[index]
+                if result is not None and result.get("state") == "parsed":
+                    state, fields = "parsed", result
+            else:
+                state = "not_fetched"
+            owner = fields.get("owner") if fields else None
+            code = fields.get("code") if fields else None
+            direction = fields.get("direction") if fields else None
+            title = f"Form 4: {owner} ({code})" if owner and code else "Form 4"
+            out.append(
+                _item(
+                    row,
+                    cik,
+                    title,
+                    "insider_transaction",
+                    accepted,
+                    retrieved_at,
+                    EvidenceDetails(
+                        providers=[self.name],
+                        form_type=row["form"],
+                        transaction_code=code,
+                        direction=direction,
+                        parse_state=state,  # type: ignore[arg-type]
+                    ),
+                )
+            )
+        return out
+
+    def _form4(
+        self, row: Row, cik: int, retrieved_at: datetime, deadline: float
+    ) -> dict[str, Any] | None:
+        """Parse fields for one Form 4, or None when the document was not fetched."""
+        accession = row["accessionNumber"]
+        filed = _filed(row)
+        if filed is None:
+            return None
+        key = f"form4:{accession}"
+        cached = self._cache_get(key, filed)
+        if isinstance(cached, dict) and cached.get("state") in ("parsed", "unparsed"):
+            return cached
+        document = _XSL_PREFIX.sub("", row.get("primaryDocument", ""))
+        if not document:
+            return None
+        url = ARCHIVE_URL.format(
+            cik=cik, folder=accession.replace("-", ""), name=document
+        )
+        try:
+            text = self._http.get_text(url, deadline=deadline)
+        except ProviderHttpError:
+            return None
+        result = _parse_form4(text)
+        self._cache_put(key, filed, result, retrieved_at, immutable=True)
+        return result
+
+
+# ---------------------------------------------------------------------- helpers
+
+
+def _text(value: object) -> str | None:
+    if isinstance(value, (str, int)) and not isinstance(value, bool):
+        text = str(value).strip()
+        return text or None
+    return None
+
+
+def _accepted(row: Row) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(
+            row["acceptanceDateTime"].replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _filed(row: Row) -> date | None:
+    try:
+        return date.fromisoformat(row["filingDate"])
+    except (KeyError, ValueError):
+        return None
+
+
+def _reduce_rows(payload: dict[str, Any], cutoff_date: date) -> list[Row]:
+    filings = payload.get("filings")
+    recent = filings.get("recent") if isinstance(filings, dict) else None
+    if not isinstance(recent, dict):
+        return []
+    columns = {k: recent.get(k) for k in _ROW_KEYS}
+    if not all(isinstance(v, list) for v in columns.values()):
+        return []
+    oldest = cutoff_date - timedelta(days=SUBMISSIONS_KEEP_DAYS)
+    wanted = {*FILING_FORMS, *INSIDER_FORMS}
+    rows: list[Row] = []
+    for values in zip(*(columns[k] for k in _ROW_KEYS), strict=False):
+        row = {
+            k: v if isinstance(v, str) else ""
+            for k, v in zip(_ROW_KEYS, values, strict=True)
+        }
+        filed = _filed(row)
+        if row["form"] in wanted and filed is not None and filed >= oldest:
+            if row["accessionNumber"]:
+                rows.append(row)
+    return rows
+
+
+def _item(
+    row: Row,
+    cik: int,
+    title: str,
+    source_type: Any,
+    accepted: datetime,
+    retrieved_at: datetime,
+    details: EvidenceDetails,
+) -> NewsItem:
+    accession = row["accessionNumber"]
+    return NewsItem(
+        evidence_id=f"sec-{accession}",
+        provider="edgar",
+        publisher="SEC EDGAR",
+        title=title,
+        url=ARCHIVE_URL.format(
+            cik=cik,
+            folder=accession.replace("-", ""),
+            name=f"{accession}-index.htm",
+        ),
+        event_time=accepted,
+        retrieved_at=retrieved_at,
+        source_type=source_type,
+        details=details,
+    )
+
+
+def _parse_form4(text: str) -> dict[str, Any]:
+    """Reduce a Form 4 document to owner, transaction code and direction."""
+    try:
+        root = ElementTree.fromstring(text)
+    except (ElementTree.ParseError, DefusedXmlException, ValueError):
+        return {"state": "unparsed"}
+    transaction = root.find("nonDerivativeTable/nonDerivativeTransaction")
+    if transaction is None:
+        transaction = root.find("derivativeTable/derivativeTransaction")
+    if transaction is None:
+        return {"state": "unparsed"}
+    code = _find_text(transaction, "transactionCoding/transactionCode")
+    flag = _find_text(
+        transaction, "transactionAmounts/transactionAcquiredDisposedCode/value"
+    )
+    owner = _find_text(root, "reportingOwner/reportingOwnerId/rptOwnerName")
+    if owner is not None:
+        owner = " ".join(owner.split())[:_OWNER_MAX] or None
+    direction = {"A": "acquired", "D": "disposed"}.get(flag or "")
+    if code is None and owner is None:
+        return {"state": "unparsed"}
+    return {"state": "parsed", "owner": owner, "code": code, "direction": direction}
+
+
+def _find_text(node: Any, path: str) -> str | None:
+    found = node.find(path)
+    if found is None or found.text is None:
+        return None
+    text = found.text.strip()
+    return text or None

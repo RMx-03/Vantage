@@ -21,6 +21,7 @@ from app.providers.contracts import (
     NewsProvider,
     PriceCrossCheckProvider,
 )
+from app.providers.edgar import EdgarProvider
 from app.providers.finnhub import FinnhubNewsProvider
 from app.providers.fixture_provider import FixtureProvider
 from app.providers.llm import (
@@ -30,6 +31,7 @@ from app.providers.llm import (
     OllamaInterpretationProvider,
 )
 from app.providers.yfinance_provider import YFinanceSnapshotProvider
+from app.repositories.provider_cache import PostgresProviderCache
 
 ProviderRole = Literal["market", "news", "filings", "macro", "crosscheck", "llm"]
 ProviderFactory = Callable[[Settings], object | None]
@@ -113,6 +115,16 @@ def _finnhub_news(s: Settings) -> object | None:
     )
 
 
+def _edgar(s: Settings) -> object | None:
+    if not s.SEC_USER_AGENT:
+        return None
+    return EdgarProvider(
+        s.SEC_USER_AGENT,
+        PostgresProviderCache(),
+        timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS),
+    )
+
+
 @lru_cache(maxsize=1)
 def default_registry() -> ProviderRegistry:
     registry = ProviderRegistry()
@@ -121,6 +133,7 @@ def default_registry() -> ProviderRegistry:
     registry.register("news", "alpaca", _alpaca_news)
     registry.register("news", "finnhub", _finnhub_news)
     registry.register("news", "yfinance", _yfinance)
+    registry.register("filings", "edgar", _edgar)
     registry.register("market", "fixture", _fixture)
     registry.register("news", "fixture", _fixture)
     registry.register("llm", "disabled", lambda s: DisabledInterpretationProvider())
