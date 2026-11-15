@@ -311,3 +311,41 @@ def test_no_retry_when_under_one_second_remains_against_the_deadline() -> None:
     assert info.value.kind == "unavailable"
     assert route.call_count == 1
     assert t.sleeps == []
+
+
+@respx.mock
+def test_decoding_error_maps_to_malformed_without_retry() -> None:
+    route = respx.get(URL).mock(side_effect=httpx.DecodingError(f"bad {SECRET}"))
+    with pytest.raises(ProviderHttpError) as info:
+        make_http(FakeTime()).get_json(URL)
+    err = info.value
+    assert err.kind == "malformed"
+    assert route.call_count == 1
+    assert err.__context__ is None
+    assert err.__cause__ is None
+    assert SECRET not in repr(err)
+
+
+@respx.mock
+def test_invalid_url_maps_to_rejected_without_retry() -> None:
+    route = respx.get(URL).mock(side_effect=httpx.InvalidURL(f"bad {SECRET}"))
+    with pytest.raises(ProviderHttpError) as info:
+        make_http(FakeTime()).get_json(URL)
+    err = info.value
+    assert err.kind == "rejected"
+    assert route.call_count == 1
+    assert err.__context__ is None
+
+
+@respx.mock
+def test_redirect_is_rejected_not_success() -> None:
+    route = respx.get(URL).respond(302, headers={"Location": "https://x.test/"})
+    with pytest.raises(ProviderHttpError) as info:
+        make_http(FakeTime()).get_json(URL)
+    assert info.value.kind == "rejected"
+    assert info.value.status == 302
+    assert route.call_count == 1
+
+
+def test_httpcore_logger_is_held_at_warning() -> None:
+    assert logging.getLogger("httpcore").level == logging.WARNING

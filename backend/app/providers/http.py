@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 # httpx logs full request URLs at INFO, which would include query-borne keys (FRED).
 logging.getLogger("httpx").setLevel(logging.WARNING)
+# h11 error text can carry a header value (a key or contact address) and httpcore
+# writes it at DEBUG, so hold that logger at WARNING too.
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 ErrorKind = Literal[
     "auth", "rate_limited", "unavailable", "rejected", "not_found", "malformed"
@@ -86,6 +89,8 @@ def _kind_for_status(status: int) -> ErrorKind | None:
         return "not_found"
     if status == 429:
         return "rate_limited"
+    if 300 <= status < 400:
+        return "rejected"  # redirects are not followed
     if status >= 500:
         return "unavailable"
     if status >= 400:
@@ -168,6 +173,12 @@ class ProviderHttp:
                 )
             except (httpx.TimeoutException, httpx.TransportError):
                 kind = "unavailable"
+            except httpx.InvalidURL:
+                kind = "rejected"
+            except httpx.HTTPError:
+                # Corrupt body or redirect loop: not retryable. The kind is raised
+                # below, outside this block, so no httpx text enters __context__.
+                kind = "malformed"
             else:
                 status = response.status_code
                 kind = _kind_for_status(status)

@@ -4,6 +4,7 @@ Later stages add providers by registering factories; nothing else in the
 research path needs to know which implementation serves a role.
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -34,6 +35,8 @@ from app.providers.llm import (
 from app.providers.tiingo import TiingoCrossCheckProvider
 from app.providers.yfinance_provider import YFinanceSnapshotProvider
 from app.repositories.provider_cache import PostgresProviderCache
+
+logger = logging.getLogger(__name__)
 
 ProviderRole = Literal["market", "news", "filings", "macro", "crosscheck", "llm"]
 ProviderFactory = Callable[[Settings], object | None]
@@ -89,59 +92,87 @@ def _yfinance(_: Settings) -> object:
     return YFinanceSnapshotProvider()
 
 
+def _usable_secret(value: str | None) -> str | None:
+    """Strip a credential; None when empty or outside printable ASCII.
+
+    A non-ASCII value would make the httpx client constructor raise, and surrounding
+    whitespace makes h11 reject the header with text that echoes the value.
+    """
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped or any(not 0x20 <= ord(ch) <= 0x7E for ch in stripped):
+        return None
+    return stripped
+
+
+def _credentials(role: str, name: str, *values: str | None) -> tuple[str, ...] | None:
+    """All values usable, or None. Never logs a value or its length."""
+    usable = [_usable_secret(v) for v in values]
+    if all(v is not None for v in usable):
+        return tuple(v for v in usable if v is not None)
+    if any(values):
+        logger.warning("provider_credential_unusable role=%s name=%s", role, name)
+    return None
+
+
 def _alpaca_market(s: Settings) -> object | None:
-    if not (s.ALPACA_API_KEY_ID and s.ALPACA_API_SECRET_KEY):
+    creds = _credentials(
+        "market", "alpaca", s.ALPACA_API_KEY_ID, s.ALPACA_API_SECRET_KEY
+    )
+    if creds is None:
         return None
     return AlpacaMarketProvider(
-        s.ALPACA_API_KEY_ID,
-        s.ALPACA_API_SECRET_KEY,
-        timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS),
+        creds[0], creds[1], timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
     )
 
 
 def _alpaca_news(s: Settings) -> object | None:
-    if not (s.ALPACA_API_KEY_ID and s.ALPACA_API_SECRET_KEY):
+    creds = _credentials("news", "alpaca", s.ALPACA_API_KEY_ID, s.ALPACA_API_SECRET_KEY)
+    if creds is None:
         return None
     return AlpacaNewsProvider(
-        s.ALPACA_API_KEY_ID,
-        s.ALPACA_API_SECRET_KEY,
-        timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS),
+        creds[0], creds[1], timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
     )
 
 
 def _finnhub_news(s: Settings) -> object | None:
-    if not s.FINNHUB_API_KEY:
+    creds = _credentials("news", "finnhub", s.FINNHUB_API_KEY)
+    if creds is None:
         return None
     return FinnhubNewsProvider(
-        s.FINNHUB_API_KEY, timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
+        creds[0], timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
     )
 
 
 def _edgar(s: Settings) -> object | None:
-    if not s.SEC_USER_AGENT:
+    creds = _credentials("filings", "edgar", s.SEC_USER_AGENT)
+    if creds is None:
         return None
     return EdgarProvider(
-        s.SEC_USER_AGENT,
+        creds[0],
         PostgresProviderCache(),
         timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS),
     )
 
 
 def _fred(s: Settings) -> object | None:
-    if not s.FRED_API_KEY:
+    creds = _credentials("macro", "fred", s.FRED_API_KEY)
+    if creds is None:
         return None
     return FredMacroProvider(
-        s.FRED_API_KEY,
+        creds[0],
         PostgresProviderCache(),
         timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS),
     )
 
 
 def _tiingo(s: Settings) -> object | None:
-    if not s.TIINGO_API_KEY:
+    creds = _credentials("crosscheck", "tiingo", s.TIINGO_API_KEY)
+    if creds is None:
         return None
     return TiingoCrossCheckProvider(
-        s.TIINGO_API_KEY, timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
+        creds[0], timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
     )
 
 
