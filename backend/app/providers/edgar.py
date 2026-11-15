@@ -24,6 +24,7 @@ from app.domain.research import (
     ComponentQuality,
     EvidenceDetails,
     FilingsSnapshot,
+    FundamentalsSnapshot,
     NewsItem,
 )
 from app.providers.cache import ProviderCache
@@ -36,12 +37,25 @@ EDGAR_LIMITER = RateLimiter(8, 1.0)
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
 ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{folder}/{name}"
+COMPANYFACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
 
 FILING_FORMS = ("8-K", "8-K/A", "10-Q", "10-Q/A", "10-K", "10-K/A")
 INSIDER_FORMS = ("4", "4/A")
 INSIDER_LOOKBACK_DAYS = 90
 FORM4_FETCH_LIMIT = 10
 SUBMISSIONS_KEEP_DAYS = 400
+
+REVENUE_CONCEPTS = (
+    "Revenues",
+    "RevenueFromContractWithCustomerExcludingAssessedTax",
+    "SalesRevenueNet",
+    "RevenueFromContractWithCustomerIncludingAssessedTax",
+)
+NET_INCOME_CONCEPT = "NetIncomeLoss"
+ANNUAL_FORMS = ("10-K", "10-K/A")
+ANNUAL_MIN_DAYS = 350
+ANNUAL_MAX_DAYS = 380
+_FACT_KEYS = ("start", "end", "val", "form", "fp", "filed")
 
 ERROR_CODE = "FILINGS_PROVIDER_FAILED"
 MESSAGES = {
@@ -245,6 +259,73 @@ class EdgarProvider:
         self._cache_put(key, cutoff_date, reduced, retrieved_at)
         return reduced
 
+    # ------------------------------------------------------------ fundamentals
+
+    def fetch_fundamentals(
+        self, symbol: str, retrieved_at: datetime
+    ) -> FundamentalsSnapshot:
+        primary = symbol.strip().upper()
+        retrieved_utc = retrieved_at.astimezone(UTC)
+        valid_for = retrieved_utc.astimezone(_NY).date()
+        base: dict[str, Any] = {
+            "symbol": primary,
+            "provider": self.name,
+            "retrieved_at": retrieved_utc,
+        }
+        try:
+            deadline = self._http.deadline()
+            tickers = self._ticker_map(valid_for, retrieved_utc, deadline)
+            entry = tickers.get(primary.replace(".", "-"))
+            facts = None
+            if entry is not None:
+                facts = self._company_facts(
+                    entry[0], valid_for, retrieved_utc, deadline
+                )
+        except ProviderHttpError as err:
+            raise fail(ERROR_CODE, MESSAGES, err) from None
+        if entry is None:
+            return FundamentalsSnapshot(
+                **base,
+                quality=ComponentQuality.MISSING,
+                error_code="NO_SEC_FILER_RECORD",
+            )
+        selected = _select_fundamentals(facts) if facts is not None else None
+        if selected is None:
+            return FundamentalsSnapshot(
+                **base,
+                quality=ComponentQuality.MISSING,
+                error_code="FUNDAMENTALS_UNAVAILABLE",
+            )
+        complete = (
+            selected["prior_revenue"] is not None and selected["net_income"] is not None
+        )
+        return FundamentalsSnapshot(
+            **base,
+            quality=ComponentQuality.FRESH if complete else ComponentQuality.PARTIAL,
+            **selected,
+        )
+
+    def _company_facts(
+        self, cik: int, valid_for: date, retrieved_at: datetime, deadline: float
+    ) -> dict[str, list[dict[str, Any]]] | None:
+        key = f"companyfacts:{cik}"
+        cached = self._cache_get(key, valid_for)
+        if isinstance(cached, dict):
+            return cached
+        try:
+            payload = self._http.get_json(
+                COMPANYFACTS_URL.format(cik=cik), deadline=deadline
+            )
+        except ProviderHttpError as err:
+            if err.kind == "not_found":
+                return None
+            raise
+        if not isinstance(payload, dict):
+            raise ProviderHttpError("malformed")
+        reduced = _reduce_facts(payload)
+        self._cache_put(key, valid_for, reduced, retrieved_at)
+        return reduced
+
     # ----------------------------------------------------------------- filings
 
     def _filing_items(
@@ -430,6 +511,112 @@ def _reduce_rows(payload: dict[str, Any], cutoff_date: date) -> list[Row]:
             if row["accessionNumber"]:
                 rows.append(row)
     return rows
+
+
+def _fact_date(value: object) -> date | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+class _Annual:
+    __slots__ = ("end", "filed", "form", "start", "val")
+
+    def __init__(
+        self, start: date, end: date, filed: date, form: str, val: float
+    ) -> None:
+        self.start = start
+        self.end = end
+        self.filed = filed
+        self.form = form
+        self.val = val
+
+
+def _annual(raw: object) -> _Annual | None:
+    """One annual 10-K fact, or None when it is not annual or is malformed."""
+    if not isinstance(raw, dict):
+        return None
+    form, val = raw.get("form"), raw.get("val")
+    if form not in ANNUAL_FORMS or raw.get("fp") != "FY":
+        return None
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return None
+    start, end, filed = (_fact_date(raw.get(k)) for k in ("start", "end", "filed"))
+    if start is None or end is None or filed is None:
+        return None
+    if not ANNUAL_MIN_DAYS <= (end - start).days <= ANNUAL_MAX_DAYS:
+        return None
+    return _Annual(start, end, filed, form, float(val))
+
+
+def _reduce_facts(payload: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """Keep only the annual USD facts of the five concepts, with selection fields."""
+    facts = payload.get("facts")
+    gaap = facts.get("us-gaap") if isinstance(facts, dict) else None
+    if not isinstance(gaap, dict):
+        return {}
+    reduced: dict[str, list[dict[str, Any]]] = {}
+    for concept in (*REVENUE_CONCEPTS, NET_INCOME_CONCEPT):
+        node = gaap.get(concept)
+        units = node.get("units") if isinstance(node, dict) else None
+        rows = units.get("USD") if isinstance(units, dict) else None
+        if not isinstance(rows, list):
+            continue
+        kept = [
+            {k: row[k] for k in _FACT_KEYS} for row in rows if _annual(row) is not None
+        ]
+        if kept:
+            reduced[concept] = kept
+    return reduced
+
+
+def _latest_by_end(rows: object) -> dict[date, _Annual]:
+    """Annual facts keyed by period end, keeping the latest filed of each end."""
+    out: dict[date, _Annual] = {}
+    if not isinstance(rows, list):
+        return out
+    for raw in rows:
+        fact = _annual(raw)
+        if fact is None:
+            continue
+        current = out.get(fact.end)
+        if current is None or fact.filed > current.filed:
+            out[fact.end] = fact
+    return out
+
+
+def _select_fundamentals(
+    facts: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any] | None:
+    best: tuple[str, dict[date, _Annual], date] | None = None
+    for concept in REVENUE_CONCEPTS:
+        by_end = _latest_by_end(facts.get(concept))
+        if not by_end:
+            continue
+        latest = max(by_end)
+        if best is None or latest > best[2]:
+            best = (concept, by_end, latest)
+    if best is None:
+        return None
+    concept, by_end, end = best
+    current = by_end[end]
+    prior_ends = [
+        e for e in by_end if ANNUAL_MIN_DAYS <= (end - e).days <= ANNUAL_MAX_DAYS
+    ]
+    prior = by_end[max(prior_ends)] if prior_ends else None
+    income = _latest_by_end(facts.get(NET_INCOME_CONCEPT)).get(end)
+    return {
+        "fiscal_year": end.year,
+        "period_end": end,
+        "form": current.form,
+        "revenue": current.val,
+        "prior_revenue": prior.val if prior is not None else None,
+        "net_income": income.val if income is not None else None,
+        "revenue_concept": concept,
+    }
 
 
 def _item(

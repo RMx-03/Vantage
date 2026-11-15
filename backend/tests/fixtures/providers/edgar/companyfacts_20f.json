@@ -1,0 +1,14 @@
+{
+  "cik": 1046179,
+  "entityName": "Taiwan Semiconductor Manufacturing Co Ltd",
+  "facts": {
+    "ifrs-full": {
+      "Revenue": {
+        "units": {"TWD": [{"start": "2024-01-01", "end": "2024-12-31", "val": 2894307699000, "form": "20-F", "fp": "FY", "filed": "2025-04-15"}]}
+      },
+      "ProfitLoss": {
+        "units": {"TWD": [{"start": "2024-01-01", "end": "2024-12-31", "val": 1173268000000, "form": "20-F", "fp": "FY", "filed": "2025-04-15"}]}
+      }
+    }
+  }
+}
