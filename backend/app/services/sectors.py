@@ -53,7 +53,10 @@ _RANGES: tuple[tuple[int, int, str], ...] = (
     (3100, 3199, "XLY"),  # leather, footwear
     (3200, 3299, "XLB"),  # stone, clay, glass, cement
     (3300, 3399, "XLB"),  # primary metals
-    (3400, 3569, "XLI"),  # fabricated metal products and industrial machinery
+    (3400, 3558, "XLI"),  # fabricated metal products and industrial machinery
+    # 3559 special industry machinery mixes semiconductor equipment with other
+    # machinery, so it is left unmapped.
+    (3560, 3569, "XLI"),  # general industrial machinery
     (3570, 3579, "XLK"),  # computers and office equipment (3571 electronic computers)
     (3580, 3629, "XLI"),  # industrial machinery, electrical equipment
     (3630, 3639, "XLY"),  # household appliances
@@ -74,7 +77,10 @@ _RANGES: tuple[tuple[int, int, str], ...] = (
     # 4810-4899 communications is a judgement call: telephone, radio, TV and cable fit the
     # Communication Services sector, so the whole 48xx group maps there (4813 telephone).
     (4810, 4899, "XLC"),
-    (4900, 4949, "XLU"),  # electric, gas, water and combination utilities (4911)
+    (4900, 4921, "XLU"),  # electric services and gas production (4911)
+    (4922, 4922, "XLE"),  # natural gas transmission pipelines, as with 4610-4619
+    # 4923 gas transmission and distribution mixes pipelines with utilities: unmapped.
+    (4924, 4949, "XLU"),  # natural gas distribution, water and combination utilities
     (4950, 4959, "XLI"),  # sanitary services and waste (industrial)
     (4960, 4999, "XLU"),  # steam, air conditioning and cogeneration supply
     (5140, 5149, "XLP"),  # groceries wholesale
@@ -87,7 +93,17 @@ _RANGES: tuple[tuple[int, int, str], ...] = (
     (5900, 5909, "XLY"),  # miscellaneous retail
     (5910, 5919, "XLP"),  # drug stores: staples, matching the SPDR staples sector
     (5920, 5999, "XLY"),  # specialty and mail-order retail (5961)
-    (6000, 6499, "XLF"),  # banks, credit, brokers, insurance (6021, 6311)
+    (
+        6000,
+        6323,
+        "XLF",
+    ),  # banks, credit, brokers, life and other insurance (6021, 6311)
+    (
+        6324,
+        6324,
+        "XLV",
+    ),  # hospital and medical service plans: managed care is Health Care
+    (6325, 6499, "XLF"),  # remaining insurance carriers, agents and brokers
     (6500, 6599, "XLRE"),  # real estate operators, lessors, developers
     (6700, 6769, "XLF"),  # holding and other investment offices
     # 6770 blank checks and 6771-6797 are left unmapped: no sector is implied.
@@ -95,17 +111,24 @@ _RANGES: tuple[tuple[int, int, str], ...] = (
     (7000, 7019, "XLY"),  # hotels and lodging
     (7310, 7319, "XLC"),  # advertising
     (7320, 7369, "XLI"),  # credit reporting, building, rental, staffing
-    # 7370-7371 vs 7372-7379 is a judgement call. 7370 (computer services and data
-    # processing, where large search and social platforms file) and 7371 (programming
-    # services) map to Communication Services. 7372-7379 (prepackaged software, systems
-    # design, processing) map to Information Technology (7372 software).
-    (7370, 7371, "XLC"),
+    # 7370 vs 7371-7379 is a judgement call. 7370 (computer services and data
+    # processing, where large search and social platforms file) maps to Communication
+    # Services. 7371-7379 (programming, prepackaged software, systems design,
+    # processing) map to Information Technology.
+    (7370, 7370, "XLC"),
+    (7371, 7371, "XLK"),  # computer programming and IT services
     (7372, 7379, "XLK"),
-    (7380, 7389, "XLI"),  # miscellaneous business services
+    # 7389 business services not elsewhere classified is a catch-all (payments,
+    # marketplaces and more), so it is left unmapped.
+    (7380, 7388, "XLI"),  # detective, security and other business services
     (7800, 7841, "XLC"),  # motion picture production and distribution (7841)
-    (7990, 7999, "XLY"),  # amusement, gaming and recreation services
+    # 7990 miscellaneous amusement and recreation mixes media and leisure: unmapped.
+    (7991, 7999, "XLY"),  # amusement, gaming and recreation services
     (8000, 8099, "XLV"),  # health services, hospitals, laboratories (8062)
-    (8700, 8799, "XLI"),  # engineering, accounting, management services
+    (8700, 8730, "XLI"),  # engineering, accounting, management services
+    # 8731 commercial physical and biological research mixes biotech with contract
+    # research: unmapped.
+    (8732, 8799, "XLI"),  # remaining research, management and consulting services
 )
 
 
