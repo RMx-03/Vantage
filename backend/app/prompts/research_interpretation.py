@@ -26,6 +26,10 @@ SYSTEM_INSTRUCTION = (
     "Every cited evidence ID must come from the supplied evidence."
 )
 
+# Prompt v2 must receive exactly the evidence fields it was written against.
+# Multi-source fields on NewsItem stay out until a new prompt version adopts them.
+_V2_EVIDENCE_EXCLUDE = {"content_hash", "source_type", "summary", "details"}
+
 
 def build_interpretation_input(
     symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
@@ -34,7 +38,7 @@ def build_interpretation_input(
         "symbol": symbol,
         "metrics": [metric.model_dump(mode="json") for metric in metrics],
         "evidence": [
-            item.model_dump(mode="json", exclude={"content_hash"})
+            item.model_dump(mode="json", exclude=_V2_EVIDENCE_EXCLUDE)
             for item in news.items
         ],
         "response_schema": AIInterpretation.model_json_schema(),
