@@ -115,8 +115,18 @@ class ProviderHttp:
     def close(self) -> None:
         self._client.close()
 
-    def get_json(self, url: str, *, params: Mapping[str, str] | None = None) -> Any:
-        response = self._get(url, params)
+    def deadline(self) -> float:
+        """Absolute clock time that ends one provider call made of several requests."""
+        return self._clock() + self._timeout
+
+    def get_json(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, str] | None = None,
+        deadline: float | None = None,
+    ) -> Any:
+        response = self._get(url, params, deadline)
         try:
             return response.json()
         except ValueError:
@@ -124,15 +134,31 @@ class ProviderHttp:
         # Raised outside the except block so no exception is left in __context__.
         raise _error("malformed", response.status_code)
 
-    def get_text(self, url: str, *, params: Mapping[str, str] | None = None) -> str:
-        return self._get(url, params).text
+    def get_text(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, str] | None = None,
+        deadline: float | None = None,
+    ) -> str:
+        return self._get(url, params, deadline).text
 
-    def _get(self, url: str, params: Mapping[str, str] | None) -> httpx.Response:
+    def _get(
+        self,
+        url: str,
+        params: Mapping[str, str] | None,
+        deadline: float | None = None,
+    ) -> httpx.Response:
         start = self._clock()
         attempt = 0
         while True:
+            if deadline is not None and deadline - self._clock() <= 0:
+                raise _error("unavailable")
             self._limiter.acquire()
-            remaining = max(self._timeout - (self._clock() - start), 0.001)
+            remaining = self._timeout - (self._clock() - start)
+            if deadline is not None:
+                remaining = min(remaining, deadline - self._clock())
+            remaining = max(remaining, 0.001)
             kind: ErrorKind | None
             status: int | None = None
             retry_delay = self._backoff
@@ -150,7 +176,10 @@ class ProviderHttp:
                 if status == 429:
                     retry_delay = _retry_after(response, self._backoff)
             retryable = kind in ("rate_limited", "unavailable")
-            budget_left = self._timeout - (self._clock() - start) - retry_delay
+            budget_left = self._timeout - (self._clock() - start)
+            if deadline is not None:
+                budget_left = min(budget_left, deadline - self._clock())
+            budget_left -= retry_delay
             if attempt == 0 and retryable and budget_left >= _MIN_RETRY_BUDGET_SECONDS:
                 self._sleep(retry_delay)
                 attempt += 1

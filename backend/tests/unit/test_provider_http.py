@@ -265,3 +265,49 @@ def test_fail_produces_a_safe_vantage_error(
     assert e.__cause__ is None
     assert e.__suppress_context__ is True
     assert SECRET not in caplog.text
+
+
+@respx.mock
+def test_deadline_in_the_past_sends_no_request_and_takes_no_slot() -> None:
+    t = FakeTime()
+    http = make_http(t, max_calls=1)
+    route = respx.get(URL).respond(200, json={})
+    deadline = http.deadline()
+    t.now += 7.0
+    with pytest.raises(ProviderHttpError) as info:
+        http.get_json(URL, deadline=deadline)
+    assert info.value.kind == "unavailable"
+    assert info.value.__context__ is None
+    assert route.call_count == 0
+    # The single limiter slot is still free.
+    assert http.get_json(URL) == {}
+
+
+@respx.mock
+def test_attempt_timeout_is_capped_by_the_deadline() -> None:
+    t = FakeTime()
+    http = make_http(t, timeout=6.0)
+    seen: list[float | None] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        seen.append(request.extensions["timeout"]["read"])
+        return httpx.Response(200, json={})
+
+    respx.get(URL).mock(side_effect=record)
+    deadline = http.deadline()
+    t.now += 4.0  # an earlier request in the same call used 4 s
+    http.get_json(URL, deadline=deadline)
+    assert seen == [2.0]
+
+
+@respx.mock
+def test_no_retry_when_under_one_second_remains_against_the_deadline() -> None:
+    t = FakeTime()
+    http = make_http(t, timeout=6.0)
+    route = respx.get(URL).respond(503)
+    deadline = t.now + 1.2  # per-request budget alone would allow a retry
+    with pytest.raises(ProviderHttpError) as info:
+        http.get_json(URL, deadline=deadline)
+    assert info.value.kind == "unavailable"
+    assert route.call_count == 1
+    assert t.sleeps == []

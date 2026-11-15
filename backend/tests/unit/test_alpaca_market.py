@@ -84,6 +84,7 @@ def make_provider(
         timeout_seconds=6.0,
         transport=transport,
         now=lambda: now,
+        sleep=lambda seconds: None,
     )
 
 
@@ -402,3 +403,33 @@ def test_market_is_not_configured_when_alpaca_selected_without_key() -> None:
 
     assert providers.market is None
     assert "market" in providers.not_configured
+
+
+@respx.mock
+def test_one_deadline_covers_every_request_of_the_call() -> None:
+    clock = {"now": 1000.0}
+    requests: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.params["adjustment"])
+        clock["now"] += 7.0  # the raw request alone outlasts the 6 s budget
+        return httpx.Response(
+            200, json={"bars": _select(request), "next_page_token": None}
+        )
+
+    route(handler)
+    provider = AlpacaMarketProvider(
+        KEY_ID,
+        SECRET,
+        timeout_seconds=6.0,
+        now=lambda: NOW_AFTER_CLOSE,
+        sleep=lambda seconds: None,
+    )
+    provider._http._clock = lambda: clock["now"]  # noqa: SLF001
+
+    with pytest.raises(VantageError) as exc:
+        fetch(provider)
+
+    assert requests == ["raw"]
+    assert exc.value.code == "MARKET_DATA_PROVIDER_FAILED"
+    assert exc.value.safe_message == MESSAGES["unavailable"]

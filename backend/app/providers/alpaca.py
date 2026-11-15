@@ -9,6 +9,7 @@ Keys travel only in request headers. They are held by the HTTP client and appear
 attribute, repr, message or log line.
 """
 
+import time
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -72,12 +73,14 @@ class AlpacaMarketProvider:
         timeout_seconds: float,
         transport: httpx.BaseTransport | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._http = ProviderHttp(
             timeout_seconds=timeout_seconds,
             limiter=ALPACA_LIMITER,
             headers={"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": secret_key},
             transport=transport,
+            sleep=sleep,
         )
         self._now = now
 
@@ -109,8 +112,9 @@ class AlpacaMarketProvider:
         expected = trailing_xnys_sessions(effective_end)
 
         try:
-            raw = self._fetch(symbols, expected[0], end, "raw")
-            adjusted = self._fetch(symbols, expected[0], end, "all")
+            deadline = self._http.deadline()
+            raw = self._fetch(symbols, expected[0], end, "raw", deadline)
+            adjusted = self._fetch(symbols, expected[0], end, "all", deadline)
         except ProviderHttpError as err:
             raise fail(ERROR_CODE, _MESSAGES, err) from None
 
@@ -149,7 +153,12 @@ class AlpacaMarketProvider:
         return snapshot.model_copy(update={"context_bars": context})
 
     def _fetch(
-        self, symbols: list[str], start: date, end: datetime, adjustment: str
+        self,
+        symbols: list[str],
+        start: date,
+        end: datetime,
+        adjustment: str,
+        deadline: float,
     ) -> _Bars:
         params = {
             "symbols": ",".join(symbols),
@@ -163,7 +172,7 @@ class AlpacaMarketProvider:
         }
         merged: _Bars = {}
         for _ in range(_MAX_PAGES):
-            payload = self._http.get_json(BARS_URL, params=params)
+            payload = self._http.get_json(BARS_URL, params=params, deadline=deadline)
             if not isinstance(payload, dict):
                 raise ProviderHttpError("malformed")
             page = payload.get("bars") or {}
