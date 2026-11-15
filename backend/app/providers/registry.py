@@ -11,6 +11,7 @@ from typing import Literal
 
 from app.core.config import Settings
 from app.domain.errors import VantageError
+from app.providers.alpaca import AlpacaMarketProvider
 from app.providers.contracts import (
     FilingsProvider,
     FundamentalsProvider,
@@ -86,9 +87,20 @@ def _yfinance(_: Settings) -> object:
     return YFinanceSnapshotProvider()
 
 
+def _alpaca_market(s: Settings) -> object | None:
+    if not (s.ALPACA_API_KEY_ID and s.ALPACA_API_SECRET_KEY):
+        return None
+    return AlpacaMarketProvider(
+        s.ALPACA_API_KEY_ID,
+        s.ALPACA_API_SECRET_KEY,
+        timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS),
+    )
+
+
 @lru_cache(maxsize=1)
 def default_registry() -> ProviderRegistry:
     registry = ProviderRegistry()
+    registry.register("market", "alpaca", _alpaca_market)
     registry.register("market", "yfinance", _yfinance)
     registry.register("news", "yfinance", _yfinance)
     registry.register("market", "fixture", _fixture)
