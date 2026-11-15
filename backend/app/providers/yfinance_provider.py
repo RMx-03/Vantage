@@ -1,12 +1,8 @@
 from datetime import UTC, date, datetime, timedelta
 import hashlib
-import json
 import logging
-import math
-from numbers import Real
-from typing import Any, cast
+from typing import Any
 
-import exchange_calendars
 import pandas as pd
 import yfinance as yf
 
@@ -20,10 +16,26 @@ from app.domain.research import (
 )
 from app.domain.urls import normalize_url
 from app.providers.contracts import MarketDataProvider, NewsProvider
+from app.providers.price_validation import RawBar, build_market_snapshot
+from app.services.sessions import (
+    XNYS,
+    latest_completed_xnys_close,
+    latest_completed_xnys_session,
+    market_snapshot_hash,
+    trailing_xnys_sessions,
+)
 
 logger = logging.getLogger(__name__)
 
-XNYS = exchange_calendars.get_calendar("XNYS")
+snapshot_hash = market_snapshot_hash
+__all__ = [
+    "XNYS",
+    "YFinanceSnapshotProvider",
+    "latest_completed_xnys_close",
+    "latest_completed_xnys_session",
+    "snapshot_hash",
+    "trailing_xnys_sessions",
+]
 US_EQUITY_EXCHANGES = frozenset(
     {"ASE", "BATS", "BTS", "IEX", "NCM", "NGM", "NMS", "NYQ", "PCX"}
 )
@@ -31,52 +43,6 @@ US_EQUITY_EXCHANGES = frozenset(
 
 def _search_news(symbol: str, count: int) -> list[dict[str, Any]]:
     return list(yf.Search(symbol, news_count=count).news or [])
-
-
-def latest_completed_xnys_close(now: datetime) -> datetime:
-    now_utc = now.astimezone(UTC)
-    candidate = XNYS.date_to_session(now_utc.date(), direction="previous")
-    close = XNYS.session_close(candidate).to_pydatetime()
-    if close > now_utc:
-        candidate = XNYS.previous_session(candidate)
-        close = XNYS.session_close(candidate).to_pydatetime()
-    return close.astimezone(UTC)
-
-
-def latest_completed_xnys_session(now: datetime) -> date:
-    return latest_completed_xnys_close(now).date()
-
-
-def trailing_xnys_sessions(end_session: date, count: int = 21) -> tuple[date, ...]:
-    if count < 1:
-        raise ValueError("count must be positive")
-    end = XNYS.date_to_session(end_session, direction="previous")
-    sessions = XNYS.sessions_window(end, -count)
-    return tuple(session.date() for session in sessions)
-
-
-def snapshot_hash(symbol: str, bars: list[DailyBar]) -> str:
-    sorted_bars = sorted(bars, key=lambda b: b.session_date)
-    canonical_bars = [
-        {
-            "session_date": bar.session_date.isoformat(),
-            "open": bar.open,
-            "high": bar.high,
-            "low": bar.low,
-            "close": bar.close,
-            "adjusted_close": bar.adjusted_close,
-            "volume": bar.volume,
-            "currency": bar.currency,
-            "adjustment_state": bar.adjustment_state,
-        }
-        for bar in sorted_bars
-    ]
-    payload = {
-        "symbol": symbol.strip().upper(),
-        "bars": canonical_bars,
-    }
-    canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
 
 class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
@@ -180,133 +146,34 @@ class YFinanceSnapshotProvider(MarketDataProvider, NewsProvider):
                     safe_message="Market price series contains an invalid session index.",
                 )
 
-        # Verify duplicate session dates
-        if len(session_dates) != len(set(session_dates)):
-            raise VantageError(
-                code="INVALID_PRICE_SERIES",
-                safe_message="Market price series contains duplicate sessions.",
-                duplicate_session_count=len(session_dates) - len(set(session_dates)),
-            )
-
-        required_sessions = set(trailing_xnys_sessions(end_session))
-        actual_sessions = set(session_dates)
-        missing_sessions = required_sessions - actual_sessions
-        if missing_sessions or actual_sessions - required_sessions:
-            raise VantageError(
-                code="INVALID_PRICE_SERIES",
-                safe_message="Market price series does not contain the required sessions.",
-                missing_value_count=len(missing_sessions),
-            )
-
-        bars: list[DailyBar] = []
-        has_zero_volume = False
         price_columns = tuple(
             df.get(field) for field in ("Open", "High", "Low", "Close", "Adj Close")
         )
         volume_column = df.get("Volume")
-        for position, session_d in enumerate(session_dates):
-            raw_prices = tuple(
-                column.iloc[position] if column is not None else None
-                for column in price_columns
+
+        def _cell(column: Any, position: int) -> object:
+            return column.iloc[position] if column is not None else None
+
+        raw_bars = [
+            RawBar(
+                session_date=session_d,
+                open=_cell(price_columns[0], position),
+                high=_cell(price_columns[1], position),
+                low=_cell(price_columns[2], position),
+                close=_cell(price_columns[3], position),
+                adjusted_close=_cell(price_columns[4], position),
+                volume=_cell(volume_column, position),
             )
-            raw_volume = (
-                volume_column.iloc[position] if volume_column is not None else None
-            )
-            if (
-                any(
-                    not isinstance(value, Real) or isinstance(value, bool)
-                    for value in raw_prices
-                )
-                or not isinstance(raw_volume, Real)
-                or isinstance(raw_volume, bool)
-            ):
-                raise VantageError(
-                    code="INVALID_PRICE_SERIES",
-                    safe_message="OHLCV values must be valid and complete.",
-                    missing_value_count=1,
-                )
-
-            try:
-                price_values = tuple(float(cast(Any, value)) for value in raw_prices)
-                volume_float = float(raw_volume)
-            except (OverflowError, TypeError, ValueError) as e:
-                raise VantageError(
-                    code="INVALID_PRICE_SERIES",
-                    safe_message="OHLCV values must be valid and complete.",
-                    missing_value_count=1,
-                ) from e
-
-            if (
-                any(not math.isfinite(value) or value <= 0 for value in price_values)
-                or not math.isfinite(volume_float)
-                or volume_float < 0
-                or not volume_float.is_integer()
-            ):
-                raise VantageError(
-                    code="INVALID_PRICE_SERIES",
-                    safe_message="OHLCV values must be valid and complete.",
-                    missing_value_count=1,
-                )
-
-            open_val, high_val, low_val, close_val, adj_close_val = price_values
-            volume_val = int(cast(Any, raw_volume))
-            if high_val < max(open_val, close_val, low_val) or low_val > min(
-                open_val, close_val, high_val
-            ):
-                raise VantageError(
-                    code="INVALID_PRICE_SERIES",
-                    safe_message="OHLC values have invalid price geometry.",
-                    missing_value_count=1,
-                )
-            has_zero_volume = has_zero_volume or volume_val == 0
-
-            bars.append(
-                DailyBar(
-                    symbol=normalized_symbol,
-                    session_date=session_d,
-                    open=open_val,
-                    high=high_val,
-                    low=low_val,
-                    close=close_val,
-                    adjusted_close=adj_close_val,
-                    volume=volume_val,
-                    currency="USD",
-                    provider=self.name,
-                    retrieved_at=now,
-                    adjustment_state="split_and_dividend_adjusted",
-                )
-            )
-
-        if not bars:
-            raise VantageError(
-                code="MARKET_DATA_PROVIDER_FAILED",
-                safe_message="No daily bars in requested session range.",
-            )
-
-        bars.sort(key=lambda bar: bar.session_date)
-        c_hash = snapshot_hash(normalized_symbol, bars)
-        latest_bar_session = bars[-1].session_date
-        as_of = XNYS.session_close(end_session).to_pydatetime().astimezone(UTC)
-        latest_completed = end_session
-
-        quality = (
-            ComponentQuality.FRESH
-            if latest_bar_session == latest_completed
-            else ComponentQuality.STALE
-        )
-
-        return MarketSnapshot(
+            for position, session_d in enumerate(session_dates)
+        ]
+        return build_market_snapshot(
             symbol=normalized_symbol,
-            bars=bars,
+            raw_bars=raw_bars,
+            expected_sessions=trailing_xnys_sessions(end_session),
+            end_session=end_session,
             provider=self.name,
             retrieved_at=now,
-            as_of=as_of,
-            latest_completed_session=latest_completed,
-            content_hash=c_hash,
-            quality=quality,
-            volume_quality=(
-                ComponentQuality.PARTIAL if has_zero_volume else ComponentQuality.FRESH
-            ),
+            adjustment_state="split_and_dividend_adjusted",
         )
 
     def fetch_company_news(
