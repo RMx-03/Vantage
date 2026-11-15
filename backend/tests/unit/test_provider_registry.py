@@ -102,12 +102,30 @@ def test_factory_returning_none_marks_role_not_configured() -> None:
     assert "market" in providers.not_configured
 
 
-def test_two_news_providers_are_refused_until_merge() -> None:
-    with pytest.raises(VantageError) as exc:
-        build_providers(
-            Settings(_env_file=None, NEWS_PROVIDERS=["yfinance", "fixture"])
+def test_two_news_providers_build_with_keys() -> None:
+    providers = build_providers(
+        Settings(
+            _env_file=None,
+            NEWS_PROVIDERS=["alpaca", "finnhub"],
+            ALPACA_API_KEY_ID="id",
+            ALPACA_API_SECRET_KEY="secret",
+            FINNHUB_API_KEY="fh",
         )
-    assert exc.value.code == "CONFIG_ERROR"
+    )
+    assert [p.name for p in providers.news] == ["alpaca", "finnhub"]
+    assert "news" not in providers.not_configured
+
+
+def test_missing_alpaca_key_leaves_one_news_provider_configured() -> None:
+    providers = build_providers(
+        Settings(
+            _env_file=None,
+            NEWS_PROVIDERS=["alpaca", "finnhub"],
+            FINNHUB_API_KEY="fh",
+        )
+    )
+    assert [p.name for p in providers.news] == ["finnhub"]
+    assert "news" not in providers.not_configured
 
 
 def test_duplicate_registration_raises() -> None:

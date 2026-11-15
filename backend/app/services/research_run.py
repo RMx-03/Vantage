@@ -33,6 +33,7 @@ from app.providers.yfinance_provider import (
     trailing_xnys_sessions,
 )
 from app.repositories.research_runs import ResearchRunRepository, RunningResearchRun
+from app.services.evidence import merge_news
 from app.services.metrics import METRICS_VERSION
 from app.services.policy import POLICY_VERSION, PolicyResult
 from app.services.run_executor import RunExecutor
@@ -88,8 +89,11 @@ class ResearchRunService:
         self.market: MarketDataProvider | None = (
             market_provider or self.providers.market
         )
-        self.news: NewsProvider | None = news_provider or (
-            self.providers.news[0] if self.providers.news else None
+        self.news_providers: tuple[NewsProvider, ...] = (
+            (news_provider,) if news_provider is not None else self.providers.news
+        )
+        self.news: NewsProvider | None = (
+            self.news_providers[0] if self.news_providers else None
         )
         self.llm = interpretation_provider or self.providers.llm
         self.versions = versions or VersionInfo(
@@ -312,9 +316,9 @@ class ResearchRunService:
 
             with tracer.start_as_current_span("fetch_news_snapshot") as n_span:
                 n_span.set_attribute("vantage.run_id", str(row.public_id))
-                with tracer.start_as_current_span("provider_request") as p_span:
-                    p_span.set_attribute("vantage.run_id", str(row.public_id))
-                    if self.news is None:
+                if not self.news_providers:
+                    with tracer.start_as_current_span("provider_request") as p_span:
+                        p_span.set_attribute("vantage.run_id", str(row.public_id))
                         news = NewsSnapshot(
                             symbol=norm_symbol,
                             items=[],
@@ -323,24 +327,33 @@ class ResearchRunService:
                             quality=ComponentQuality.FAILED,
                             error_code="NEWS_PROVIDER_FAILED",
                         )
-                    else:
-                        try:
-                            news = self.news.fetch_company_news(
-                                norm_symbol,
-                                analysis_cutoff,
-                                now,
-                                settings.NEWS_LOOKBACK_DAYS,
-                                10,
-                            )
-                        except VantageError as exc:
-                            news = NewsSnapshot(
-                                symbol=norm_symbol,
-                                items=[],
-                                provider=self.news.name,
-                                retrieved_at=now,
-                                quality=ComponentQuality.FAILED,
-                                error_code=exc.code,
-                            )
+                else:
+                    news_snapshots: list[NewsSnapshot] = []
+                    for news_provider_i in self.news_providers:
+                        with tracer.start_as_current_span("provider_request") as q_span:
+                            q_span.set_attribute("vantage.run_id", str(row.public_id))
+                            try:
+                                news_snapshots.append(
+                                    news_provider_i.fetch_company_news(
+                                        norm_symbol,
+                                        analysis_cutoff,
+                                        now,
+                                        settings.NEWS_LOOKBACK_DAYS,
+                                        10,
+                                    )
+                                )
+                            except VantageError as exc:
+                                news_snapshots.append(
+                                    NewsSnapshot(
+                                        symbol=norm_symbol,
+                                        items=[],
+                                        provider=news_provider_i.name,
+                                        retrieved_at=now,
+                                        quality=ComponentQuality.FAILED,
+                                        error_code=exc.code,
+                                    )
+                                )
+                    news = merge_news(news_snapshots, symbol=norm_symbol, limit=10)
                 with tracer.start_as_current_span("validate_news_quality") as v_span:
                     v_span.set_attribute("vantage.run_id", str(row.public_id))
 
@@ -372,7 +385,7 @@ class ResearchRunService:
                 ),
                 ProviderRecord(
                     role="news",
-                    provider=None if self.news is None else news.provider,
+                    provider=None if not self.news_providers else news.provider,
                     retrieved_at=news.retrieved_at,
                     quality=RoleQuality(news.quality.value),
                     error_code=news.error_code,

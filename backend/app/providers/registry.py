@@ -37,9 +37,6 @@ ProviderFactory = Callable[[Settings], object | None]
 # Roles where the literal name "none" turns the role off.
 _OPTIONAL_ROLES: frozenset[str] = frozenset({"filings", "macro", "crosscheck"})
 
-# Several news providers need the merge that 3c adds; until then refuse them.
-MAX_NEWS_PROVIDERS = 1
-
 
 class ProviderRegistry:
     def __init__(self) -> None:
@@ -178,14 +175,6 @@ def build_providers(
     settings: Settings, registry: ProviderRegistry | None = None
 ) -> ProviderSet:
     reg = registry or default_registry()
-    if len(settings.NEWS_PROVIDERS) > MAX_NEWS_PROVIDERS:
-        raise VantageError(
-            code="CONFIG_ERROR",
-            safe_message=(
-                "Several news providers need the news merge, "
-                "which is not available yet."
-            ),
-        )
     market = reg.build("market", settings.MARKET_PROVIDER, settings)
     news = tuple(
         provider
