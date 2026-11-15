@@ -285,6 +285,8 @@ class ResearchRunService:
                 m_span.set_attribute("vantage.run_id", str(row.public_id))
                 with tracer.start_as_current_span("provider_request") as p_span:
                     p_span.set_attribute("vantage.run_id", str(row.public_id))
+                    p_span.set_attribute("vantage.provider.role", "market")
+                    p_span.set_attribute("vantage.provider.name", self.market.name)
                     try:
                         market = self.market.fetch_daily_snapshot(
                             norm_symbol, start_date, completed, now
@@ -332,6 +334,10 @@ class ResearchRunService:
                     for news_provider_i in self.news_providers:
                         with tracer.start_as_current_span("provider_request") as q_span:
                             q_span.set_attribute("vantage.run_id", str(row.public_id))
+                            q_span.set_attribute("vantage.provider.role", "news")
+                            q_span.set_attribute(
+                                "vantage.provider.name", news_provider_i.name
+                            )
                             try:
                                 news_snapshots.append(
                                     news_provider_i.fetch_company_news(

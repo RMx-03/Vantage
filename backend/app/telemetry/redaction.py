@@ -19,6 +19,8 @@ ALLOWED_ATTRIBUTES = frozenset(
         "vantage.workflow_status",
         "vantage.research_status",
         "vantage.quality.overall",
+        "vantage.provider.role",
+        "vantage.provider.name",
         "gen_ai.provider.name",
         "gen_ai.request.model",
         "error.type",

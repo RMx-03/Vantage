@@ -328,6 +328,18 @@ def test_redaction_helpers(test_user_id: UUID) -> None:
     assert "vantage.run_id" in filtered
     assert "vantage.workflow_status" in filtered
     assert "user.email" not in filtered
+
+    tagged = safe_attributes(
+        {
+            "vantage.provider.role": "news",
+            "vantage.provider.name": "alpaca",
+            "http.url": "https://example.com/?api_key=x",
+        }
+    )
+    assert tagged == {
+        "vantage.provider.role": "news",
+        "vantage.provider.name": "alpaca",
+    }
     assert "authorization" not in filtered
 
 

@@ -87,3 +87,58 @@ def test_registry_selects_fixture() -> None:
     assert isinstance(providers.market, FixtureProvider)
     assert len(providers.news) == 1
     assert isinstance(providers.news[0], FixtureProvider)
+
+
+def test_recorded_market_bars_pass_price_validation() -> None:
+    from app.providers.fixture_provider import _load
+    from app.providers.price_validation import RawBar, build_market_snapshot
+
+    end = date(2026, 11, 27)
+    sessions = trailing_xnys_sessions(end)
+    data = _load("market.json")
+    for key in ("default", "SPY", "sector"):
+        rows = data[key][-len(sessions) :]
+        assert len(rows) == len(sessions)
+        raw_bars = [
+            RawBar(
+                session_date=session,
+                open=row["open"],
+                high=row["high"],
+                low=row["low"],
+                close=row["close"],
+                adjusted_close=row["adjusted_close"],
+                volume=row["volume"],
+            )
+            for session, row in zip(sessions, rows, strict=True)
+        ]
+        snapshot = build_market_snapshot(
+            symbol="AAPL",
+            raw_bars=raw_bars,
+            expected_sessions=sessions,
+            end_session=end,
+            provider="fixture",
+            retrieved_at=NOW,
+            adjustment_state="split_and_dividend_adjusted",
+        )
+        assert len(snapshot.bars) == len(sessions)
+
+
+def test_recorded_news_items_build_news_items() -> None:
+    from app.domain.research import NewsItem
+    from app.providers.fixture_provider import _load
+
+    records = _load("news.json")
+    assert records
+    for index, rec in enumerate(records):
+        item = NewsItem(
+            evidence_id=f"fixture-AAPL-{index}",
+            provider="fixture",
+            publisher=rec["publisher"],
+            title=rec["title_template"].format(symbol="AAPL"),
+            summary=rec["summary_template"].format(symbol="AAPL"),
+            url="https://example.com" + rec["url_path"].format(n="aapl"),
+            event_time=NOW - timedelta(hours=rec["offset_hours"]),
+            retrieved_at=NOW,
+            content_hash="a" * 64,
+        )
+        assert item.title

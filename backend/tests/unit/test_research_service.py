@@ -298,3 +298,66 @@ def test_single_provider_snapshot_is_saved_unchanged_with_same_hash() -> None:
     assert repo.save_snapshot.side_effect(1, None, market, news) == (
         combined_snapshot_hash(market, returned["snap"])
     )
+
+
+def test_provider_request_spans_carry_role_and_provider_name(monkeypatch) -> None:
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    from app.services import research_run
+    from app.telemetry.redaction import RedactingSpanProcessor
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(RedactingSpanProcessor())
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = provider.get_tracer("test")
+    monkeypatch.setattr(research_run, "get_tracer", lambda: tracer)
+
+    _run([_StubNews("alpaca"), _StubNews("finnhub")])
+
+    spans = [s for s in exporter.get_finished_spans() if s.name == "provider_request"]
+    pairs = [
+        (s.attributes["vantage.provider.role"], s.attributes["vantage.provider.name"])
+        for s in spans
+    ]
+    assert pairs == [("market", "stub"), ("news", "alpaca"), ("news", "finnhub")]
+
+
+def test_no_news_provider_opens_no_tagged_news_span(monkeypatch) -> None:
+    from dataclasses import replace
+    from uuid import uuid4
+
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    from app.services import research_run
+    from app.telemetry.redaction import RedactingSpanProcessor
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(RedactingSpanProcessor())
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = provider.get_tracer("test")
+    monkeypatch.setattr(research_run, "get_tracer", lambda: tracer)
+
+    base = _provider_set(_market_stub(), object())
+    service, repo, now = _service_with(replace(base, news=()))
+    repo.save_snapshot.side_effect = RuntimeError("stop after snapshot")
+    try:
+        service.create(user_id=uuid4(), symbol="AAPL", now=now)
+    except Exception:
+        pass
+
+    roles = [
+        s.attributes.get("vantage.provider.role")
+        for s in exporter.get_finished_spans()
+        if s.name == "provider_request"
+    ]
+    assert roles == ["market", None]
