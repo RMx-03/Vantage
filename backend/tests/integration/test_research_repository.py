@@ -1166,3 +1166,31 @@ def test_yfinance_shaped_run_hash_unchanged(
     market, news, sources = valid_snapshot
     content_hash = repo.save_snapshot(running_run.id, user_id, market, news, sources)
     assert content_hash == combined_snapshot_hash(market, news)
+
+
+def test_absent_multi_source_json_is_sql_null(
+    repo: ResearchRunRepository, running_run, valid_snapshot, user_id: UUID
+) -> None:
+    market, news, sources = valid_snapshot
+    repo.save_snapshot(running_run.id, user_id, market, news, sources)
+    with SessionFactory() as session:
+        snap = session.execute(
+            text(
+                "SELECT providers IS NULL AS providers_null, "
+                "context_bars IS NULL AS bars_null, "
+                "fundamentals IS NULL AS fundamentals_null, "
+                "macro IS NULL AS macro_null "
+                "FROM vantage_app.research_snapshots WHERE run_id = :r"
+            ),
+            {"r": running_run.id},
+        ).one()
+        details_null = session.execute(
+            text(
+                "SELECT bool_and(details IS NULL) FROM vantage_app.research_sources "
+                "WHERE snapshot_id = (SELECT id FROM vantage_app.research_snapshots "
+                "WHERE run_id = :r)"
+            ),
+            {"r": running_run.id},
+        ).scalar_one()
+    assert tuple(snap) == (True, True, True, True)
+    assert details_null is True

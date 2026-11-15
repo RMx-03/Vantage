@@ -172,10 +172,18 @@ class ResearchSnapshotRow(Base):
     news_error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     price_bars: Mapped[list[Any]] = mapped_column(postgresql.JSONB, nullable=False)
     quality: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB, nullable=False)
-    providers: Mapped[Any | None] = mapped_column(postgresql.JSONB, nullable=True)
-    context_bars: Mapped[Any | None] = mapped_column(postgresql.JSONB, nullable=True)
-    fundamentals: Mapped[Any | None] = mapped_column(postgresql.JSONB, nullable=True)
-    macro: Mapped[Any | None] = mapped_column(postgresql.JSONB, nullable=True)
+    providers: Mapped[Any | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
+    context_bars: Mapped[Any | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
+    fundamentals: Mapped[Any | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
+    macro: Mapped[Any | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
 
     run: Mapped["ResearchRunRow"] = relationship(back_populates="snapshot")
     sources: Mapped[list["ResearchSourceRow"]] = relationship(
@@ -221,7 +229,9 @@ class ResearchSourceRow(Base):
     )
     content_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    details: Mapped[Any | None] = mapped_column(postgresql.JSONB, nullable=True)
+    details: Mapped[Any | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
 
     snapshot: Mapped["ResearchSnapshotRow"] = relationship(back_populates="sources")
 
