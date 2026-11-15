@@ -57,7 +57,10 @@ def upgrade() -> None:
         schema=_SCHEMA,
     )
     # Every existing row is a news item, so the constraint validates cleanly.
-    # NOT VALID then VALIDATE keeps the long scan under a weaker lock.
+    # The migration runs in one transaction, so the ACCESS EXCLUSIVE lock taken by
+    # ADD CONSTRAINT is held until commit, including the VALIDATE scan. That is
+    # short at the current table size. lock_timeout makes the release fail fast
+    # (retry the release) instead of queueing behind other sessions.
     op.execute(
         "ALTER TABLE vantage_app.research_sources "
         "ADD CONSTRAINT ck_research_sources_source_type "
