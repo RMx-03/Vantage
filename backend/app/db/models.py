@@ -1,10 +1,12 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Identity,
@@ -170,6 +172,18 @@ class ResearchSnapshotRow(Base):
     news_error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     price_bars: Mapped[list[Any]] = mapped_column(postgresql.JSONB, nullable=False)
     quality: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB, nullable=False)
+    providers: Mapped[Any | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
+    context_bars: Mapped[Any | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
+    fundamentals: Mapped[Any | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
+    macro: Mapped[Any | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
 
     run: Mapped["ResearchRunRow"] = relationship(back_populates="snapshot")
     sources: Mapped[list["ResearchSourceRow"]] = relationship(
@@ -186,6 +200,10 @@ class ResearchSourceRow(Base):
             "snapshot_id",
             "evidence_id",
             name="uq_research_sources_snapshot_evidence",
+        ),
+        CheckConstraint(
+            "source_type IN ('news','filing','insider_transaction')",
+            name="ck_research_sources_source_type",
         ),
         Index("ix_research_sources_snapshot_id", "snapshot_id"),
         {"schema": "vantage_app"},
@@ -210,5 +228,37 @@ class ResearchSourceRow(Base):
         DateTime(timezone=True), nullable=False
     )
     content_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    details: Mapped[Any | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
 
     snapshot: Mapped["ResearchSnapshotRow"] = relationship(back_populates="sources")
+
+
+class ProviderCacheRow(Base):
+    __tablename__ = "provider_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "cache_key",
+            "valid_for_date",
+            name="uq_provider_cache_key",
+        ),
+        Index("ix_provider_cache_retrieved_at", "retrieved_at"),
+        {"schema": "vantage_app"},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    cache_key: Mapped[str] = mapped_column(Text, nullable=False)
+    valid_for_date: Mapped[date] = mapped_column(Date, nullable=False)
+    content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[Any] = mapped_column(postgresql.JSONB, nullable=False)
+    retrieved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    # Parsed Form 4 filings never change, so they are exempt from the purge.
+    immutable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )

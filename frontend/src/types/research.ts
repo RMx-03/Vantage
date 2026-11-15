@@ -2,6 +2,7 @@ export type WorkflowStatus = 'running' | 'succeeded' | 'failed';
 export type ResearchStatus = 'informational' | 'review' | 'insufficient_data' | 'failed';
 export type OverallQuality = 'sufficient' | 'degraded' | 'insufficient';
 export type ComponentQuality = 'fresh' | 'partial' | 'stale' | 'missing' | 'failed';
+export type RoleQuality = ComponentQuality | 'not_configured';
 export type ModelQuality = 'healthy' | 'degraded' | 'failed' | 'not_run';
 
 export type MetricUnit = 'ratio' | 'percent' | 'usd' | 'count' | 'sessions';
@@ -33,7 +34,23 @@ export interface DataQuality {
   overall: OverallQuality;
   prices: ComponentQuality;
   news: ComponentQuality;
+  filings?: RoleQuality | null;
+  fundamentals?: RoleQuality | null;
+  macro?: RoleQuality | null;
+  crosscheck?: RoleQuality | null;
   model: ModelQuality;
+}
+
+export type SourceType = 'news' | 'filing' | 'insider_transaction';
+
+export interface EvidenceDetails {
+  providers?: string[];
+  company_specific?: boolean | null;
+  form_type?: string | null;
+  item_codes?: string[];
+  transaction_code?: string | null;
+  direction?: 'acquired' | 'disposed' | null;
+  parse_state?: 'parsed' | 'unparsed' | 'not_fetched' | null;
 }
 
 export interface EvidenceSource {
@@ -45,7 +62,9 @@ export interface EvidenceSource {
   event_time?: string | null;
   retrieved_at: string;
   content_hash?: string | null;
-  source_type: 'news';
+  source_type: SourceType;
+  summary?: string | null;
+  details?: EvidenceDetails | null;
 }
 
 export type SentimentLabel = 'positive' | 'mixed' | 'neutral' | 'negative' | 'unavailable';
@@ -58,6 +77,23 @@ export interface AIInterpretation {
   warnings: string[];
   abstained: boolean;
   abstention_reason: string | null;
+}
+
+export type ProviderRole =
+  | 'market'
+  | 'news'
+  | 'filings'
+  | 'fundamentals'
+  | 'macro'
+  | 'crosscheck';
+
+export interface ProviderRecord {
+  role: ProviderRole;
+  provider: string | null;
+  retrieved_at: string | null;
+  quality: RoleQuality;
+  error_code: string | null;
+  content_hash: string | null;
 }
 
 export interface SnapshotProvenance {
@@ -74,6 +110,7 @@ export interface SnapshotProvenance {
   news_coverage_start: string | null;
   news_coverage_end: string | null;
   news_quality: ComponentQuality;
+  providers?: ProviderRecord[] | null;
 }
 
 export interface ModelInfo {

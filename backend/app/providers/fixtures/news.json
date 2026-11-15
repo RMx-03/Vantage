@@ -1,0 +1,58 @@
+[
+ {
+  "offset_hours": 6,
+  "publisher": "Fixture Wire",
+  "title_template": "{symbol} outlines product roadmap at investor briefing",
+  "summary_template": "Management of {symbol} described planned product launches for the coming quarters.",
+  "url_path": "/news/{n}/roadmap"
+ },
+ {
+  "offset_hours": 20,
+  "publisher": "Fixture Markets",
+  "title_template": "{symbol} shares trade in a narrow range on moderate volume",
+  "summary_template": "Trading in {symbol} stayed within a tight band as volume tracked its recent average.",
+  "url_path": "/news/{n}/range"
+ },
+ {
+  "offset_hours": 34,
+  "publisher": "Fixture Daily",
+  "title_template": "Analysts review {symbol} margin trends",
+  "summary_template": "Commentary on {symbol} focused on operating margin changes over recent periods.",
+  "url_path": "/news/{n}/margins"
+ },
+ {
+  "offset_hours": 52,
+  "publisher": "Fixture Wire",
+  "title_template": "{symbol} announces a supplier partnership",
+  "summary_template": "{symbol} said it agreed a multi-year supply arrangement with a component maker.",
+  "url_path": "/news/{n}/supplier"
+ },
+ {
+  "offset_hours": 75,
+  "publisher": "Fixture Journal",
+  "title_template": "{symbol} publishes sustainability report",
+  "summary_template": "The annual report from {symbol} details energy use and emissions targets.",
+  "url_path": "/news/{n}/sustainability"
+ },
+ {
+  "offset_hours": 98,
+  "publisher": "Fixture Markets",
+  "title_template": "Sector peers weigh on {symbol} relative performance",
+  "summary_template": "{symbol} lagged a group of sector peers during the latest session.",
+  "url_path": "/news/{n}/peers"
+ },
+ {
+  "offset_hours": 130,
+  "publisher": "Fixture Daily",
+  "title_template": "{symbol} schedules its next earnings call",
+  "summary_template": "{symbol} set a date for its upcoming quarterly results call.",
+  "url_path": "/news/{n}/earnings-date"
+ },
+ {
+  "offset_hours": 160,
+  "publisher": "Fixture Journal",
+  "title_template": "{symbol} expands a regional distribution site",
+  "summary_template": "{symbol} is adding capacity at a distribution site to support demand.",
+  "url_path": "/news/{n}/distribution"
+ }
+]

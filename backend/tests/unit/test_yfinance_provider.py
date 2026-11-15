@@ -816,3 +816,14 @@ def test_the_news_outcome_is_logged_as_counts_without_titles(
     assert "symbol=AAPL" in message
     assert "kept=1" in message
     assert "Confidential headline" not in caplog.text
+
+
+def test_context_symbols_are_accepted_and_ignored(
+    provider: YFinanceSnapshotProvider, fixed_now: datetime
+) -> None:
+    plain = provider.fetch_daily_snapshot("AAPL", START, END, fixed_now)
+    with_context = provider.fetch_daily_snapshot(
+        "AAPL", START, END, fixed_now, context_symbols=("SPY", "XLK")
+    )
+    assert with_context.bars == plain.bars
+    assert with_context.context_bars == {}

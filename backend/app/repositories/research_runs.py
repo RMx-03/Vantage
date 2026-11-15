@@ -19,12 +19,16 @@ from app.domain.research import (
     AIInterpretation,
     ComponentQuality,
     DataQuality,
+    EvidenceDetails,
     EvidenceSource,
+    FundamentalsSnapshot,
+    MacroSnapshot,
     MarketSnapshot,
     ModelInfo,
     ModelQuality,
     NewsSnapshot,
     OverallQuality,
+    ProviderRecord,
     Reason,
     ResearchMetric,
     ResearchRun,
@@ -106,6 +110,10 @@ class ResearchRunRepository:
         snapshot: MarketSnapshot,
         news: NewsSnapshot,
         sources: list[EvidenceSource],
+        *,
+        providers: list[ProviderRecord] | None = None,
+        fundamentals: FundamentalsSnapshot | None = None,
+        macro: MacroSnapshot | None = None,
     ) -> str:
         with SessionFactory() as session:
             with session.begin():
@@ -154,7 +162,9 @@ class ResearchRunRepository:
                     "market_duplicate_session_count": snapshot.duplicate_session_count,
                     "news": news.quality.value,
                 }
-                content_hash = combined_snapshot_hash(snapshot, news)
+                content_hash = combined_snapshot_hash(
+                    snapshot, news, fundamentals=fundamentals, macro=macro
+                )
 
                 snapshot_row = ResearchSnapshotRow(
                     public_id=uuid4(),
@@ -176,6 +186,24 @@ class ResearchRunRepository:
                     news_error_code=news.error_code,
                     price_bars=[bar.model_dump(mode="json") for bar in snapshot.bars],
                     quality=quality_dict,
+                    providers=(
+                        [p.model_dump(mode="json") for p in providers]
+                        if providers is not None
+                        else None
+                    ),
+                    context_bars=(
+                        {
+                            key: [bar.model_dump(mode="json") for bar in bars]
+                            for key, bars in snapshot.context_bars.items()
+                        }
+                        or None
+                    ),
+                    fundamentals=(
+                        fundamentals.model_dump(mode="json")
+                        if fundamentals is not None
+                        else None
+                    ),
+                    macro=macro.model_dump(mode="json") if macro is not None else None,
                 )
                 session.add(snapshot_row)
                 session.flush()
@@ -184,7 +212,13 @@ class ResearchRunRepository:
                     source_row = ResearchSourceRow(
                         snapshot_id=snapshot_row.id,
                         evidence_id=s.evidence_id,
-                        source_type=getattr(s, "source_type", "news"),
+                        source_type=s.source_type,
+                        summary=s.summary,
+                        details=(
+                            s.details.model_dump(mode="json")
+                            if s.details is not None
+                            else None
+                        ),
                         provider=s.provider,
                         publisher=s.publisher,
                         title=s.title,
@@ -465,7 +499,13 @@ class ResearchRunRepository:
                         event_time=s.event_time,
                         retrieved_at=s.retrieved_at,
                         content_hash=s.content_hash if s.content_hash else None,
-                        source_type="news",
+                        source_type=cast(Any, s.source_type),
+                        summary=s.summary,
+                        details=(
+                            EvidenceDetails.model_validate(s.details)
+                            if s.details is not None
+                            else None
+                        ),
                     )
                 )
 
@@ -510,6 +550,11 @@ class ResearchRunRepository:
                 news_coverage_start=row.snapshot.news_coverage_start,
                 news_coverage_end=row.snapshot.news_coverage_end,
                 news_quality=ComponentQuality(row.snapshot.news_quality),
+                providers=(
+                    [ProviderRecord.model_validate(p) for p in row.snapshot.providers]
+                    if row.snapshot.providers is not None
+                    else None
+                ),
             )
 
         return ResearchRun(

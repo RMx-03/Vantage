@@ -86,6 +86,46 @@
       "DataQuality": {
         "additionalProperties": false,
         "properties": {
+          "crosscheck": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoleQuality"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoleQuality"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fundamentals": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoleQuality"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "macro": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoleQuality"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "model": {
             "$ref": "#/components/schemas/ModelQuality"
           },
@@ -108,8 +148,94 @@
         "title": "DataQuality",
         "type": "object"
       },
+      "EvidenceDetails": {
+        "additionalProperties": false,
+        "properties": {
+          "company_specific": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Specific"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "acquired",
+                  "disposed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "form_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Form Type"
+          },
+          "item_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Item Codes",
+            "type": "array"
+          },
+          "parse_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "parsed",
+                  "unparsed",
+                  "not_fetched"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse State"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "transaction_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transaction Code"
+          }
+        },
+        "title": "EvidenceDetails",
+        "type": "object"
+      },
       "EvidenceSource": {
         "additionalProperties": false,
+        "description": "Public API name for a persisted evidence item.",
         "properties": {
           "content_hash": {
             "anyOf": [
@@ -121,6 +247,16 @@
               }
             ],
             "title": "Content Hash"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "event_time": {
             "anyOf": [
@@ -159,10 +295,26 @@
             "type": "string"
           },
           "source_type": {
-            "const": "news",
             "default": "news",
+            "enum": [
+              "news",
+              "filing",
+              "insider_transaction"
+            ],
             "title": "Source Type",
             "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
           },
           "title": {
             "title": "Title",
@@ -255,6 +407,79 @@
         ],
         "title": "OverallQuality",
         "type": "string"
+      },
+      "ProviderRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/RoleQuality"
+          },
+          "retrieved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieved At"
+          },
+          "role": {
+            "enum": [
+              "market",
+              "news",
+              "filings",
+              "fundamentals",
+              "macro",
+              "crosscheck"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "provider",
+          "retrieved_at",
+          "quality"
+        ],
+        "title": "ProviderRecord",
+        "type": "object"
       },
       "Reason": {
         "additionalProperties": false,
@@ -629,6 +854,18 @@
         "title": "ResearchStatus",
         "type": "string"
       },
+      "RoleQuality": {
+        "enum": [
+          "fresh",
+          "partial",
+          "stale",
+          "missing",
+          "failed",
+          "not_configured"
+        ],
+        "title": "RoleQuality",
+        "type": "string"
+      },
       "SnapshotProvenance": {
         "additionalProperties": false,
         "description": "Owner-safe provenance for the immutable snapshot a run was computed from.\n\nDeliberately excludes raw price bars, internal row ids and the owner id.",
@@ -692,6 +929,20 @@
             "format": "date-time",
             "title": "News Retrieved At",
             "type": "string"
+          },
+          "providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ProviderRecord"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
           },
           "snapshot_id": {
             "format": "uuid",

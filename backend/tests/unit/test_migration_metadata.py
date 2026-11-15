@@ -55,3 +55,22 @@ def test_env_imports_register_every_auth_table() -> None:
         f"migrations/env.py does not import the modules defining {sorted(missing)}; "
         "the next --autogenerate would emit drop_table for them"
     )
+
+
+def test_env_imports_register_provider_cache() -> None:
+    program = "\n".join(
+        [
+            "from app.db.base import Base",
+            *_model_imports_declared_by_env(),
+            "print(' '.join(sorted(Base.metadata.tables)))",
+        ]
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", program],
+        capture_output=True,
+        text=True,
+        cwd=str(BACKEND),
+    )
+    assert result.returncode == 0, result.stderr
+    assert "vantage_app.provider_cache" in set(result.stdout.split())

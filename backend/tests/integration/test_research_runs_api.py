@@ -43,7 +43,7 @@ from app.services.research_run import (
 from app.repositories.users import UserRepository
 from app.services.policy import PolicyResult
 from app.services.run_executor import RunExecutor, get_run_executor
-from app.providers.llm import build_interpretation_provider
+from app.providers.registry import build_interpretation_provider
 from app.agents.research_graph import create_research_graph
 
 
@@ -347,7 +347,7 @@ def test_disabled_model_skips_workflow_call_and_exposes_null_model_info(
             )
             return self.row
 
-        def save_snapshot(self, internal_id, user_id, market, news, sources):
+        def save_snapshot(self, internal_id, user_id, market, news, sources, **kwargs):
             self.sources = sources
             return "c" * 64
 
@@ -1116,3 +1116,44 @@ def test_list_expires_orphaned_running_runs(
     item = next(i for i in page["items"] if i["run_id"] == str(run_id))
     assert item["workflow_status"] == "failed"
     assert item["error_code"] == "RUN_INTERRUPTED"
+
+
+def test_run_records_provider_roles(
+    tracking_repo: TrackingRepo,
+    mock_llm,
+    client: TestClient,
+    auth_headers: dict,
+    test_user_id: UUID,
+) -> None:
+    from app.providers.fixture_provider import FixtureProvider
+
+    fixture = FixtureProvider()
+    svc = ResearchRunService(
+        repo=tracking_repo,
+        market_provider=fixture,
+        news_provider=fixture,
+        interpretation_provider=mock_llm,
+    )
+    app.dependency_overrides[get_research_service] = lambda: svc
+
+    response = client.post(
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    records = {r["role"]: r for r in body["snapshot"]["providers"]}
+    assert len(body["snapshot"]["providers"]) == 6
+    assert records["market"]["provider"] == "fixture"
+    assert records["news"]["provider"] == "fixture"
+    for role in ("filings", "fundamentals", "macro", "crosscheck"):
+        assert records[role]["quality"] == "not_configured"
+        assert records[role]["provider"] is None
+        assert records[role]["retrieved_at"] is None
+    dq = body["data_quality"]
+    for key in ("filings", "fundamentals", "macro", "crosscheck"):
+        assert dq.get(key) is None
+    stored = tracking_repo.get_owned(test_user_id, UUID(body["run_id"]))
+    assert stored is not None and stored.snapshot is not None
+    assert stored.snapshot.providers is not None
+    assert len(stored.snapshot.providers) == 6

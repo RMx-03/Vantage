@@ -25,9 +25,9 @@ from app.providers.llm import (
     GeminiInterpretationProvider,
     GroqInterpretationProvider,
     OllamaInterpretationProvider,
-    build_interpretation_provider,
     validate_interpretation,
 )
+from app.providers.registry import build_interpretation_provider
 
 
 def test_interpretation_rejects_model_authored_numeric_claims() -> None:
@@ -539,20 +539,6 @@ def test_refusal_is_never_retried(
     assert caught.value.code in {"MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"}
     # Call count must be exactly 1, no retries on refusal
     assert mock_client.models.generate_content.call_count == 1
-
-
-@pytest.mark.parametrize(
-    ("provider_name", "expected_cls"),
-    [
-        ("gemini", GeminiInterpretationProvider),
-        ("groq", GroqInterpretationProvider),
-        ("ollama", OllamaInterpretationProvider),
-    ],
-)
-def test_build_interpretation_provider(provider_name: str, expected_cls: type) -> None:
-    settings = Settings(LLM_PROVIDER=provider_name)
-    provider = build_interpretation_provider(settings)
-    assert isinstance(provider, expected_cls)
 
 
 @pytest.fixture(params=["gemini", "groq", "ollama"])

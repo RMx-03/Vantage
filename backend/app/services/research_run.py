@@ -1,7 +1,7 @@
 from datetime import datetime
 from functools import lru_cache
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import UUID
 from opentelemetry import trace
 
@@ -15,7 +15,9 @@ from app.domain.research import (
     ModelInfo,
     ModelQuality,
     NewsSnapshot,
+    ProviderRecord,
     ResearchRun,
+    RoleQuality,
     VersionInfo,
 )
 from app.providers.contracts import (
@@ -24,9 +26,8 @@ from app.providers.contracts import (
     NewsProvider,
 )
 from app.prompts.research_interpretation import PROMPT_VERSION
-from app.providers.llm import build_interpretation_provider
+from app.providers.registry import ProviderSet, build_providers
 from app.providers.yfinance_provider import (
-    YFinanceSnapshotProvider,
     latest_completed_xnys_close,
     snapshot_hash as market_snapshot_hash,
     trailing_xnys_sessions,
@@ -63,11 +64,34 @@ class ResearchRunService:
         news_provider: NewsProvider | None = None,
         interpretation_provider: InterpretationProvider | None = None,
         versions: VersionInfo | None = None,
+        providers: ProviderSet | None = None,
     ) -> None:
         self.repo = repo or ResearchRunRepository()
-        self.market = market_provider or YFinanceSnapshotProvider()
-        self.news = news_provider or YFinanceSnapshotProvider()
-        self.llm = interpretation_provider or build_interpretation_provider(settings)
+        if (
+            providers is None
+            and market_provider is not None
+            and news_provider is not None
+            and interpretation_provider is not None
+        ):
+            # Fully explicit wiring never touches settings or the registry.
+            providers = ProviderSet(
+                market=market_provider,
+                news=(news_provider,),
+                filings=None,
+                fundamentals=None,
+                macro=None,
+                crosscheck=None,
+                llm=interpretation_provider,
+                not_configured=("filings", "fundamentals", "macro", "crosscheck"),
+            )
+        self.providers = providers or build_providers(settings)
+        self.market: MarketDataProvider | None = (
+            market_provider or self.providers.market
+        )
+        self.news: NewsProvider | None = news_provider or (
+            self.providers.news[0] if self.providers.news else None
+        )
+        self.llm = interpretation_provider or self.providers.llm
         self.versions = versions or VersionInfo(
             response_schema=RESPONSE_SCHEMA_VERSION,
             workflow=WORKFLOW_VERSION,
@@ -243,6 +267,11 @@ class ResearchRunService:
     ) -> ResearchRun:
         tracer = get_tracer()
         try:
+            if self.market is None:
+                raise VantageError(
+                    code="MARKET_DATA_PROVIDER_FAILED",
+                    safe_message="Market data provider was unavailable.",
+                )
             analysis_cutoff = latest_completed_xnys_close(now)
             sessions = trailing_xnys_sessions(analysis_cutoff.date())
             start_date = sessions[0]
@@ -285,23 +314,33 @@ class ResearchRunService:
                 n_span.set_attribute("vantage.run_id", str(row.public_id))
                 with tracer.start_as_current_span("provider_request") as p_span:
                     p_span.set_attribute("vantage.run_id", str(row.public_id))
-                    try:
-                        news = self.news.fetch_company_news(
-                            norm_symbol,
-                            analysis_cutoff,
-                            now,
-                            settings.NEWS_LOOKBACK_DAYS,
-                            10,
-                        )
-                    except VantageError as exc:
+                    if self.news is None:
                         news = NewsSnapshot(
                             symbol=norm_symbol,
                             items=[],
-                            provider=self.news.name,
+                            provider="none",
                             retrieved_at=now,
                             quality=ComponentQuality.FAILED,
-                            error_code=exc.code,
+                            error_code="NEWS_PROVIDER_FAILED",
                         )
+                    else:
+                        try:
+                            news = self.news.fetch_company_news(
+                                norm_symbol,
+                                analysis_cutoff,
+                                now,
+                                settings.NEWS_LOOKBACK_DAYS,
+                                10,
+                            )
+                        except VantageError as exc:
+                            news = NewsSnapshot(
+                                symbol=norm_symbol,
+                                items=[],
+                                provider=self.news.name,
+                                retrieved_at=now,
+                                quality=ComponentQuality.FAILED,
+                                error_code=exc.code,
+                            )
                 with tracer.start_as_current_span("validate_news_quality") as v_span:
                     v_span.set_attribute("vantage.run_id", str(row.public_id))
 
@@ -315,13 +354,42 @@ class ResearchRunService:
                     event_time=item.event_time,
                     retrieved_at=item.retrieved_at,
                     content_hash=item.content_hash,
-                    source_type="news",
+                    source_type=item.source_type,
+                    summary=item.summary,
+                    details=item.details,
                 )
                 for item in news.items
             ]
             # Persist snapshot before invoking graph
+            provider_records = [
+                ProviderRecord(
+                    role="market",
+                    provider=market.provider,
+                    retrieved_at=market.retrieved_at,
+                    quality=RoleQuality(market.quality.value),
+                    error_code=market.error_code,
+                    content_hash=market.content_hash,
+                ),
+                ProviderRecord(
+                    role="news",
+                    provider=None if self.news is None else news.provider,
+                    retrieved_at=news.retrieved_at,
+                    quality=RoleQuality(news.quality.value),
+                    error_code=news.error_code,
+                ),
+                *(
+                    ProviderRecord(
+                        role=cast(Any, role),
+                        provider=None,
+                        retrieved_at=None,
+                        quality=RoleQuality.NOT_CONFIGURED,
+                    )
+                    for role in self.providers.not_configured
+                    if role not in ("market", "news")
+                ),
+            ]
             snapshot_hash = self.repo.save_snapshot(
-                row.id, user_id, market, news, sources
+                row.id, user_id, market, news, sources, providers=provider_records
             )
             if root_span is not None:
                 root_span.set_attribute("vantage.snapshot_hash", snapshot_hash)

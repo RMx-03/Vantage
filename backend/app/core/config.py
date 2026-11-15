@@ -1,8 +1,8 @@
 from collections.abc import Iterator
 from pathlib import Path
-from typing import List, Union, Any
+from typing import Annotated, List, Union, Any
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Root of the repository (two levels up from this file: core/ → app/ → backend/)
 _BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -18,7 +18,7 @@ GROQ_STRICT_JSON_SCHEMA_MODELS: tuple[str, ...] = (
 # Substrings that mark a field as credential-bearing. Matching on the name
 # rather than an explicit list means a secret added later is redacted by default
 # instead of leaking until someone remembers to update this.
-SECRET_NAME_PARTS = ("SECRET", "KEY", "PASSWORD", "TOKEN", "SALT", "DSN")
+SECRET_NAME_PARTS = ("SECRET", "KEY", "PASSWORD", "TOKEN", "SALT", "DSN", "USER_AGENT")
 
 
 def _is_secret_field(name: str) -> bool:
@@ -176,6 +176,56 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:5173"
     EMAIL_VERIFICATION_TTL_SECONDS: int = Field(default=86400, gt=0)
     PASSWORD_RESET_TTL_SECONDS: int = Field(default=3600, gt=0)
+
+    # ------------------------------------------------------------------
+    # Data providers (free multi-source data layer)
+    # ------------------------------------------------------------------
+    # Keys live only in the environment. A missing key degrades its role to
+    # not_configured; it never stops startup. SEC_USER_AGENT has no default:
+    # the SEC requires a contact in it, and it is redacted like a key.
+    ALPACA_API_KEY_ID: str = ""
+    ALPACA_API_SECRET_KEY: str = ""
+    FINNHUB_API_KEY: str = ""
+    FRED_API_KEY: str = ""
+    TIINGO_API_KEY: str = ""
+    SEC_USER_AGENT: str = ""
+    # One provider per role. yfinance stays the default so nothing changes
+    # until an operator opts in; "none" switches an optional role off.
+    MARKET_PROVIDER: str = "yfinance"
+    NEWS_PROVIDERS: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["yfinance"]
+    )
+    FILINGS_PROVIDER: str = "none"
+    MACRO_PROVIDER: str = "none"
+    PRICE_CROSSCHECK_PROVIDER: str = "none"
+    PROVIDER_TIMEOUT_SECONDS: int = Field(default=6, gt=0)
+
+    @field_validator(
+        "MARKET_PROVIDER",
+        "FILINGS_PROVIDER",
+        "MACRO_PROVIDER",
+        "PRICE_CROSSCHECK_PROVIDER",
+        mode="before",
+    )
+    @classmethod
+    def normalise_provider_selector(cls, v: Any) -> Any:
+        return v.strip().lower() if isinstance(v, str) else v
+
+    @field_validator("NEWS_PROVIDERS", mode="before")
+    @classmethod
+    def parse_news_providers(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = v.split(",")
+        if isinstance(v, (list, tuple)):
+            names = list(
+                dict.fromkeys(
+                    n.strip().lower() for n in v if isinstance(n, str) and n.strip()
+                )
+            )
+            if not names:
+                raise ValueError("NEWS_PROVIDERS must name at least one provider")
+            return names
+        return v
 
     # ------------------------------------------------------------------
     # Database (PostgreSQL)

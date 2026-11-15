@@ -97,6 +97,7 @@ def test_research_run_contract_exposes_v2_interpretation_and_provenance() -> Non
         "news_coverage_start",
         "news_coverage_end",
         "news_quality",
+        "providers",
     }
 
 
@@ -136,3 +137,9 @@ def test_contract_compares_exactly_the_schemas_the_paths_reach() -> None:
     result = canonicalize(doc, paths=["/x"])
 
     assert set(result["components"]["schemas"]) == {"A", "B", "C"}
+
+
+def test_evidence_source_schema_lists_three_source_types() -> None:
+    schemas = app.openapi()["components"]["schemas"]
+    source_type = schemas["EvidenceSource"]["properties"]["source_type"]
+    assert source_type["enum"] == ["news", "filing", "insider_transaction"]
