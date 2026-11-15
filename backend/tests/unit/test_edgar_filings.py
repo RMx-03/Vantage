@@ -15,6 +15,7 @@ from app.domain.errors import VantageError
 from app.domain.research import ComponentQuality
 from app.providers.cache import InMemoryProviderCache
 from app.providers.edgar import EDGAR_LIMITER, EdgarProvider
+from app.providers.http import RateLimiter
 from app.providers.registry import default_registry
 
 AGENT = "Vantage Test Suite sec-contact-7731@example.invalid"
@@ -40,18 +41,22 @@ MESSAGES = {
 }
 
 
-@pytest.fixture(autouse=True)
-def _fresh_limiter() -> None:
-    EDGAR_LIMITER._calls.clear()
-
-
 def make_provider(cache: Any = None) -> EdgarProvider:
+    # A generous limiter keeps these tests off the real 8/s wall clock.
     return EdgarProvider(
         AGENT,
         cache if cache is not None else InMemoryProviderCache(),
         timeout_seconds=6.0,
         sleep=lambda seconds: None,
+        limiter=RateLimiter(10_000, 1.0),
     )
+
+
+def test_default_limiter_is_the_shared_eight_per_second_one() -> None:
+    assert EDGAR_LIMITER._max_calls == 8
+    assert EDGAR_LIMITER._period == 1.0
+    provider = EdgarProvider(AGENT, InMemoryProviderCache(), timeout_seconds=6.0)
+    assert provider._http._limiter is EDGAR_LIMITER
 
 
 def fetch(provider: EdgarProvider, symbol: str = "aapl", lookback: int = 30) -> Any:
@@ -275,7 +280,12 @@ def test_second_call_uses_the_cache() -> None:
 
     assert len(mocks.tickers.calls) == 1
     assert len(mocks.submissions.calls) == 1
-    assert len(mocks.form4.calls) == 10  # parsed and unparsed results are cached
+    # Parsed results are cached; the one malformed document is fetched again.
+    assert len(mocks.form4.calls) == 11
+    assert (
+        provider._cache.get("edgar", f"form4:{BAD_ACCESSION}", date(2026, 11, 11))
+        is None
+    )
     assert [i.model_dump() for i in first.items] == [
         i.model_dump() for i in second.items
     ]
@@ -330,11 +340,11 @@ def test_cache_keys_and_reduced_payloads() -> None:
         "items",
         "primaryDocument",
     }
-    assert len([k for k in by_key if k.startswith("form4:")]) == 10
+    assert len([k for k in by_key if k.startswith("form4:")]) == 9
     one = by_key["form4:0001959173-26-000001"]
     assert one[2] == date(2026, 11, 11) and one[4] is True
     assert one[3]["state"] == "parsed"
-    assert by_key[f"form4:{BAD_ACCESSION}"][3]["state"] == "unparsed"
+    assert f"form4:{BAD_ACCESSION}" not in by_key  # unparsed is never cached
     dumped = json.dumps([p[3] for p in puts])
     assert AGENT not in dumped
     assert "ownershipDocument" not in dumped

@@ -89,11 +89,12 @@ class EdgarProvider:
         timeout_seconds: float,
         transport: httpx.BaseTransport | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        limiter: RateLimiter = EDGAR_LIMITER,
     ) -> None:
         self._cache = cache
         self._http = ProviderHttp(
             timeout_seconds=timeout_seconds,
-            limiter=EDGAR_LIMITER,
+            limiter=limiter,
             headers={"User-Agent": user_agent},
             transport=transport,
             sleep=sleep,
@@ -439,7 +440,7 @@ class EdgarProvider:
             return None
         key = f"form4:{accession}"
         cached = self._cache_get(key, filed)
-        if isinstance(cached, dict) and cached.get("state") in ("parsed", "unparsed"):
+        if isinstance(cached, dict) and cached.get("state") == "parsed":
             return cached
         document = _XSL_PREFIX.sub("", row.get("primaryDocument", ""))
         if not document:
@@ -452,7 +453,10 @@ class EdgarProvider:
         except ProviderHttpError:
             return None
         result = _parse_form4(text)
-        self._cache_put(key, filed, result, retrieved_at, immutable=True)
+        if result.get("state") == "parsed":
+            # An unparsed result is never cached: a transient notice page or odd
+            # body must not pin the filing as unparsed forever.
+            self._cache_put(key, filed, result, retrieved_at, immutable=True)
         return result
 
 

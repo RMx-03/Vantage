@@ -15,11 +15,11 @@ from app.domain.errors import VantageError
 from app.domain.research import ComponentQuality
 from app.providers.cache import InMemoryProviderCache
 from app.providers.edgar import (
-    EDGAR_LIMITER,
     NET_INCOME_CONCEPT,
     REVENUE_CONCEPTS,
     EdgarProvider,
 )
+from app.providers.http import RateLimiter
 from app.providers.registry import build_providers
 
 AGENT = "Vantage Test Suite sec-contact-7731@example.invalid"
@@ -41,17 +41,13 @@ MESSAGES = {
 }
 
 
-@pytest.fixture(autouse=True)
-def _fresh_limiter() -> None:
-    EDGAR_LIMITER._calls.clear()
-
-
 def make_provider(cache: Any = None) -> EdgarProvider:
     return EdgarProvider(
         AGENT,
         cache if cache is not None else InMemoryProviderCache(),
         timeout_seconds=6.0,
         sleep=lambda seconds: None,
+        limiter=RateLimiter(10_000, 1.0),
     )
 
 
