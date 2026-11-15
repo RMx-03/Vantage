@@ -102,6 +102,11 @@ def combined_snapshot_hash(
             fundamentals.model_dump(mode="json")
         )
     if macro is not None:
-        payload["macro"] = _without_retrieved_at(macro.model_dump(mode="json"))
+        ordered = macro.model_copy(
+            update={
+                "observations": sorted(macro.observations, key=lambda o: o.series_id)
+            }
+        )
+        payload["macro"] = _without_retrieved_at(ordered.model_dump(mode="json"))
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

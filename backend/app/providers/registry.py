@@ -23,6 +23,7 @@ from app.providers.contracts import (
 )
 from app.providers.edgar import EdgarProvider
 from app.providers.finnhub import FinnhubNewsProvider
+from app.providers.fred import FredMacroProvider
 from app.providers.fixture_provider import FixtureProvider
 from app.providers.llm import (
     DisabledInterpretationProvider,
@@ -30,6 +31,7 @@ from app.providers.llm import (
     GroqInterpretationProvider,
     OllamaInterpretationProvider,
 )
+from app.providers.tiingo import TiingoCrossCheckProvider
 from app.providers.yfinance_provider import YFinanceSnapshotProvider
 from app.repositories.provider_cache import PostgresProviderCache
 
@@ -125,6 +127,24 @@ def _edgar(s: Settings) -> object | None:
     )
 
 
+def _fred(s: Settings) -> object | None:
+    if not s.FRED_API_KEY:
+        return None
+    return FredMacroProvider(
+        s.FRED_API_KEY,
+        PostgresProviderCache(),
+        timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS),
+    )
+
+
+def _tiingo(s: Settings) -> object | None:
+    if not s.TIINGO_API_KEY:
+        return None
+    return TiingoCrossCheckProvider(
+        s.TIINGO_API_KEY, timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
+    )
+
+
 @lru_cache(maxsize=1)
 def default_registry() -> ProviderRegistry:
     registry = ProviderRegistry()
@@ -134,6 +154,8 @@ def default_registry() -> ProviderRegistry:
     registry.register("news", "finnhub", _finnhub_news)
     registry.register("news", "yfinance", _yfinance)
     registry.register("filings", "edgar", _edgar)
+    registry.register("macro", "fred", _fred)
+    registry.register("crosscheck", "tiingo", _tiingo)
     registry.register("market", "fixture", _fixture)
     registry.register("news", "fixture", _fixture)
     registry.register("llm", "disabled", lambda s: DisabledInterpretationProvider())

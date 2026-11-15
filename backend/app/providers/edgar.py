@@ -6,7 +6,6 @@ holds reduced data only: the ticker map, a few submissions fields and Form 4 par
 fields. It never holds a raw document.
 """
 
-import logging
 import re
 import time
 from collections.abc import Callable
@@ -18,7 +17,6 @@ from zoneinfo import ZoneInfo
 import httpx
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
-from sqlalchemy.exc import SQLAlchemyError
 
 from app.domain.research import (
     ComponentQuality,
@@ -27,10 +25,8 @@ from app.domain.research import (
     FundamentalsSnapshot,
     NewsItem,
 )
-from app.providers.cache import ProviderCache
+from app.providers.cache import ProviderCache, cache_get_safely, cache_put_safely
 from app.providers.http import ProviderHttp, ProviderHttpError, RateLimiter, fail
-
-logger = logging.getLogger(__name__)
 
 EDGAR_LIMITER = RateLimiter(8, 1.0)
 
@@ -109,11 +105,7 @@ class EdgarProvider:
     # ------------------------------------------------------------------ cache
 
     def _cache_get(self, key: str, valid_for: date) -> Any | None:
-        try:
-            entry = self._cache.get(self.name, key, valid_for)
-        except SQLAlchemyError:
-            logger.warning("provider_cache_unavailable")
-            return None
+        entry = cache_get_safely(self._cache, self.name, key, valid_for)
         return entry.payload if entry is not None else None
 
     def _cache_put(
@@ -125,12 +117,15 @@ class EdgarProvider:
         *,
         immutable: bool = False,
     ) -> None:
-        try:
-            self._cache.put(
-                self.name, key, valid_for, payload, retrieved_at, immutable=immutable
-            )
-        except SQLAlchemyError:
-            logger.warning("provider_cache_unavailable")
+        cache_put_safely(
+            self._cache,
+            self.name,
+            key,
+            valid_for,
+            payload,
+            retrieved_at,
+            immutable=immutable,
+        )
 
     # ------------------------------------------------------------------ fetch
 

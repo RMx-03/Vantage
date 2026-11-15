@@ -6,9 +6,14 @@ provider document and never a key.
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Protocol
+
+from sqlalchemy.exc import SQLAlchemyError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -65,3 +70,31 @@ class InMemoryProviderCache:
         entry = CacheEntry(payload, compute_content_hash(payload), retrieved_at)
         self._entries[(provider, cache_key, valid_for_date)] = entry
         return entry
+
+
+def cache_get_safely(
+    cache: ProviderCache, provider: str, key: str, valid_for: date
+) -> CacheEntry | None:
+    """Cache read where a database failure is a miss, logged with a fixed line."""
+    try:
+        return cache.get(provider, key, valid_for)
+    except SQLAlchemyError:
+        logger.warning("provider_cache_unavailable")
+        return None
+
+
+def cache_put_safely(
+    cache: ProviderCache,
+    provider: str,
+    key: str,
+    valid_for: date,
+    payload: Any,
+    retrieved_at: datetime,
+    *,
+    immutable: bool = False,
+) -> None:
+    """Cache write where a database failure skips the write, logged the same way."""
+    try:
+        cache.put(provider, key, valid_for, payload, retrieved_at, immutable=immutable)
+    except SQLAlchemyError:
+        logger.warning("provider_cache_unavailable")
