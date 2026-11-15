@@ -18,7 +18,7 @@ from app.providers.yfinance_provider import YFinanceSnapshotProvider
 
 
 def test_default_settings_build_todays_providers() -> None:
-    providers = build_providers(Settings())
+    providers = build_providers(Settings(_env_file=None))
 
     assert isinstance(providers.market, YFinanceSnapshotProvider)
     assert len(providers.news) == 1
@@ -37,7 +37,7 @@ def test_default_settings_build_todays_providers() -> None:
 
 def test_unknown_name_is_config_error_without_echo() -> None:
     with pytest.raises(VantageError) as exc:
-        build_providers(Settings(MARKET_PROVIDER="alpacca"))
+        build_providers(Settings(_env_file=None, MARKET_PROVIDER="alpacca"))
 
     assert exc.value.code == "CONFIG_ERROR"
     assert "alpacca" not in exc.value.safe_message
@@ -45,13 +45,13 @@ def test_unknown_name_is_config_error_without_echo() -> None:
 
 def test_empty_selector_is_config_error() -> None:
     with pytest.raises(VantageError) as exc:
-        build_providers(Settings(MARKET_PROVIDER=""))
+        build_providers(Settings(_env_file=None, MARKET_PROVIDER=""))
     assert exc.value.code == "CONFIG_ERROR"
 
 
 def test_unknown_optional_role_name_is_config_error() -> None:
     with pytest.raises(VantageError) as exc:
-        build_providers(Settings(FILINGS_PROVIDER="edgarr"))
+        build_providers(Settings(_env_file=None, FILINGS_PROVIDER="edgarr"))
     assert exc.value.code == "CONFIG_ERROR"
     assert "edgarr" not in exc.value.safe_message
 
@@ -68,13 +68,15 @@ def test_unknown_optional_role_name_is_config_error() -> None:
 def test_llm_names_build_the_same_classes(
     provider_name: str, expected_cls: type
 ) -> None:
-    provider = build_interpretation_provider(Settings(LLM_PROVIDER=provider_name))
+    provider = build_interpretation_provider(
+        Settings(_env_file=None, LLM_PROVIDER=provider_name)
+    )
     assert isinstance(provider, expected_cls)
 
 
 def test_unknown_llm_keeps_its_message() -> None:
     with pytest.raises(VantageError) as exc:
-        build_interpretation_provider(Settings(LLM_PROVIDER="nope"))
+        build_interpretation_provider(Settings(_env_file=None, LLM_PROVIDER="nope"))
     assert exc.value.code == "CONFIG_ERROR"
     assert (
         exc.value.safe_message
@@ -92,7 +94,9 @@ def test_factory_returning_none_marks_role_not_configured() -> None:
     ):
         registry.register("llm", name, factory)
 
-    providers = build_providers(Settings(LLM_PROVIDER="disabled"), registry)
+    providers = build_providers(
+        Settings(_env_file=None, LLM_PROVIDER="disabled"), registry
+    )
 
     assert providers.market is None
     assert "market" in providers.not_configured
@@ -100,7 +104,9 @@ def test_factory_returning_none_marks_role_not_configured() -> None:
 
 def test_two_news_providers_are_refused_until_merge() -> None:
     with pytest.raises(VantageError) as exc:
-        build_providers(Settings(NEWS_PROVIDERS=["yfinance", "fixture"]))
+        build_providers(
+            Settings(_env_file=None, NEWS_PROVIDERS=["yfinance", "fixture"])
+        )
     assert exc.value.code == "CONFIG_ERROR"
 
 

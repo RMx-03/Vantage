@@ -90,7 +90,6 @@ def test_explicit_providers_override_the_set() -> None:
 def test_service_builds_with_no_news_provider() -> None:
     from unittest.mock import MagicMock
 
-    service, _, _ = _service_with(_provider_set(MagicMock(), MagicMock()))
     empty = _provider_set(MagicMock(), MagicMock())
     from dataclasses import replace
 
