@@ -11,7 +11,7 @@ from typing import Literal
 
 from app.core.config import Settings
 from app.domain.errors import VantageError
-from app.providers.alpaca import AlpacaMarketProvider
+from app.providers.alpaca import AlpacaMarketProvider, AlpacaNewsProvider
 from app.providers.contracts import (
     FilingsProvider,
     FundamentalsProvider,
@@ -21,6 +21,7 @@ from app.providers.contracts import (
     NewsProvider,
     PriceCrossCheckProvider,
 )
+from app.providers.finnhub import FinnhubNewsProvider
 from app.providers.fixture_provider import FixtureProvider
 from app.providers.llm import (
     DisabledInterpretationProvider,
@@ -97,11 +98,31 @@ def _alpaca_market(s: Settings) -> object | None:
     )
 
 
+def _alpaca_news(s: Settings) -> object | None:
+    if not (s.ALPACA_API_KEY_ID and s.ALPACA_API_SECRET_KEY):
+        return None
+    return AlpacaNewsProvider(
+        s.ALPACA_API_KEY_ID,
+        s.ALPACA_API_SECRET_KEY,
+        timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS),
+    )
+
+
+def _finnhub_news(s: Settings) -> object | None:
+    if not s.FINNHUB_API_KEY:
+        return None
+    return FinnhubNewsProvider(
+        s.FINNHUB_API_KEY, timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
+    )
+
+
 @lru_cache(maxsize=1)
 def default_registry() -> ProviderRegistry:
     registry = ProviderRegistry()
     registry.register("market", "alpaca", _alpaca_market)
     registry.register("market", "yfinance", _yfinance)
+    registry.register("news", "alpaca", _alpaca_news)
+    registry.register("news", "finnhub", _finnhub_news)
     registry.register("news", "yfinance", _yfinance)
     registry.register("market", "fixture", _fixture)
     registry.register("news", "fixture", _fixture)

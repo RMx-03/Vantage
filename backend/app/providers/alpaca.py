@@ -18,8 +18,15 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from app.domain.errors import VantageError
-from app.domain.research import DailyBar, MarketSnapshot
+from app.domain.research import DailyBar, MarketSnapshot, NewsItem, NewsSnapshot
 from app.providers.http import ProviderHttp, ProviderHttpError, RateLimiter, fail
+from app.providers.news_common import (
+    ERROR_CODE as NEWS_ERROR_CODE,
+    MESSAGES as NEWS_MESSAGES,
+    build_item,
+    build_snapshot,
+    upper_symbols,
+)
 from app.providers.price_validation import (
     RawBar,
     build_market_snapshot,
@@ -34,6 +41,9 @@ from app.services.sessions import (
 ALPACA_LIMITER = RateLimiter(150, 60.0)
 
 BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
+NEWS_URL = "https://data.alpaca.markets/v1beta1/news"
+_NEWS_PAGE_SIZE = 50
+_NEWS_EXTRA_PAGES = 2
 ERROR_CODE = "MARKET_DATA_PROVIDER_FAILED"
 SIP_DELAY = timedelta(minutes=16)
 ADJUSTMENT_STATE = "split_and_dividend_adjusted"
@@ -231,3 +241,115 @@ class AlpacaMarketProvider:
                 )
             )
         return joined
+
+
+class AlpacaNewsProvider:
+    """Alpaca company news. Shares the Alpaca rate limiter with the market provider."""
+
+    name: str = "alpaca"
+
+    def __init__(
+        self,
+        key_id: str,
+        secret_key: str,
+        *,
+        timeout_seconds: float,
+        transport: httpx.BaseTransport | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._http = ProviderHttp(
+            timeout_seconds=timeout_seconds,
+            limiter=ALPACA_LIMITER,
+            headers={"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": secret_key},
+            transport=transport,
+            sleep=sleep,
+        )
+
+    def __repr__(self) -> str:
+        return "AlpacaNewsProvider()"
+
+    def fetch_company_news(
+        self,
+        symbol: str,
+        cutoff: datetime,
+        retrieved_at: datetime,
+        lookback_days: int,
+        limit: int,
+    ) -> NewsSnapshot:
+        primary = symbol.strip().upper()
+        cutoff_utc = cutoff.astimezone(UTC)
+        window_start = cutoff_utc - timedelta(days=lookback_days)
+        retrieved_utc = retrieved_at.astimezone(UTC)
+        params = {
+            "symbols": primary,
+            "start": window_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "end": cutoff_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "limit": str(_NEWS_PAGE_SIZE),
+            "sort": "desc",
+            "include_content": "false",
+        }
+        try:
+            deadline = self._http.deadline()
+            raw_items = self._fetch_pages(params, deadline)
+        except ProviderHttpError as err:
+            raise fail(NEWS_ERROR_CODE, NEWS_MESSAGES, err) from None
+
+        items: list[NewsItem] = []
+        for raw in raw_items:
+            item = self._item(raw, retrieved_utc)
+            if item is not None:
+                items.append(item)
+        return build_snapshot(
+            provider=self.name,
+            symbol=primary,
+            items=items,
+            cutoff=cutoff_utc,
+            retrieved_at=retrieved_utc,
+            lookback_days=lookback_days,
+            limit=limit,
+        )
+
+    def _fetch_pages(self, params: dict[str, str], deadline: float) -> list[Any]:
+        collected: list[Any] = []
+        for _ in range(1 + _NEWS_EXTRA_PAGES):
+            payload = self._http.get_json(NEWS_URL, params=params, deadline=deadline)
+            if not isinstance(payload, dict):
+                raise ProviderHttpError("malformed")
+            page = payload.get("news")
+            if page is None:
+                page = []
+            if not isinstance(page, list):
+                raise ProviderHttpError("malformed")
+            collected.extend(page)
+            token = payload.get("next_page_token")
+            if not token:
+                break
+            if not isinstance(token, str):
+                raise ProviderHttpError("malformed")
+            params = {**params, "page_token": token}
+        return collected
+
+    def _item(self, raw: object, retrieved_at: datetime) -> NewsItem | None:
+        if not isinstance(raw, dict):
+            return None
+        created = raw.get("created_at")
+        if not isinstance(created, str):
+            return None
+        try:
+            event_time = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if event_time.tzinfo is None:
+            return None
+        symbols = raw.get("symbols")
+        return build_item(
+            provider=self.name,
+            raw_id=raw.get("id"),
+            publisher=raw.get("source"),
+            title=raw.get("headline"),
+            summary=raw.get("summary"),
+            url=raw.get("url"),
+            event_time=event_time.astimezone(UTC),
+            symbols=upper_symbols(symbols) if isinstance(symbols, list) else [],
+            retrieved_at=retrieved_at,
+        )

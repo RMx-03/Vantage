@@ -218,6 +218,13 @@
             "title": "Providers",
             "type": "array"
           },
+          "tagged_symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tagged Symbols",
+            "type": "array"
+          },
           "transaction_code": {
             "anyOf": [
               {

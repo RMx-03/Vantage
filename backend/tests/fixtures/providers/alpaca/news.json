@@ -1,0 +1,77 @@
+{
+  "news": [
+    {
+      "id": 41001,
+      "headline": "Apple unveils expanded on-device AI features for iPhone lineup",
+      "summary": "Apple outlined new on-device AI features for its iPhone lineup at a developer briefing.",
+      "author": "Newsroom Staff",
+      "created_at": "2026-11-13T14:32:10Z",
+      "updated_at": "2026-11-13T14:35:02Z",
+      "url": "https://www.example-wire.com/technology/apple-on-device-ai-features-2026-11-13/?utm_source=feed",
+      "images": [],
+      "symbols": ["AAPL"],
+      "source": "example-wire"
+    },
+    {
+      "id": 41002,
+      "headline": "Apple supplier outlines fourth-quarter shipment timing",
+      "summary": "<p>A key <b>component supplier</b> said   shipments to Apple's assembly partners\n are on schedule.</p><script>alert(1)</script>",
+      "author": "Markets Desk",
+      "created_at": "2026-11-12T19:05:00Z",
+      "updated_at": "2026-11-12T19:05:00Z",
+      "url": "https://www.example-markets.com/news/apple-supplier-shipments/",
+      "images": [],
+      "symbols": ["aapl", "TSM"],
+      "source": "example-markets"
+    },
+    {
+      "id": 41003,
+      "headline": "Apple services revenue in focus ahead of the holiday period",
+      "summary": "",
+      "author": "",
+      "created_at": "2026-11-12T13:40:00Z",
+      "updated_at": "2026-11-12T13:40:00Z",
+      "url": "https://www.example-markets.com/news/apple-services-holiday/",
+      "images": [],
+      "symbols": ["AAPL"],
+      "source": ""
+    },
+    {
+      "id": 41004,
+      "headline": "   ",
+      "summary": "An item whose headline is blank.",
+      "author": "Markets Desk",
+      "created_at": "2026-11-11T15:00:00Z",
+      "updated_at": "2026-11-11T15:00:00Z",
+      "url": "https://www.example-markets.com/news/blank-headline/",
+      "images": [],
+      "symbols": ["AAPL"],
+      "source": "example-markets"
+    },
+    {
+      "id": 41005,
+      "headline": "Apple retail traffic survey published a week earlier",
+      "summary": "An older item that falls before the lookback window.",
+      "author": "Research Desk",
+      "created_at": "2026-11-05T12:00:00Z",
+      "updated_at": "2026-11-05T12:00:00Z",
+      "url": "https://www.example-wire.com/technology/apple-retail-survey/",
+      "images": [],
+      "symbols": ["AAPL"],
+      "source": "example-wire"
+    },
+    {
+      "id": 41006,
+      "headline": "Large-cap technology names mixed as the week closes",
+      "summary": "Large-cap technology shares moved in both directions.",
+      "author": "Markets Desk",
+      "created_at": "2026-11-11T09:15:00Z",
+      "updated_at": "2026-11-11T09:15:00Z",
+      "url": "https://www.example-markets.com/news/tech-mixed-close/",
+      "images": [],
+      "symbols": ["AAPL", "MSFT", "NVDA"],
+      "source": "example-markets"
+    }
+  ],
+  "next_page_token": null
+}
