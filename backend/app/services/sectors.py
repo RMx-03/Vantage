@@ -42,7 +42,10 @@ _RANGES: tuple[tuple[int, int, str], ...] = (
     (2200, 2399, "XLY"),  # textiles and apparel
     (2400, 2449, "XLB"),  # lumber and wood products (245x unmapped)
     (2500, 2599, "XLY"),  # household and office furniture
-    (2600, 2699, "XLB"),  # paper and allied products
+    (2600, 2669, "XLB"),  # paper and allied products
+    # 2670 converted paper and paperboard products mixes packaging (materials) with
+    # consumer paper: unmapped.
+    (2671, 2699, "XLB"),
     (2710, 2741, "XLC"),  # newspapers, periodicals, book publishing (media)
     (2800, 2829, "XLB"),  # chemicals, plastics and resins (2821)
     (2830, 2836, "XLV"),  # medicinal chemicals, pharmaceuticals, biologicals (2834)
@@ -52,8 +55,16 @@ _RANGES: tuple[tuple[int, int, str], ...] = (
     (3080, 3089, "XLB"),  # plastics products
     (3100, 3199, "XLY"),  # leather, footwear
     (3200, 3299, "XLB"),  # stone, clay, glass, cement
-    (3300, 3399, "XLB"),  # primary metals
-    (3400, 3558, "XLI"),  # fabricated metal products and industrial machinery
+    (3300, 3349, "XLB"),  # primary metals
+    # 3350 rolling, drawing and extruding of nonferrous metals: mixed, unmapped.
+    (3351, 3356, "XLB"),
+    # 3357 drawing and insulating of nonferrous wire mixes cable makers with others.
+    (3358, 3399, "XLB"),
+    (3400, 3410, "XLI"),  # fabricated metal products and industrial machinery
+    (3411, 3411, "XLB"),  # metal cans: packaging is Materials, not industrials
+    (3412, 3532, "XLI"),
+    (3533, 3533, "XLE"),  # oil and gas field machinery: energy equipment makers
+    (3534, 3558, "XLI"),
     # 3559 special industry machinery mixes semiconductor equipment with other
     # machinery, so it is left unmapped.
     (3560, 3569, "XLI"),  # general industrial machinery
@@ -71,33 +82,39 @@ _RANGES: tuple[tuple[int, int, str], ...] = (
     (3840, 3859, "XLV"),  # surgical, medical and dental instruments, ophthalmic goods
     (3940, 3949, "XLY"),  # toys, games, sporting and athletic goods
     (4000, 4299, "XLI"),  # railroads, transit, trucking and warehousing (4011)
-    (4400, 4599, "XLI"),  # water and air transportation
+    # 4400 water transportation mixes cruise lines (consumer) with shipping: unmapped.
+    (4401, 4599, "XLI"),  # water and air transportation
     (4610, 4619, "XLE"),  # pipelines: energy transport, not general transport
-    (4700, 4799, "XLI"),  # transportation services
+    # 4700 transportation services mixes travel booking (consumer) with logistics.
+    (4701, 4799, "XLI"),  # transportation services
     # 4810-4899 communications is a judgement call: telephone, radio, TV and cable fit the
     # Communication Services sector, so the whole 48xx group maps there (4813 telephone).
     (4810, 4899, "XLC"),
     (4900, 4921, "XLU"),  # electric services and gas production (4911)
     (4922, 4922, "XLE"),  # natural gas transmission pipelines, as with 4610-4619
     # 4923 gas transmission and distribution mixes pipelines with utilities: unmapped.
-    (4924, 4949, "XLU"),  # natural gas distribution, water and combination utilities
+    # 4924 natural gas distribution mixes utilities with others: unmapped.
+    (4925, 4949, "XLU"),  # water and combination utilities
     (4950, 4959, "XLI"),  # sanitary services and waste (industrial)
     (4960, 4999, "XLU"),  # steam, air conditioning and cogeneration supply
     (5140, 5149, "XLP"),  # groceries wholesale
     (5170, 5172, "XLE"),  # petroleum products wholesale
-    (5200, 5329, "XLY"),  # building materials retail, department stores
+    # 5200 building materials and garden retail mixes home improvement (consumer) with
+    # other large filers: unmapped.
+    (5201, 5329, "XLY"),  # building materials retail, department stores
     (5330, 5399, "XLP"),  # variety and general merchandise stores (5331 Walmart, 5399)
     (5400, 5499, "XLP"),  # food stores
     (5500, 5699, "XLY"),  # auto dealers, gas stations, apparel retail
     (5700, 5899, "XLY"),  # home furnishings, eating and drinking places (5812)
     (5900, 5909, "XLY"),  # miscellaneous retail
-    (5910, 5919, "XLP"),  # drug stores: staples, matching the SPDR staples sector
+    (5910, 5911, "XLP"),  # drug stores: staples, matching the SPDR staples sector
+    # 5912 drug stores and proprietary stores mixes retail pharmacy with managed care
+    # and distribution filers: unmapped.
+    (5913, 5919, "XLP"),
     (5920, 5999, "XLY"),  # specialty and mail-order retail (5961)
-    (
-        6000,
-        6323,
-        "XLF",
-    ),  # banks, credit, brokers, life and other insurance (6021, 6311)
+    (6000, 6220, "XLF"),  # banks, credit, brokers, life and other insurance (6021)
+    # 6221 commodity contracts brokers and dealers mixes exchanges, brokers and funds.
+    (6222, 6323, "XLF"),  # remaining brokers, insurance (6311)
     (
         6324,
         6324,
@@ -110,14 +127,19 @@ _RANGES: tuple[tuple[int, int, str], ...] = (
     (6798, 6798, "XLRE"),  # real estate investment trusts
     (7000, 7019, "XLY"),  # hotels and lodging
     (7310, 7319, "XLC"),  # advertising
-    (7320, 7369, "XLI"),  # credit reporting, building, rental, staffing
+    # 7320 consumer credit reporting and collection mixes credit bureaus (industrials
+    # by GICS) with other filers: unmapped.
+    (7321, 7369, "XLI"),  # credit reporting, building, rental, staffing
     # 7370 vs 7371-7379 is a judgement call. 7370 (computer services and data
     # processing, where large search and social platforms file) maps to Communication
     # Services. 7371-7379 (programming, prepackaged software, systems design,
     # processing) map to Information Technology.
     (7370, 7370, "XLC"),
     (7371, 7371, "XLK"),  # computer programming and IT services
-    (7372, 7379, "XLK"),
+    (7372, 7373, "XLK"),
+    # 7374 computer processing and data preparation mixes payroll and data processors
+    # (ADP, Verisk are industrials) with software: unmapped.
+    (7375, 7379, "XLK"),
     # 7389 business services not elsewhere classified is a catch-all (payments,
     # marketplaces and more), so it is left unmapped.
     (7380, 7388, "XLI"),  # detective, security and other business services
