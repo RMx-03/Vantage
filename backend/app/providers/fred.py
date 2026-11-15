@@ -1,7 +1,7 @@
 """FRED macro-level provider.
 
-FRED takes its key only as the ``api_key`` query parameter. The key is held by this
-provider's request parameters alone: it appears in no attribute, repr, message, cache
+FRED takes its key only as the ``api_key`` query parameter. The key is held privately
+and sent only as that query parameter; it never appears in an error, repr, cache
 payload or log line, and the ``httpx`` logger is held at WARNING so request URLs are
 never logged.
 """
@@ -28,7 +28,7 @@ OBSERVATION_LIMIT = 10
 
 ERROR_CODE = "MACRO_PROVIDER_FAILED"
 MESSAGES = {
-    "auth": "FRED rejected the configured API key.",
+    "auth": "FRED refused the configured API key.",
     "rate_limited": "FRED rate limit was reached.",
     "unavailable": "Macro series could not be retrieved.",
     "rejected": "Macro series could not be retrieved.",

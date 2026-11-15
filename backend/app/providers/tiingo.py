@@ -26,7 +26,7 @@ PRICES_URL = "https://api.tiingo.com/tiingo/daily/{symbol}/prices"
 ERROR_CODE = "PRICE_CROSSCHECK_FAILED"
 UNAVAILABLE_CODE = "PRICE_CROSSCHECK_UNAVAILABLE"
 MESSAGES = {
-    "auth": "Tiingo rejected the configured API key.",
+    "auth": "Tiingo refused the configured API key.",
     "rate_limited": "Tiingo rate limit was reached.",
     "unavailable": "Cross-check prices could not be retrieved.",
     "rejected": "Cross-check prices could not be retrieved.",

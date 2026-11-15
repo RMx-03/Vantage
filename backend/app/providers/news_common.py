@@ -20,7 +20,7 @@ from app.domain.urls import normalize_url
 
 ERROR_CODE = "NEWS_PROVIDER_FAILED"
 MESSAGES = {
-    "auth": "News provider rejected the configured credentials.",
+    "auth": "News provider refused the configured credentials.",
     "rate_limited": "News provider rate limit was reached.",
     "unavailable": "Company news could not be retrieved.",
     "rejected": "Company news could not be retrieved.",

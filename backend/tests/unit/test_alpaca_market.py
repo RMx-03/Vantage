@@ -27,7 +27,7 @@ NOW_DURING_LAG = datetime(2026, 11, 13, 21, 10, tzinfo=UTC)
 NY = ZoneInfo("America/New_York")
 
 MESSAGES = {
-    "auth": "Market data provider rejected the configured credentials.",
+    "auth": "Market data provider refused the configured credentials.",
     "rate_limited": "Market data provider rate limit was reached.",
     "unavailable": "Market prices could not be retrieved.",
     "malformed": "Market data provider returned an unreadable response.",
@@ -221,7 +221,7 @@ def test_rejected_request_message() -> None:
     with pytest.raises(VantageError) as exc:
         fetch(make_provider())
 
-    assert exc.value.safe_message == "Market data provider rejected the request."
+    assert exc.value.safe_message == "Market data provider refused the request."
 
 
 @respx.mock

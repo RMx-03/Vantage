@@ -31,7 +31,7 @@ from typing import cast
 from app.core.config import Settings
 from app.core.config import settings as default_settings
 from app.domain.errors import VantageError
-from app.domain.research import CrossCheckClose, DailyBar
+from app.domain.research import ComponentQuality, CrossCheckClose, DailyBar
 from app.providers.contracts import MarketDataProvider, PriceCrossCheckProvider
 from app.providers.registry import default_registry
 from app.services.sessions import latest_completed_xnys_session, trailing_xnys_sessions
@@ -67,6 +67,7 @@ class TickerResult:
     dollar_volume_gap: float | None
     crosscheck_deviations: list[float] | None
     error: str | None = None
+    note: str | None = None
 
 
 @dataclass(frozen=True)
@@ -179,6 +180,14 @@ def evaluate(results: Sequence[TickerResult]) -> ParityVerdict:
     )
 
 
+def _state_note(label: str, quality: ComponentQuality, error_code: str | None) -> str:
+    """Name a snapshot state that is not fresh or carries an error code."""
+    if quality == ComponentQuality.FRESH and error_code is None:
+        return ""
+    text = f"{label} data {quality.value}"
+    return f"{text} ({error_code})" if error_code else text
+
+
 def _compare_ticker(
     symbol: str,
     reference: MarketDataProvider,
@@ -188,26 +197,48 @@ def _compare_ticker(
     end: date,
     now: datetime,
 ) -> TickerResult:
+    state = ""
     try:
-        ref_bars = reference.fetch_daily_snapshot(symbol, start, end, now).bars
-        cand_bars = candidate.fetch_daily_snapshot(symbol, start, end, now).bars
+        # yfinance spells share classes with a dash; the report keeps the listed ticker.
+        ref_snap = reference.fetch_daily_snapshot(
+            symbol.replace(".", "-"), start, end, now
+        )
+        cand_snap = candidate.fetch_daily_snapshot(symbol, start, end, now)
+        ref_bars, cand_bars = ref_snap.bars, cand_snap.bars
+        state = "; ".join(
+            n
+            for n in (
+                _state_note("Alpaca", cand_snap.quality, cand_snap.error_code),
+                _state_note("yfinance", ref_snap.quality, ref_snap.error_code),
+            )
+            if n
+        )
         cross: list[float] | None = None
+        cross_note = ""
         if crosscheck is not None:
-            snap = crosscheck.fetch_adjusted_closes(symbol, start, end, now)
-            cross = crosscheck_deviations(cand_bars, snap.closes)
+            try:
+                snap = crosscheck.fetch_adjusted_closes(symbol, start, end, now)
+            except VantageError:
+                cross_note = "Tiingo cross-check unavailable."
+            else:
+                if snap.quality == ComponentQuality.FRESH and not snap.error_code:
+                    cross = crosscheck_deviations(cand_bars, snap.closes)
+                else:
+                    cross_note = "Tiingo cross-check unavailable."
+        note = " ".join(n for n in (state + "." if state else "", cross_note) if n)
         return TickerResult(
             symbol=symbol,
             deviations=close_deviations(cand_bars, ref_bars),
             return_gap_pp=return_gap_pp(cand_bars, ref_bars),
             dollar_volume_gap=dollar_volume_gap(cand_bars, ref_bars),
             crosscheck_deviations=cross,
+            note=note or None,
         )
     except VantageError as err:
         return TickerResult(symbol, [], None, None, None, err.safe_message)
     except ValueError:
-        return TickerResult(
-            symbol, [], None, None, None, "Too few matching sessions to compare."
-        )
+        message = state or "Too few matching sessions to compare."
+        return TickerResult(symbol, [], None, None, None, message)
 
 
 def _fmt(value: float | None, digits: int = 3) -> str:
@@ -241,7 +272,7 @@ def render_report(
             f"| {r.symbol} | {len(r.deviations)} "
             f"| {_fmt(max(r.deviations, default=None))} "
             f"| {_fmt(r.return_gap_pp)} | {_fmt(r.dollar_volume_gap, 4)} "
-            f"| {cross} | {r.error or ''} |"
+            f"| {cross} | {' '.join(n for n in (r.error, r.note) if n)} |"
         )
     lines += ["", "## Verdict", ""]
     lines.append(

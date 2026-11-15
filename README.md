@@ -66,7 +66,7 @@ Each run also emits an OpenTelemetry trace (optionally exported to Langfuse), so
 
 ## Data terms
 
-Vantage reads market and news data from third-party providers that you configure with your own keys. The Alpaca, Finnhub and Tiingo free tiers allow personal and internal use. Self-host Vantage with your own keys. A public, multi-user deployment that shows this data to other people counts as redistribution, which those free tiers do not cover. Check each provider's current terms before you rely on a deployment. This note is not legal advice.
+Vantage reads market and news data from third-party providers that you configure with your own keys. The Alpaca, Finnhub and Tiingo free tiers allow personal and internal use. Self-host Vantage with your own keys. A public, multi-user deployment that shows this data to other people is likely to count as redistribution, which those free tiers do not cover. Check each provider's current terms before you rely on a deployment. This note is not legal advice.
 
 ## Tech stack
 

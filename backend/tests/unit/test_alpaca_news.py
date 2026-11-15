@@ -25,7 +25,7 @@ RETRIEVED = datetime(2026, 11, 13, 22, 0, tzinfo=UTC)
 PAYLOAD = json.loads((FIXTURES / "news.json").read_text())
 
 MESSAGES = {
-    "auth": "News provider rejected the configured credentials.",
+    "auth": "News provider refused the configured credentials.",
     "rate_limited": "News provider rate limit was reached.",
     "unavailable": "Company news could not be retrieved.",
     "malformed": "Company news could not be retrieved.",

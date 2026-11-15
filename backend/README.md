@@ -87,7 +87,7 @@ Other settings that matter in a deployment:
 | `MARKET_PROVIDER`, `NEWS_PROVIDERS`, `FILINGS_PROVIDER`, `MACRO_PROVIDER`, `PRICE_CROSSCHECK_PROVIDER` | Which provider serves each data role. Defaults: `yfinance`, `yfinance` (comma list), `none`, `none`, `none`. Allowed values are listed in `.env.example`; see Data providers below. |
 | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, `FINNHUB_API_KEY`, `FRED_API_KEY`, `TIINGO_API_KEY` | Provider credentials, empty by default and redacted. A missing key leaves that role not configured; it does not stop startup. |
 | `SEC_USER_AGENT` | User-Agent for SEC EDGAR; the SEC requires it and a contact in it. No default; redacted. |
-| `PROVIDER_TIMEOUT_SECONDS` | Per-request timeout for data providers (default `6`). |
+| `PROVIDER_TIMEOUT_SECONDS` | Time budget for one provider call, covering all of its requests and the retry (default `6`). |
 | `APP_BASE_URL` | The frontend origin that links in emails point to. |
 | `EMAIL_VERIFICATION_TTL_SECONDS`, `PASSWORD_RESET_TTL_SECONDS` | Link lifetimes; the email text states the same values. |
 
@@ -147,6 +147,8 @@ SEC EDGAR's fair-access policy requires every request to identify the caller. Se
 Alpaca's free market data uses the SIP feed, which excludes the most recent 15 minutes. The provider clamps its end time to that boundary, so a session that has only just closed can come back incomplete and is shown as stale until the data catches up.
 
 EDGAR, FRED and Tiingo are registered and can be selected, but research runs do not call them yet. They are wired into runs in the next stage.
+
+A manual parity report compares Alpaca prices with yfinance, with an optional Tiingo cross-check. Run it from `backend/` with `uv run python -m scripts.compare_providers --output report.md`. It needs the Alpaca keys; Tiingo is optional. It is never run in CI, and a second run within the hour can exhaust Tiingo's hourly limit.
 
 ## Telemetry
 

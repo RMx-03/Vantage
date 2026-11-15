@@ -1,3 +1,5 @@
+import pytest
+
 from app.services.research_run import get_research_service
 
 
@@ -339,6 +341,7 @@ def test_no_news_provider_opens_no_tagged_news_span(monkeypatch) -> None:
         InMemorySpanExporter,
     )
 
+    from app.domain.errors import VantageError
     from app.services import research_run
     from app.telemetry.redaction import RedactingSpanProcessor
 
@@ -352,11 +355,11 @@ def test_no_news_provider_opens_no_tagged_news_span(monkeypatch) -> None:
     base = _provider_set(_market_stub(), object())
     service, repo, now = _service_with(replace(base, news=()))
     repo.save_snapshot.side_effect = RuntimeError("stop after snapshot")
-    try:
+    with pytest.raises(VantageError):  # the service wraps the repository error
         service.create(user_id=uuid4(), symbol="AAPL", now=now)
-    except Exception:
-        pass
 
+    # With no news provider the service still opens one provider_request span for the
+    # empty news snapshot, and it carries no role or name attribute.
     roles = [
         s.attributes.get("vantage.provider.role")
         for s in exporter.get_finished_spans()

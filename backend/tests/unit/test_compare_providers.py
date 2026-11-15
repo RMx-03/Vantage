@@ -3,9 +3,18 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 
 from app.core.config import Settings
-from app.domain.research import CrossCheckClose, DailyBar
+from app.domain.errors import VantageError
+from app.domain.research import (
+    ComponentQuality,
+    CrossCheckClose,
+    DailyBar,
+    MarketSnapshot,
+    PriceCrossCheckSnapshot,
+)
 from scripts.compare_providers import (
     PARITY_TICKERS,
+    _compare_ticker,
+    render_report,
     TickerResult,
     close_deviations,
     crosscheck_deviations,
@@ -68,7 +77,8 @@ def test_close_deviation_within_and_outside() -> None:
     devs = close_deviations(bars([100.4, 100.0]), bars([100.0, 100.6]))
     assert devs[0] == pytest.approx(0.4)
     assert devs[1] == pytest.approx(100 * 0.6 / 100.6)
-    assert devs[0] <= 0.5 < 0.6 <= 0.6 + devs[1]
+    assert devs[0] <= 0.5
+    assert devs[1] > 0.5
 
 
 def test_close_deviation_ignores_mismatched_dates() -> None:
@@ -152,6 +162,116 @@ def test_evaluate_fetch_failure_is_listed_and_fails() -> None:
 
 
 def test_main_exits_2_without_alpaca_keys(capsys: pytest.CaptureFixture[str]) -> None:
-    settings = Settings(ALPACA_API_KEY_ID="", ALPACA_API_SECRET_KEY="")
+    settings = Settings(_env_file=None, ALPACA_API_KEY_ID="", ALPACA_API_SECRET_KEY="")
     assert main([], settings=settings) == 2
     assert "Alpaca keys are not set" in capsys.readouterr().err
+
+
+NOW = datetime(2026, 1, 30, tzinfo=UTC)
+
+
+class StubMarket:
+    def __init__(
+        self,
+        values: list[float],
+        *,
+        quality: ComponentQuality = ComponentQuality.FRESH,
+        error_code: str | None = None,
+    ) -> None:
+        self.values = values
+        self.quality = quality
+        self.error_code = error_code
+        self.symbols: list[str] = []
+
+    def fetch_daily_snapshot(
+        self, symbol: str, start: date, end: date, retrieved_at: datetime, **_: object
+    ) -> MarketSnapshot:
+        self.symbols.append(symbol)
+        return MarketSnapshot(
+            symbol="AAPL",
+            bars=bars(self.values),
+            provider="stub",
+            retrieved_at=NOW,
+            as_of=NOW,
+            latest_completed_session=START,
+            content_hash="a" * 64,
+            quality=self.quality,
+            error_code=self.error_code,
+        )
+
+
+class StubCross:
+    def __init__(
+        self,
+        *,
+        raises: bool = False,
+        quality: ComponentQuality = ComponentQuality.FRESH,
+        error_code: str | None = None,
+    ) -> None:
+        self.raises = raises
+        self.quality = quality
+        self.error_code = error_code
+
+    def fetch_adjusted_closes(
+        self, symbol: str, start: date, end: date, retrieved_at: datetime
+    ) -> PriceCrossCheckSnapshot:
+        if self.raises:
+            raise VantageError(code="X", safe_message="Tiingo is unavailable.")
+        return PriceCrossCheckSnapshot(
+            symbol="AAPL",
+            provider="tiingo",
+            retrieved_at=NOW,
+            quality=self.quality,
+            error_code=self.error_code,
+            closes=[CrossCheckClose(session_date=START, adjusted_close=100.0)],
+        )
+
+
+def _compare(ref, cand, cross, symbol: str = "AAPL") -> TickerResult:
+    return _compare_ticker(symbol, ref, cand, cross, START, START, NOW)
+
+
+def test_share_class_symbol_uses_a_dash_for_yfinance_only() -> None:
+    ref, cand = StubMarket([100.0, 101.0]), StubMarket([100.0, 101.0])
+    out = _compare(ref, cand, None, symbol="BRK.B")
+    assert ref.symbols == ["BRK-B"]
+    assert cand.symbols == ["BRK.B"]
+    assert out.symbol == "BRK.B"
+    verdict = evaluate([out])
+    assert "BRK.B" in render_report([out], verdict, START, START, False)
+
+
+@pytest.mark.parametrize(
+    "cross",
+    [
+        StubCross(raises=True),
+        StubCross(quality=ComponentQuality.MISSING),
+        StubCross(quality=ComponentQuality.FAILED, error_code="TIINGO_FAILED"),
+    ],
+)
+def test_tiingo_trouble_keeps_the_main_comparison(cross: StubCross) -> None:
+    out = _compare(StubMarket([100.0, 101.0]), StubMarket([100.0, 101.0]), cross)
+    assert out.error is None
+    assert out.return_gap_pp == pytest.approx(0.0)
+    assert out.crosscheck_deviations is None
+    assert out.note is not None and "cross-check unavailable" in out.note
+    assert evaluate([out]).failed_tickers == []
+    report = render_report([out], evaluate([out]), START, START, True)
+    assert "cross-check unavailable" in report
+
+
+def test_non_fresh_provider_state_is_named_in_the_note() -> None:
+    ref = StubMarket([100.0, 101.0])
+    cand = StubMarket(
+        [100.0], quality=ComponentQuality.PARTIAL, error_code="ALPACA_PARTIAL"
+    )
+    out = _compare(ref, cand, None)
+    assert out.error is not None
+    assert "Alpaca" in out.error and "partial" in out.error
+    assert "ALPACA_PARTIAL" in out.error
+    assert "Too few" not in out.error
+
+
+def test_too_few_sessions_message_stays_when_both_are_fresh() -> None:
+    out = _compare(StubMarket([100.0]), StubMarket([100.0]), None)
+    assert out.error == "Too few matching sessions to compare."

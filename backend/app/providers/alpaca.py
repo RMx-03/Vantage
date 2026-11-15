@@ -51,11 +51,11 @@ _MAX_PAGES = 20
 _NY = ZoneInfo("America/New_York")
 
 _MESSAGES = {
-    "auth": "Market data provider rejected the configured credentials.",
+    "auth": "Market data provider refused the configured credentials.",
     "rate_limited": "Market data provider rate limit was reached.",
     "unavailable": "Market prices could not be retrieved.",
-    "rejected": "Market data provider rejected the request.",
-    "not_found": "Market data provider rejected the request.",
+    "rejected": "Market data provider refused the request.",
+    "not_found": "Market data provider refused the request.",
     "malformed": "Market data provider returned an unreadable response.",
 }
 _EMPTY_MESSAGE = "No market prices were available for the requested symbol."

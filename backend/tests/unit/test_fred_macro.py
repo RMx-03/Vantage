@@ -32,7 +32,7 @@ BODIES = {
 HOLIDAY = json.loads((FIXTURES / "holiday.json").read_text())
 
 MESSAGES = {
-    "auth": "FRED rejected the configured API key.",
+    "auth": "FRED refused the configured API key.",
     "rate_limited": "FRED rate limit was reached.",
     "other": "Macro series could not be retrieved.",
 }

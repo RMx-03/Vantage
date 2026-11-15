@@ -22,7 +22,7 @@ RETRIEVED = datetime(2026, 11, 13, 22, 0, tzinfo=UTC)
 PAYLOAD = json.loads((FIXTURES / "prices.json").read_text())
 
 MESSAGES = {
-    "auth": "Tiingo rejected the configured API key.",
+    "auth": "Tiingo refused the configured API key.",
     "rate_limited": "Tiingo rate limit was reached.",
     "other": "Cross-check prices could not be retrieved.",
 }
