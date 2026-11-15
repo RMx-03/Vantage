@@ -39,8 +39,11 @@ def _same_story(candidate: NewsItem, kept: NewsItem) -> bool:
         return True
     if candidate.event_time is None or kept.event_time is None:
         return False
+    cand_title = normalize_title(candidate.title)
     return (
-        normalize_title(candidate.title) == normalize_title(kept.title)
+        # A title with no ASCII alphanumerics normalises to "": never a match.
+        bool(cand_title)
+        and cand_title == normalize_title(kept.title)
         and abs(candidate.event_time - kept.event_time) <= _TITLE_WINDOW
     )
 
@@ -106,8 +109,9 @@ def merge_news(
         quality = ComponentQuality.FAILED
         error_code = "NEWS_PROVIDER_FAILED"
     elif failed_count:
+        # No error code: quality.py reads any news error code as FAILED. Policy v1
+        # derives PARTIAL_NEWS_COVERAGE from the partial quality.
         quality = ComponentQuality.PARTIAL
-        error_code = "PARTIAL_NEWS_COVERAGE"
     elif any(s.quality == ComponentQuality.PARTIAL for s in succeeded):
         quality = ComponentQuality.PARTIAL
     elif all(s.quality == ComponentQuality.MISSING for s in succeeded):

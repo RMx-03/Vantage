@@ -230,16 +230,18 @@ def test_two_providers_one_failing_persists_partial_news() -> None:
     news = repo.save_snapshot.call_args.args[3]
     assert news.provider == "alpaca,finnhub"
     assert news.quality == ComponentQuality.PARTIAL
-    assert news.error_code == "PARTIAL_NEWS_COVERAGE"
+    assert news.error_code is None
     assert len(news.items) == 1
     records = repo.save_snapshot.call_args.kwargs["providers"]
     news_record = next(r for r in records if r.role == "news")
     assert news_record.provider == "alpaca,finnhub"
-    assert news_record.error_code == "PARTIAL_NEWS_COVERAGE"
+    assert news_record.error_code is None
     assert [p.name for p in service.news_providers] == ["alpaca", "finnhub"]
     reasons = [r.code for r in repo.finalize_success.call_args.kwargs["reasons"]]
     assert "PARTIAL_NEWS_COVERAGE" in reasons
     assert "NEWS_PROVIDER_FAILED" not in reasons
+    data_quality = repo.finalize_success.call_args.kwargs["data_quality"]
+    assert data_quality.news == ComponentQuality.PARTIAL
 
 
 def test_all_providers_failing_persists_failed_news() -> None:

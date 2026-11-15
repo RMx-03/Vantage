@@ -217,11 +217,12 @@ def test_all_failed_is_failed() -> None:
     assert merged.provider == "alpaca,finnhub"
 
 
-def test_some_failed_is_partial_with_code() -> None:
+def test_some_failed_is_partial_without_error_code() -> None:
+    # An error code would make quality.py read the whole news role as failed.
     ok = _snap("finnhub", [_item("finnhub", "A")])
     merged = merge_news([_failed("alpaca"), ok], symbol="AAPL", limit=10)
     assert merged.quality == ComponentQuality.PARTIAL
-    assert merged.error_code == "PARTIAL_NEWS_COVERAGE"
+    assert merged.error_code is None
     assert merged.provider == "alpaca,finnhub"
     assert len(merged.items) == 1
 
@@ -247,3 +248,14 @@ def test_fresh_otherwise() -> None:
     f = _snap("finnhub", [])
     merged = merge_news([a, f], symbol="AAPL", limit=10)
     assert merged.quality == ComponentQuality.FRESH
+
+
+def test_non_latin_titles_without_urls_do_not_merge() -> None:
+    a = _item("alpaca", "苹果发布新产品", url=None, event_time=T0)
+    f = _item(
+        "finnhub", "特斯拉交付量上升", url=None, event_time=T0 + timedelta(hours=1)
+    )
+    merged = merge_news(
+        [_snap("alpaca", [a]), _snap("finnhub", [f])], symbol="AAPL", limit=10
+    )
+    assert len(merged.items) == 2
