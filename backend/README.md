@@ -84,10 +84,10 @@ Other settings that matter in a deployment:
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP delivery. For Gmail: `smtp.gmail.com`, `587` (STARTTLS; `465` uses implicit TLS), the account address and a Google app password. TLS is always negotiated before the password is sent. |
 | `BREVO_API_KEY` | A Brevo API key (`xkeysib-…`), not an SMTP key. |
 | `EMAIL_FROM` | The sender. With Gmail, the account address or a verified alias; with Brevo, a sender verified there. |
-| `MARKET_PROVIDER`, `NEWS_PROVIDERS`, `FILINGS_PROVIDER`, `MACRO_PROVIDER`, `PRICE_CROSSCHECK_PROVIDER` | Which provider serves each data role. Defaults: `yfinance`, `yfinance` (comma list), `none`, `none`, `none`. This release ships `yfinance` and `fixture` only; the other provider names arrive with their providers. |
-| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, `FINNHUB_API_KEY`, `FRED_API_KEY`, `TIINGO_API_KEY` | Provider credentials, empty by default and redacted. A missing key leaves that role not configured; it does not stop startup. Not used until their providers arrive. |
+| `MARKET_PROVIDER`, `NEWS_PROVIDERS`, `FILINGS_PROVIDER`, `MACRO_PROVIDER`, `PRICE_CROSSCHECK_PROVIDER` | Which provider serves each data role. Defaults: `yfinance`, `yfinance` (comma list), `none`, `none`, `none`. Allowed values are listed in `.env.example`; see Data providers below. |
+| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, `FINNHUB_API_KEY`, `FRED_API_KEY`, `TIINGO_API_KEY` | Provider credentials, empty by default and redacted. A missing key leaves that role not configured; it does not stop startup. |
 | `SEC_USER_AGENT` | User-Agent for SEC EDGAR; the SEC requires it and a contact in it. No default; redacted. |
-| `PROVIDER_TIMEOUT_SECONDS` | Per-request timeout for data providers (default `6`). |
+| `PROVIDER_TIMEOUT_SECONDS` | Time budget for one provider call, covering all of its requests and the retry (default `6`). |
 | `APP_BASE_URL` | The frontend origin that links in emails point to. |
 | `EMAIL_VERIFICATION_TTL_SECONDS`, `PASSWORD_RESET_TTL_SECONDS` | Link lifetimes; the email text states the same values. |
 
@@ -130,9 +130,29 @@ python -m scripts.purge_auth_attempts
 
 Running the file directly fails with `No module named 'app'`.
 
+## Data providers
+
+Each data role names its provider in configuration; the defaults keep `yfinance` for prices and news, and filings, macro and the price cross-check stay off. Keys are optional and are read from the environment only. Never commit them.
+
+| Provider | Role | Where the free key comes from |
+|---|---|---|
+| Alpaca | Market data and news | A free-tier account at alpaca.markets gives `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY`. |
+| Finnhub | News | A free-tier account at finnhub.io gives `FINNHUB_API_KEY`. |
+| SEC EDGAR | Filings and fundamentals | No key. Set `SEC_USER_AGENT`. |
+| FRED | Macro series | A free API key from the St. Louis Fed's FRED site (fred.stlouisfed.org) gives `FRED_API_KEY`. |
+| Tiingo | Price cross-check | A free-tier account at tiingo.com gives `TIINGO_API_KEY`. |
+
+SEC EDGAR's fair-access policy requires every request to identify the caller. Set `SEC_USER_AGENT` to a name and a contact email, for example `Vantage-research admin@example.com` (use your own contact details).
+
+Alpaca's free market data uses the SIP feed, which excludes the most recent 15 minutes. The provider clamps its end time to that boundary, so a session that has only just closed can come back incomplete and is shown as stale until the data catches up.
+
+EDGAR, FRED and Tiingo are registered and can be selected, but research runs do not call them yet. They are wired into runs in the next stage.
+
+A manual parity report compares Alpaca prices with yfinance, with an optional Tiingo cross-check. Run it from `backend/` with `uv run python -m scripts.compare_providers --output report.md`. It needs the Alpaca keys; Tiingo is optional. It is never run in CI, and a second run within the hour can exhaust Tiingo's hourly limit.
+
 ## Telemetry
 
-`TRACE_EXPORT_ENABLED=false` keeps spans local and performs no Langfuse export. When enabled with `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST`, the Langfuse client registers its exporter on the same OpenTelemetry provider. Export is restricted to the Vantage instrumentation scope after attributes, exception events, and status descriptions are redacted. Raw tokens, emails, user IDs, provider payloads, and exception strings are not exported. Stored rate-limit keys and user hashes are salted with `TELEMETRY_USER_SALT`, so they cannot be reversed to an address.
+`TRACE_EXPORT_ENABLED=false` keeps spans local and performs no Langfuse export. When enabled with `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST`, the Langfuse client registers its exporter on the same OpenTelemetry provider. Each `provider_request` span also carries `vantage.provider.role` (`market` or `news`) and `vantage.provider.name`; no other provider detail is exported. Export is restricted to the Vantage instrumentation scope after attributes, exception events, and status descriptions are redacted. Raw tokens, emails, user IDs, provider payloads, and exception strings are not exported. Stored rate-limit keys and user hashes are salted with `TELEMETRY_USER_SALT`, so they cannot be reversed to an address.
 
 ## Verification
 

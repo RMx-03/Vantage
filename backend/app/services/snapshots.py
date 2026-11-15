@@ -11,7 +11,7 @@ from app.domain.research import (
 )
 
 
-def _bar_fields(bar: DailyBar) -> dict[str, Any]:
+def bar_fields(bar: DailyBar) -> dict[str, Any]:
     return {
         "session_date": bar.session_date.isoformat(),
         "open": bar.open,
@@ -90,7 +90,7 @@ def combined_snapshot_hash(
     if market.context_bars:
         payload["context_bars"] = {
             symbol: [
-                _bar_fields(bar)
+                bar_fields(bar)
                 for bar in sorted(
                     market.context_bars[symbol], key=lambda b: b.session_date
                 )
@@ -102,6 +102,11 @@ def combined_snapshot_hash(
             fundamentals.model_dump(mode="json")
         )
     if macro is not None:
-        payload["macro"] = _without_retrieved_at(macro.model_dump(mode="json"))
+        ordered = macro.model_copy(
+            update={
+                "observations": sorted(macro.observations, key=lambda o: o.series_id)
+            }
+        )
+        payload["macro"] = _without_retrieved_at(ordered.model_dump(mode="json"))
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

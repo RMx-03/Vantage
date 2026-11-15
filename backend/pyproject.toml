@@ -28,6 +28,7 @@ dependencies = [
     "opentelemetry-sdk==1.44.0",
     "opentelemetry-instrumentation-fastapi==0.65b0",
     "opentelemetry-exporter-otlp-proto-http==1.44.0",
+    "defusedxml>=0.7.1",
 ]
 
 [dependency-groups]

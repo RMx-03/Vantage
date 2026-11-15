@@ -175,6 +175,7 @@ class EvidenceDetails(StrictModel):
     transaction_code: str | None = None
     direction: Literal["acquired", "disposed"] | None = None
     parse_state: Literal["parsed", "unparsed", "not_fetched"] | None = None
+    tagged_symbols: list[str] = Field(default_factory=list)
 
 
 class NewsItem(StrictModel):

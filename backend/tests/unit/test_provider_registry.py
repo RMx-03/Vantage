@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from app.core.config import Settings
@@ -102,12 +104,30 @@ def test_factory_returning_none_marks_role_not_configured() -> None:
     assert "market" in providers.not_configured
 
 
-def test_two_news_providers_are_refused_until_merge() -> None:
-    with pytest.raises(VantageError) as exc:
-        build_providers(
-            Settings(_env_file=None, NEWS_PROVIDERS=["yfinance", "fixture"])
+def test_two_news_providers_build_with_keys() -> None:
+    providers = build_providers(
+        Settings(
+            _env_file=None,
+            NEWS_PROVIDERS=["alpaca", "finnhub"],
+            ALPACA_API_KEY_ID="id",
+            ALPACA_API_SECRET_KEY="secret",
+            FINNHUB_API_KEY="fh",
         )
-    assert exc.value.code == "CONFIG_ERROR"
+    )
+    assert [p.name for p in providers.news] == ["alpaca", "finnhub"]
+    assert "news" not in providers.not_configured
+
+
+def test_missing_alpaca_key_leaves_one_news_provider_configured() -> None:
+    providers = build_providers(
+        Settings(
+            _env_file=None,
+            NEWS_PROVIDERS=["alpaca", "finnhub"],
+            FINNHUB_API_KEY="fh",
+        )
+    )
+    assert [p.name for p in providers.news] == ["finnhub"]
+    assert "news" not in providers.not_configured
 
 
 def test_duplicate_registration_raises() -> None:
@@ -119,3 +139,85 @@ def test_duplicate_registration_raises() -> None:
 
 def test_names_are_sorted() -> None:
     assert default_registry().names("llm") == ("disabled", "gemini", "groq", "ollama")
+
+
+# (role attribute, settings that select it, key fields, header holding the value)
+_CRED_CASES = [
+    (
+        "market",
+        {"MARKET_PROVIDER": "alpaca"},
+        ("ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY"),
+        "APCA-API-KEY-ID",
+    ),
+    (
+        "news",
+        {"NEWS_PROVIDERS": ["alpaca"]},
+        ("ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY"),
+        "APCA-API-KEY-ID",
+    ),
+    (
+        "news",
+        {"NEWS_PROVIDERS": ["finnhub"]},
+        ("FINNHUB_API_KEY",),
+        "X-Finnhub-Token",
+    ),
+    (
+        "filings",
+        {"FILINGS_PROVIDER": "edgar"},
+        ("SEC_USER_AGENT",),
+        "User-Agent",
+    ),
+    ("macro", {"MACRO_PROVIDER": "fred"}, ("FRED_API_KEY",), None),
+    (
+        "crosscheck",
+        {"PRICE_CROSSCHECK_PROVIDER": "tiingo"},
+        ("TIINGO_API_KEY",),
+        "Authorization",
+    ),
+]
+
+
+def _built(role: str, providers):
+    built = getattr(providers, role)
+    return built[0] if role == "news" and built else built
+
+
+@pytest.mark.parametrize(("role", "select", "fields", "header"), _CRED_CASES)
+def test_credentials_are_stripped(role, select, fields, header) -> None:
+    values = {f: f"  value-{f.lower()}\t" for f in fields}
+    providers = build_providers(Settings(_env_file=None, **select, **values))
+    built = _built(role, providers)
+    assert built is not None
+    if header is not None:
+        sent = built._http._client.headers[header]
+        assert "  " not in sent and not sent.endswith(("\t", " "))
+        if header != "Authorization" and header != "User-Agent":
+            assert sent == f"value-{fields[0].lower()}"
+
+
+@pytest.mark.parametrize("planted", ["cl\u00e9-secret", "key\u2013secret"])
+@pytest.mark.parametrize(("role", "select", "fields", "header"), _CRED_CASES)
+def test_unusable_credentials_leave_the_role_unconfigured(
+    role, select, fields, header, planted, caplog
+) -> None:
+    values = {f: "plainvalue" for f in fields}
+    values[fields[-1]] = planted
+    with caplog.at_level(logging.DEBUG):
+        providers = build_providers(Settings(_env_file=None, **select, **values))
+    assert _built(role, providers) in (None, ())
+    assert planted not in caplog.text
+    assert "provider_credential_unusable" in caplog.text
+    assert role in providers.not_configured
+
+
+def test_whitespace_only_credential_is_unconfigured(caplog) -> None:
+    with caplog.at_level(logging.DEBUG):
+        providers = build_providers(
+            Settings(
+                _env_file=None,
+                NEWS_PROVIDERS=["finnhub"],
+                FINNHUB_API_KEY="   ",
+            )
+        )
+    assert providers.news == ()
+    assert "news" in providers.not_configured

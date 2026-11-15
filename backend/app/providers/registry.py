@@ -4,6 +4,7 @@ Later stages add providers by registering factories; nothing else in the
 research path needs to know which implementation serves a role.
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -11,6 +12,7 @@ from typing import Literal
 
 from app.core.config import Settings
 from app.domain.errors import VantageError
+from app.providers.alpaca import AlpacaMarketProvider, AlpacaNewsProvider
 from app.providers.contracts import (
     FilingsProvider,
     FundamentalsProvider,
@@ -20,6 +22,9 @@ from app.providers.contracts import (
     NewsProvider,
     PriceCrossCheckProvider,
 )
+from app.providers.edgar import EdgarProvider
+from app.providers.finnhub import FinnhubNewsProvider
+from app.providers.fred import FredMacroProvider
 from app.providers.fixture_provider import FixtureProvider
 from app.providers.llm import (
     DisabledInterpretationProvider,
@@ -27,16 +32,17 @@ from app.providers.llm import (
     GroqInterpretationProvider,
     OllamaInterpretationProvider,
 )
+from app.providers.tiingo import TiingoCrossCheckProvider
 from app.providers.yfinance_provider import YFinanceSnapshotProvider
+from app.repositories.provider_cache import PostgresProviderCache
+
+logger = logging.getLogger(__name__)
 
 ProviderRole = Literal["market", "news", "filings", "macro", "crosscheck", "llm"]
 ProviderFactory = Callable[[Settings], object | None]
 
 # Roles where the literal name "none" turns the role off.
 _OPTIONAL_ROLES: frozenset[str] = frozenset({"filings", "macro", "crosscheck"})
-
-# Several news providers need the merge that 3c adds; until then refuse them.
-MAX_NEWS_PROVIDERS = 1
 
 
 class ProviderRegistry:
@@ -86,11 +92,101 @@ def _yfinance(_: Settings) -> object:
     return YFinanceSnapshotProvider()
 
 
+def _usable_secret(value: str | None) -> str | None:
+    """Strip a credential; None when empty or outside printable ASCII.
+
+    A non-ASCII value would make the httpx client constructor raise, and surrounding
+    whitespace makes h11 reject the header with text that echoes the value.
+    """
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped or any(not 0x20 <= ord(ch) <= 0x7E for ch in stripped):
+        return None
+    return stripped
+
+
+def _credentials(role: str, name: str, *values: str | None) -> tuple[str, ...] | None:
+    """All values usable, or None. Never logs a value or its length."""
+    usable = [_usable_secret(v) for v in values]
+    if all(v is not None for v in usable):
+        return tuple(v for v in usable if v is not None)
+    if any(values):
+        logger.warning("provider_credential_unusable role=%s name=%s", role, name)
+    return None
+
+
+def _alpaca_market(s: Settings) -> object | None:
+    creds = _credentials(
+        "market", "alpaca", s.ALPACA_API_KEY_ID, s.ALPACA_API_SECRET_KEY
+    )
+    if creds is None:
+        return None
+    return AlpacaMarketProvider(
+        creds[0], creds[1], timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
+    )
+
+
+def _alpaca_news(s: Settings) -> object | None:
+    creds = _credentials("news", "alpaca", s.ALPACA_API_KEY_ID, s.ALPACA_API_SECRET_KEY)
+    if creds is None:
+        return None
+    return AlpacaNewsProvider(
+        creds[0], creds[1], timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
+    )
+
+
+def _finnhub_news(s: Settings) -> object | None:
+    creds = _credentials("news", "finnhub", s.FINNHUB_API_KEY)
+    if creds is None:
+        return None
+    return FinnhubNewsProvider(
+        creds[0], timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
+    )
+
+
+def _edgar(s: Settings) -> object | None:
+    creds = _credentials("filings", "edgar", s.SEC_USER_AGENT)
+    if creds is None:
+        return None
+    return EdgarProvider(
+        creds[0],
+        PostgresProviderCache(),
+        timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS),
+    )
+
+
+def _fred(s: Settings) -> object | None:
+    creds = _credentials("macro", "fred", s.FRED_API_KEY)
+    if creds is None:
+        return None
+    return FredMacroProvider(
+        creds[0],
+        PostgresProviderCache(),
+        timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS),
+    )
+
+
+def _tiingo(s: Settings) -> object | None:
+    creds = _credentials("crosscheck", "tiingo", s.TIINGO_API_KEY)
+    if creds is None:
+        return None
+    return TiingoCrossCheckProvider(
+        creds[0], timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
+    )
+
+
 @lru_cache(maxsize=1)
 def default_registry() -> ProviderRegistry:
     registry = ProviderRegistry()
+    registry.register("market", "alpaca", _alpaca_market)
     registry.register("market", "yfinance", _yfinance)
+    registry.register("news", "alpaca", _alpaca_news)
+    registry.register("news", "finnhub", _finnhub_news)
     registry.register("news", "yfinance", _yfinance)
+    registry.register("filings", "edgar", _edgar)
+    registry.register("macro", "fred", _fred)
+    registry.register("crosscheck", "tiingo", _tiingo)
     registry.register("market", "fixture", _fixture)
     registry.register("news", "fixture", _fixture)
     registry.register("llm", "disabled", lambda s: DisabledInterpretationProvider())
@@ -145,14 +241,6 @@ def build_providers(
     settings: Settings, registry: ProviderRegistry | None = None
 ) -> ProviderSet:
     reg = registry or default_registry()
-    if len(settings.NEWS_PROVIDERS) > MAX_NEWS_PROVIDERS:
-        raise VantageError(
-            code="CONFIG_ERROR",
-            safe_message=(
-                "Several news providers need the news merge, "
-                "which is not available yet."
-            ),
-        )
     market = reg.build("market", settings.MARKET_PROVIDER, settings)
     news = tuple(
         provider

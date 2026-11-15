@@ -51,6 +51,7 @@ export interface EvidenceDetails {
   transaction_code?: string | null;
   direction?: 'acquired' | 'disposed' | null;
   parse_state?: 'parsed' | 'unparsed' | 'not_fetched' | null;
+  tagged_symbols?: string[];
 }
 
 export interface EvidenceSource {

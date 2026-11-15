@@ -223,3 +223,28 @@ def test_summary_details_and_source_type_change_the_hash() -> None:
         )
         seen.add(combined_snapshot_hash(market, changed))
     assert len(seen) == 4
+
+
+def test_macro_observation_order_does_not_change_the_hash() -> None:
+    market, news = _snapshots()
+    now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
+    rows = [
+        MacroObservation(
+            series_id=series,
+            value=value,
+            observation_date=date(2026, 9, 12),
+            quality=ComponentQuality.FRESH,
+        )
+        for series, value in (("DFF", 3.9), ("DGS10", 4.1), ("VIXCLS", 16.0))
+    ]
+    a = MacroSnapshot(
+        provider="fred",
+        retrieved_at=now,
+        quality=ComponentQuality.FRESH,
+        observations=rows,
+    )
+    b = a.model_copy(update={"observations": list(reversed(rows))})
+
+    assert combined_snapshot_hash(market, news, macro=a) == combined_snapshot_hash(
+        market, news, macro=b
+    )

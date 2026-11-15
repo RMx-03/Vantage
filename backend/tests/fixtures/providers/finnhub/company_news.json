@@ -1,0 +1,68 @@
+[
+  {
+    "category": "company",
+    "datetime": 1794580600,
+    "headline": "Apple expands on-device AI features across iPhone models",
+    "id": 130750001,
+    "image": "",
+    "related": "AAPL",
+    "source": "Example Wire",
+    "summary": "Apple described new on-device AI features for iPhone models at a developer briefing.",
+    "url": "https://www.example-wire.com/technology/apple-on-device-ai-features-2026-11-13"
+  },
+  {
+    "category": "company",
+    "datetime": 1794510725,
+    "headline": "Apple analyst note flags services mix in the December quarter",
+    "id": 130750002,
+    "image": "",
+    "related": "AAPL, msft",
+    "source": "Example Finance",
+    "summary": "<div>An analyst note discusses the <em>services mix</em>&nbsp;for the   December quarter.</div>",
+    "url": "https://www.example-finance.com/notes/apple-services-mix"
+  },
+  {
+    "category": "company",
+    "datetime": 1794414000,
+    "headline": "Apple supply chain checks point to steady component orders",
+    "id": 130750003,
+    "image": "",
+    "related": "AAPL",
+    "source": "Example Finance",
+    "summary": "",
+    "url": "https://www.example-finance.com/news/apple-supply-chain-checks"
+  },
+  {
+    "category": "company",
+    "datetime": 1794475800,
+    "headline": "",
+    "id": 130750004,
+    "image": "",
+    "related": "AAPL",
+    "source": "Example Finance",
+    "summary": "An item whose headline is empty.",
+    "url": "https://www.example-finance.com/news/empty-headline"
+  },
+  {
+    "category": "company",
+    "datetime": 1793880000,
+    "headline": "Apple store traffic data from the prior week",
+    "id": 130750005,
+    "image": "",
+    "related": "AAPL",
+    "source": "Example Wire",
+    "summary": "An older item that falls before the lookback window.",
+    "url": "https://www.example-wire.com/technology/apple-store-traffic"
+  },
+  {
+    "category": "company",
+    "datetime": 1794350700,
+    "headline": "Apple developer conference schedule published",
+    "id": 130750006,
+    "image": "",
+    "related": "",
+    "source": "",
+    "summary": "The schedule lists sessions on machine learning and privacy.",
+    "url": "https://www.example-wire.com/technology/apple-developer-schedule"
+  }
+]
