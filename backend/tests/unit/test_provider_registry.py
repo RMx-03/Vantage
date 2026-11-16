@@ -221,3 +221,9 @@ def test_whitespace_only_credential_is_unconfigured(caplog) -> None:
         )
     assert providers.news == ()
     assert "news" in providers.not_configured
+
+
+def test_fixture_is_registered_for_filings_and_macro() -> None:
+    reg = default_registry()
+    assert "fixture" in reg.names("filings")
+    assert "fixture" in reg.names("macro")
