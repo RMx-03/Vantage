@@ -97,7 +97,7 @@ class ResearchMetric(StrictModel):
     key: str
     label: str
     value: float | int | None
-    unit: Literal["ratio", "percent", "usd", "count", "sessions"]
+    unit: Literal["ratio", "percent", "usd", "count", "sessions", "index"]
     window_sessions: int | None
     as_of: datetime
     calculation_version: str

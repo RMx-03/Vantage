@@ -581,7 +581,8 @@
               "percent",
               "usd",
               "count",
-              "sessions"
+              "sessions",
+              "index"
             ],
             "title": "Unit",
             "type": "string"
