@@ -86,7 +86,7 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
                     interp = interpretation_provider.interpret(
                         symbol=state["symbol"],
                         metrics=state.get("metrics", []),
-                        news=state["news"],
+                        evidence=state["news"].items,
                     )
                     failure_code = None
                 except VantageError as exc:

@@ -25,6 +25,13 @@ def test_eval_dataset_structure_and_completeness() -> None:
         "target_price",
         "accepted_abstention",
         "accepted_cited",
+        "attribution_market",
+        "attribution_sector",
+        "attribution_company",
+        "attribution_mixed",
+        "attribution_unclear",
+        "filing_only",
+        "attribution_downgrade",
     }
     for case in EVAL_CASES:
         assert isinstance(case["accepted"], bool)
@@ -36,10 +43,24 @@ def test_eval_dataset_structure_and_completeness() -> None:
 def test_eval_dataset_uses_runtime_safety_gate(case: dict) -> None:
     if case["accepted"]:
         result = validate_interpretation(
-            case["payload"], set(case["allowed_evidence_ids"])
+            case["payload"],
+            set(case["allowed_evidence_ids"]),
+            company_specific_ids=set(case.get("company_specific_evidence_ids", [])),
         )
-        assert result.model_dump() == case["payload"]
+        if "expected" in case:
+            expected = case["expected"]
+        else:
+            # Pre-v3 cases carry no attribution of their own.
+            expected = {
+                "attribution": None if case["payload"]["abstained"] else "unclear",
+                **case["payload"],
+            }
+        assert result.model_dump() == expected
     else:
         with pytest.raises(VantageError) as caught:
-            validate_interpretation(case["payload"], set(case["allowed_evidence_ids"]))
+            validate_interpretation(
+                case["payload"],
+                set(case["allowed_evidence_ids"]),
+                company_specific_ids=set(case.get("company_specific_evidence_ids", [])),
+            )
         assert caught.value.code == "MODEL_OUTPUT_INVALID"

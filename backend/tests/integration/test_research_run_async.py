@@ -77,7 +77,7 @@ class GatedInterpreter:
         self.gate = threading.Event()
 
     def interpret(
-        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        self, *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> AIInterpretation:
         self.entered.set()
         if not self.gate.wait(GATE_TIMEOUT):

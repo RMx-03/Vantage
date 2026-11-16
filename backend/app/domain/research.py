@@ -132,6 +132,9 @@ class AIInterpretation(StrictModel):
     warnings: list[str] = Field(default_factory=list)
     abstained: bool = False
     abstention_reason: str | None = None
+    attribution: Literal["market", "sector", "company", "mixed", "unclear"] | None = (
+        None
+    )
 
 
 class DailyBar(StrictModel):

@@ -1908,5 +1908,497 @@
       "abstained": false,
       "abstention_reason": null
     }
+  },
+  {
+    "case_id": "attr-market-01",
+    "category": "attribution_market",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n1"
+    ],
+    "payload": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0.0,
+      "summary": "The move tracked the broad market, and the supplied headline is general market commentary.",
+      "evidence_ids": [
+        "n1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "market"
+    },
+    "expected": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0.0,
+      "summary": "The move tracked the broad market, and the supplied headline is general market commentary.",
+      "evidence_ids": [
+        "n1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "market"
+    }
+  },
+  {
+    "case_id": "attr-market-02",
+    "category": "attribution_market",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n2"
+    ],
+    "payload": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.3,
+      "summary": "The decline followed the wider market lower with no issuer-specific evidence supplied.",
+      "evidence_ids": [
+        "n2"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "market"
+    },
+    "expected": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.3,
+      "summary": "The decline followed the wider market lower with no issuer-specific evidence supplied.",
+      "evidence_ids": [
+        "n2"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "market"
+    }
+  },
+  {
+    "case_id": "attr-sector-01",
+    "category": "attribution_sector",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n3"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.1,
+      "summary": "The move followed the sector more than the market, in line with sector-wide coverage.",
+      "evidence_ids": [
+        "n3"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "sector"
+    },
+    "expected": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.1,
+      "summary": "The move followed the sector more than the market, in line with sector-wide coverage.",
+      "evidence_ids": [
+        "n3"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "sector"
+    }
+  },
+  {
+    "case_id": "attr-sector-02",
+    "category": "attribution_sector",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n4"
+    ],
+    "payload": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.2,
+      "summary": "Peers in the same sector moved together, and the sector explains more than the market does.",
+      "evidence_ids": [
+        "n4"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "sector"
+    },
+    "expected": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.2,
+      "summary": "Peers in the same sector moved together, and the sector explains more than the market does.",
+      "evidence_ids": [
+        "n4"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "sector"
+    }
+  },
+  {
+    "case_id": "attr-company-01",
+    "category": "attribution_company",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n5",
+      "f1"
+    ],
+    "company_specific_evidence_ids": [
+      "f1"
+    ],
+    "payload": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.4,
+      "summary": "A company-specific filing and related coverage explain the move.",
+      "evidence_ids": [
+        "n5",
+        "f1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "company"
+    },
+    "expected": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.4,
+      "summary": "A company-specific filing and related coverage explain the move.",
+      "evidence_ids": [
+        "n5",
+        "f1"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "company"
+    }
+  },
+  {
+    "case_id": "attr-company-02",
+    "category": "attribution_company",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n6"
+    ],
+    "company_specific_evidence_ids": [
+      "n6"
+    ],
+    "payload": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.5,
+      "summary": "Company-specific news about a product delay explains the move.",
+      "evidence_ids": [
+        "n6"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "company"
+    },
+    "expected": {
+      "sentiment_label": "negative",
+      "sentiment_score": -0.5,
+      "summary": "Company-specific news about a product delay explains the move.",
+      "evidence_ids": [
+        "n6"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "company"
+    }
+  },
+  {
+    "case_id": "attr-mixed-01",
+    "category": "attribution_mixed",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n7",
+      "n8"
+    ],
+    "company_specific_evidence_ids": [
+      "n7"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.0,
+      "summary": "Company-specific news and a broad sector move both appear to contribute.",
+      "evidence_ids": [
+        "n7",
+        "n8"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "mixed"
+    },
+    "expected": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.0,
+      "summary": "Company-specific news and a broad sector move both appear to contribute.",
+      "evidence_ids": [
+        "n7",
+        "n8"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "mixed"
+    }
+  },
+  {
+    "case_id": "attr-mixed-02",
+    "category": "attribution_mixed",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "f2",
+      "n9"
+    ],
+    "company_specific_evidence_ids": [
+      "f2"
+    ],
+    "payload": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0.05,
+      "summary": "A company filing and a market-wide move both fit the day.",
+      "evidence_ids": [
+        "f2",
+        "n9"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "mixed"
+    },
+    "expected": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0.05,
+      "summary": "A company filing and a market-wide move both fit the day.",
+      "evidence_ids": [
+        "f2",
+        "n9"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "mixed"
+    }
+  },
+  {
+    "case_id": "attr-unclear-01",
+    "category": "attribution_unclear",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n10"
+    ],
+    "payload": {
+      "sentiment_label": "neutral",
+      "sentiment_score": null,
+      "summary": "The supplied evidence does not support a call on what drove the move.",
+      "evidence_ids": [
+        "n10"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "unclear"
+    },
+    "expected": {
+      "sentiment_label": "neutral",
+      "sentiment_score": null,
+      "summary": "The supplied evidence does not support a call on what drove the move.",
+      "evidence_ids": [
+        "n10"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "unclear"
+    }
+  },
+  {
+    "case_id": "attr-unclear-02",
+    "category": "attribution_unclear",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n11"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.0,
+      "summary": "Evidence is thin and points in several directions, so no driver is named.",
+      "evidence_ids": [
+        "n11"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "unclear"
+    },
+    "expected": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.0,
+      "summary": "Evidence is thin and points in several directions, so no driver is named.",
+      "evidence_ids": [
+        "n11"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "unclear"
+    }
+  },
+  {
+    "case_id": "filing-only-01",
+    "category": "filing_only",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "f3"
+    ],
+    "company_specific_evidence_ids": [
+      "f3",
+      "i1"
+    ],
+    "payload": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0.0,
+      "summary": "A current report from the company is the only supplied evidence and it relates to the issuer.",
+      "evidence_ids": [
+        "f3"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "company"
+    },
+    "expected": {
+      "sentiment_label": "neutral",
+      "sentiment_score": 0.0,
+      "summary": "A current report from the company is the only supplied evidence and it relates to the issuer.",
+      "evidence_ids": [
+        "f3"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "company"
+    }
+  },
+  {
+    "case_id": "filing-only-02",
+    "category": "filing_only",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "i2",
+      "f4"
+    ],
+    "company_specific_evidence_ids": [
+      "i2",
+      "f4"
+    ],
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.1,
+      "summary": "An insider transaction filing and a company report are the only evidence, both specific to the issuer.",
+      "evidence_ids": [
+        "i2",
+        "f4"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "company"
+    },
+    "expected": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.1,
+      "summary": "An insider transaction filing and a company report are the only evidence, both specific to the issuer.",
+      "evidence_ids": [
+        "i2",
+        "f4"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "company"
+    }
+  },
+  {
+    "case_id": "attr-downgrade-01",
+    "category": "attribution_downgrade",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n12",
+      "n13"
+    ],
+    "company_specific_evidence_ids": [
+      "n13"
+    ],
+    "payload": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.3,
+      "summary": "The reading leans on general coverage that is not specific to the company.",
+      "evidence_ids": [
+        "n12"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "company"
+    },
+    "expected": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.3,
+      "summary": "The reading leans on general coverage that is not specific to the company.",
+      "evidence_ids": [
+        "n12"
+      ],
+      "warnings": [
+        "Attribution was set to unclear because no company-specific evidence was cited."
+      ],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "unclear"
+    }
+  },
+  {
+    "case_id": "attr-downgrade-02",
+    "category": "attribution_downgrade",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n12",
+      "n13"
+    ],
+    "company_specific_evidence_ids": [
+      "n13"
+    ],
+    "payload": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.3,
+      "summary": "The reading leans on general coverage that is not specific to the company.",
+      "evidence_ids": [
+        "n12"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "mixed"
+    },
+    "expected": {
+      "sentiment_label": "positive",
+      "sentiment_score": 0.3,
+      "summary": "The reading leans on general coverage that is not specific to the company.",
+      "evidence_ids": [
+        "n12"
+      ],
+      "warnings": [
+        "Attribution was set to unclear because no company-specific evidence was cited."
+      ],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "unclear"
+    }
   }
 ]

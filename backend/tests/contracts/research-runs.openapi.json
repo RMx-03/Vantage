@@ -20,6 +20,24 @@
             ],
             "title": "Abstention Reason"
           },
+          "attribution": {
+            "anyOf": [
+              {
+                "enum": [
+                  "market",
+                  "sector",
+                  "company",
+                  "mixed",
+                  "unclear"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
           "evidence_ids": {
             "items": {
               "type": "string"

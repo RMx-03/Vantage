@@ -295,7 +295,7 @@ def mock_llm():
     llm.model = "gemini-2.5-flash"
 
     def interpret(
-        *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> AIInterpretation:
         return AIInterpretation(
             sentiment_label="positive",
@@ -571,6 +571,7 @@ def test_model_failure_is_a_persisted_degraded_success(
         "warnings": ["AI interpretation failed or was unavailable."],
         "abstained": True,
         "abstention_reason": "MODEL_UNAVAILABLE",
+        "attribution": None,
     }
 
 
@@ -653,7 +654,7 @@ def test_new_run_records_the_prompt_version_the_code_sends(
     )
     assert response.status_code == 201
     body = response.json()
-    assert PROMPT_VERSION == "research-interpretation-v2"
+    assert PROMPT_VERSION == "research-interpretation-v3"
     assert body["model_info"]["prompt_version"] == PROMPT_VERSION
 
     with SessionFactory() as session:

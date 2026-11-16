@@ -1,7 +1,7 @@
 import json
 import re
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from typing import Any
 import httpx
 from groq import APIConnectionError
@@ -11,7 +11,7 @@ from app.core.config import GROQ_STRICT_JSON_SCHEMA_MODELS
 from app.domain.errors import VantageError
 from app.domain.research import (
     AIInterpretation,
-    NewsSnapshot,
+    NewsItem,
     ResearchMetric,
 )
 from app.prompts.research_interpretation import (
@@ -132,13 +132,29 @@ class DisabledInterpretationProvider(InterpretationProvider):
     enabled: bool = False
 
     def interpret(
-        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        self, *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> None:
         return None
 
 
+UNCLEAR_ATTRIBUTION_WARNING = (
+    "Attribution was set to unclear because no company-specific evidence was cited."
+)
+
+
+def _company_specific_ids(evidence: list[NewsItem]) -> set[str]:
+    return {
+        item.evidence_id
+        for item in evidence
+        if item.details is not None and item.details.company_specific is True
+    }
+
+
 def validate_interpretation(
-    payload: object, allowed_evidence_ids: set[str]
+    payload: object,
+    allowed_evidence_ids: set[str],
+    *,
+    company_specific_ids: Collection[str] = (),
 ) -> AIInterpretation:
     try:
         if isinstance(payload, str):
@@ -187,6 +203,20 @@ def validate_interpretation(
         raise VantageError(
             code="MODEL_OUTPUT_INVALID",
             safe_message="AI interpretation contained inconsistent abstention fields.",
+        )
+    if result.abstained:
+        return result.model_copy(update={"attribution": None})
+    if result.attribution is None:
+        return result.model_copy(update={"attribution": "unclear"})
+    if result.attribution in {"company", "mixed"} and not (
+        set(result.evidence_ids) & set(company_specific_ids)
+    ):
+        # Appended in code after the text checks, so it is not itself checked.
+        return result.model_copy(
+            update={
+                "attribution": "unclear",
+                "warnings": [*result.warnings, UNCLEAR_ATTRIBUTION_WARNING],
+            }
         )
     return result
 
@@ -240,10 +270,10 @@ class GeminiInterpretationProvider(InterpretationProvider):
         )
 
     def interpret(
-        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        self, *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> AIInterpretation:
-        allowed_evidence_ids = {item.evidence_id for item in news.items}
-        input_data = build_interpretation_input(symbol, metrics, news)
+        allowed_evidence_ids = {item.evidence_id for item in evidence}
+        input_data = build_interpretation_input(symbol, metrics, evidence)
         user_content = json.dumps(input_data)
 
         from google.genai import types
@@ -271,7 +301,9 @@ class GeminiInterpretationProvider(InterpretationProvider):
                     safe_message="Model refused or blocked content.",
                 )
         return validate_interpretation(
-            getattr(response, "text", "") or "", allowed_evidence_ids
+            getattr(response, "text", "") or "",
+            allowed_evidence_ids,
+            company_specific_ids=_company_specific_ids(evidence),
         )
 
 
@@ -309,10 +341,10 @@ class GroqInterpretationProvider(InterpretationProvider):
         )
 
     def interpret(
-        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        self, *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> AIInterpretation:
-        allowed_evidence_ids = {item.evidence_id for item in news.items}
-        input_data = build_interpretation_input(symbol, metrics, news)
+        allowed_evidence_ids = {item.evidence_id for item in evidence}
+        input_data = build_interpretation_input(symbol, metrics, evidence)
         user_content = json.dumps(input_data)
 
         messages = [
@@ -352,7 +384,9 @@ class GroqInterpretationProvider(InterpretationProvider):
                 safe_message="AI interpretation provider refused the request.",
             )
         return validate_interpretation(
-            getattr(message, "content", "") or "", allowed_evidence_ids
+            getattr(message, "content", "") or "",
+            allowed_evidence_ids,
+            company_specific_ids=_company_specific_ids(evidence),
         )
 
 
@@ -382,10 +416,10 @@ class OllamaInterpretationProvider(InterpretationProvider):
         return httpx.Client(timeout=float(self.timeout_seconds))
 
     def interpret(
-        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        self, *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> AIInterpretation:
-        allowed_evidence_ids = {item.evidence_id for item in news.items}
-        input_data = build_interpretation_input(symbol, metrics, news)
+        allowed_evidence_ids = {item.evidence_id for item in evidence}
+        input_data = build_interpretation_input(symbol, metrics, evidence)
         user_content = json.dumps(input_data)
 
         payload = {
@@ -420,4 +454,8 @@ class OllamaInterpretationProvider(InterpretationProvider):
                 code="MODEL_OUTPUT_INVALID",
                 safe_message="Failed to parse Ollama response.",
             ) from exc
-        return validate_interpretation(content, allowed_evidence_ids)
+        return validate_interpretation(
+            content,
+            allowed_evidence_ids,
+            company_specific_ids=_company_specific_ids(evidence),
+        )
