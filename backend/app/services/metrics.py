@@ -69,6 +69,15 @@ MACRO_SERIES: dict[str, str] = {
     "vix_close": "VIXCLS",
 }
 
+# Metric keys each optional role feeds, checked against METRIC_DEFINITIONS.
+ROLE_METRIC_KEYS: dict[str, tuple[str, ...]] = {
+    "filings": ("filing_count_30d", "insider_filing_count_90d"),
+    "fundamentals": ("revenue_growth_fy_yoy", "net_margin_fy"),
+    "macro": tuple(MACRO_SERIES),
+    "crosscheck": ("price_crosscheck_max_deviation",),
+}
+assert all(k in METRIC_DEFINITIONS for keys in ROLE_METRIC_KEYS.values() for k in keys)
+
 _UNUSABLE_ROLE = (RoleQuality.NOT_CONFIGURED, RoleQuality.FAILED)
 
 

@@ -1152,7 +1152,7 @@ def test_run_records_provider_roles(
         assert records[role]["retrieved_at"] is None
     dq = body["data_quality"]
     for key in ("filings", "fundamentals", "macro", "crosscheck"):
-        assert dq.get(key) is None
+        assert dq.get(key) == "not_configured"
     stored = tracking_repo.get_owned(test_user_id, UUID(body["run_id"]))
     assert stored is not None and stored.snapshot is not None
     assert stored.snapshot.providers is not None
