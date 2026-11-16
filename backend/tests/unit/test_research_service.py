@@ -71,8 +71,12 @@ def test_unconfigured_market_fails_the_run() -> None:
         service.create(user_id=uuid4(), symbol="AAPL", now=now)
 
     assert exc.value.code == "MARKET_DATA_PROVIDER_FAILED"
+    assert exc.value.safe_message == "Market data provider is not configured."
     assert repo.finalize_failure.call_args.kwargs["error_code"] == (
         "MARKET_DATA_PROVIDER_FAILED"
+    )
+    assert repo.finalize_failure.call_args.kwargs["error_message_safe"] == (
+        "Market data provider is not configured."
     )
 
 

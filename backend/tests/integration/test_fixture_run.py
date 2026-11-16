@@ -2,6 +2,10 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy import select
 
+from app.core.config import settings
+from app.services.data_stage import collect_inputs
+from app.services.sessions import latest_completed_xnys_close, trailing_xnys_sessions
+from app.services.snapshots import combined_snapshot_hash
 from app.db.models import ResearchRunRow, ResearchSnapshotRow
 from app.db.session import SessionFactory
 from app.domain.research import (
@@ -134,6 +138,32 @@ def test_all_roles_from_the_fixture_provider(make_user) -> None:
     assert [s.evidence_id for s in reread.sources] == [
         s.evidence_id for s in run.sources
     ]
+    for source in reread.sources:
+        if source.source_type in ("filing", "insider_transaction"):
+            assert source.details is not None
+            assert source.details.company_specific is True
+
+    # Rebuild the inputs the run was made from (the fixture is deterministic) and
+    # recompute the hash from the read-back sources; a mismatch between the stored
+    # hash and the stored evidence would show here.
+    sessions = trailing_xnys_sessions(latest_completed_xnys_close(NOW).date())
+    collected = collect_inputs(
+        _provider_set(FixtureProvider(), all_roles=True),
+        symbol="AAPL",
+        now=NOW,
+        cutoff=latest_completed_xnys_close(NOW),
+        sessions=sessions,
+        news_lookback_days=settings.NEWS_LOOKBACK_DAYS,
+        role_timeout_seconds=float(settings.PROVIDER_TIMEOUT_SECONDS),
+        run_id="recompute",
+    )
+    assert reread.snapshot.content_hash == combined_snapshot_hash(
+        collected.market,
+        collected.news,
+        evidence=reread.sources,
+        fundamentals=collected.inputs.fundamentals,
+        macro=collected.inputs.macro,
+    )
 
 
 def test_keyless_fixture_run_shows_four_not_configured_reasons(make_user) -> None:
@@ -241,6 +271,10 @@ def test_stored_v2_run_still_reads_back(make_user) -> None:
     assert run.data_quality is not None
     assert run.data_quality.filings is None
     assert run.data_quality.macro is None
+    assert run.data_quality.fundamentals is None
+    assert run.data_quality.crosscheck is None
+    assert run.snapshot is not None
+    assert run.snapshot.providers is None
     assert run.interpretation is not None
     assert run.interpretation.attribution is None
     assert [m.calculation_version for m in run.metrics] == ["eod-metrics-v2"]
