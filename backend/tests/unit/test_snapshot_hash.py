@@ -248,3 +248,20 @@ def test_macro_observation_order_does_not_change_the_hash() -> None:
     assert combined_snapshot_hash(market, news, macro=a) == combined_snapshot_hash(
         market, news, macro=b
     )
+
+
+def test_hash_with_evidence_equal_to_news_items_is_unchanged() -> None:
+    market, news = _snapshots()
+    assert combined_snapshot_hash(
+        market, news, evidence=list(news.items)
+    ) == combined_snapshot_hash(market, news)
+
+
+def test_hash_changes_when_a_filing_is_added() -> None:
+    market, news = _snapshots()
+    filing = news.items[0].model_copy(
+        update={"evidence_id": "f1", "source_type": "filing"}
+    )
+    assert combined_snapshot_hash(
+        market, news, evidence=[*news.items, filing]
+    ) != combined_snapshot_hash(market, news)

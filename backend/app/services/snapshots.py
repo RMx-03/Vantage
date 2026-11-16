@@ -1,5 +1,6 @@
 import hashlib
 import json
+from collections.abc import Sequence
 from typing import Any
 
 from app.domain.research import (
@@ -7,6 +8,7 @@ from app.domain.research import (
     FundamentalsSnapshot,
     MacroSnapshot,
     MarketSnapshot,
+    NewsItem,
     NewsSnapshot,
 )
 
@@ -42,6 +44,7 @@ def combined_snapshot_hash(
     market: MarketSnapshot,
     news: NewsSnapshot,
     *,
+    evidence: Sequence[NewsItem] | None = None,
     fundamentals: FundamentalsSnapshot | None = None,
     macro: MacroSnapshot | None = None,
 ) -> str:
@@ -51,7 +54,10 @@ def combined_snapshot_hash(
     payload only when present, so existing-shape snapshots hash as they always did.
     """
     news_items: list[dict[str, Any]] = []
-    for item in sorted(news.items, key=lambda value: value.evidence_id):
+    for item in sorted(
+        news.items if evidence is None else evidence,
+        key=lambda value: value.evidence_id,
+    ):
         entry: dict[str, Any] = {
             "evidence_id": item.evidence_id,
             "provider": item.provider,
