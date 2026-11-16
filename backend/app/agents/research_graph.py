@@ -3,11 +3,12 @@ from typing import Any
 from langgraph.graph import END, StateGraph
 
 from app.domain.errors import VantageError
-from app.domain.research import AIInterpretation, ComponentQuality
+from app.domain.research import AIInterpretation, ComponentQuality, NewsItem
 from app.models.state import ResearchState
 from app.providers.contracts import InterpretationProvider
 from app.services.metrics import calculate_metrics
 from app.services.policy import apply_policy
+from app.services.run_inputs import RunInputs
 from app.telemetry.tracing import get_tracer
 
 
@@ -21,6 +22,16 @@ def _market_is_usable(market: Any) -> bool:
     )
 
 
+def _inputs(state: ResearchState) -> RunInputs:
+    return state.get("inputs") or RunInputs()
+
+
+def _evidence(state: ResearchState) -> list[NewsItem]:
+    # A caller that omits the key gets the news items, as before filings existed.
+    evidence = state.get("evidence")
+    return list(state["news"].items) if evidence is None else evidence
+
+
 def create_research_graph(interpretation_provider: InterpretationProvider):
     def calculate_metrics_node(state: ResearchState) -> dict[str, Any]:
         tracer = get_tracer()
@@ -28,7 +39,9 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
             if "run_id" in state:
                 span.set_attribute("vantage.run_id", str(state["run_id"]))
             try:
-                metrics = calculate_metrics(state["market"], state["news"])
+                metrics = calculate_metrics(
+                    state["market"], state["news"], _inputs(state)
+                )
                 return {"metrics": metrics}
             except ValueError as exc:
                 if "INVALID_PRICE_SERIES" not in str(exc):
@@ -45,7 +58,7 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
         if not interpretation_provider.enabled:
             return {"interpretation": None, "model_failure_code": None}
         reason = (
-            "no news evidence was available"
+            "no evidence was available"
             if _market_is_usable(state["market"])
             else "price data was inadequate"
         )
@@ -62,10 +75,10 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
     def interpretation_route(state: ResearchState) -> str:
         if not interpretation_provider.enabled:
             return "skip_interpretation"
-        # The model must cite at least one article, so with no evidence it can
+        # The model must cite at least one item, so with no evidence it can
         # only abstain; calling it costs seconds and reported that forced
         # abstention as a provider failure.
-        if not _market_is_usable(state["market"]) or not state["news"].items:
+        if not _market_is_usable(state["market"]) or not _evidence(state):
             return "skip_interpretation"
         return "generate_interpretation"
 
@@ -86,7 +99,7 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
                     interp = interpretation_provider.interpret(
                         symbol=state["symbol"],
                         metrics=state.get("metrics", []),
-                        evidence=state["news"].items,
+                        evidence=_evidence(state),
                     )
                     failure_code = None
                 except VantageError as exc:
@@ -123,6 +136,7 @@ def create_research_graph(interpretation_provider: InterpretationProvider):
                     abstention_reason="MODEL_NOT_RUN",
                 ),
                 metrics=state.get("metrics", []),
+                inputs=_inputs(state),
             )
             return {"policy": policy_result}
 

@@ -99,7 +99,7 @@ def mock_market(sample_bars: list[DailyBar]):
     market.calls = 0
 
     def fetch(
-        symbol: str, start: date, end: date, retrieved_at: datetime
+        symbol: str, start: date, end: date, retrieved_at: datetime, **kwargs: object
     ) -> MarketSnapshot:
         market.calls += 1
         now = retrieved_at
@@ -857,14 +857,14 @@ def test_run_already_finalized_maps_to_conflict(
     }
 
 
-def test_completed_response_is_v2(client: TestClient, auth_headers: dict) -> None:
+def test_completed_response_is_v3(client: TestClient, auth_headers: dict) -> None:
     response = client.post(
         "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
     )
     assert response.status_code == 201
     body = response.json()
 
-    assert body["versions"]["response_schema"] == "research-run-response-v2"
+    assert body["versions"]["response_schema"] == "research-run-response-v3"
     assert body["interpretation"]["evidence_ids"] == ["news-1"]
     assert body["interpretation"]["sentiment_label"] == "positive"
     assert body["interpretation"]["abstained"] is False

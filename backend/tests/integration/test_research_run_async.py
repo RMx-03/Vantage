@@ -120,7 +120,7 @@ def mock_market() -> MagicMock:
     sample_bars = _bars()
 
     def fetch(
-        symbol: str, start: date, end: date, retrieved_at: datetime
+        symbol: str, start: date, end: date, retrieved_at: datetime, **kwargs: object
     ) -> MarketSnapshot:
         shift = end - sample_bars[-1].session_date
         bars = [
