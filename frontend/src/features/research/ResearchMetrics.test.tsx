@@ -96,4 +96,17 @@ describe('ResearchMetrics', () => {
     expect(screen.queryByText(/via FRED/)).not.toBeInTheDocument();
     expect(screen.queryByText('16.00')).not.toBeInTheDocument();
   });
+
+  it('shows a real zero as zero, not Unavailable', () => {
+    const metrics = informationalRunV3.metrics.filter((m) =>
+      ['filing_count_30d', 'yield_curve_10y_2y'].includes(m.key)
+    );
+    expect(metrics).toHaveLength(2);
+    render(
+      <ResearchMetrics metrics={metrics.map((m) => ({ ...m, value: 0 }))} version="eod-metrics-v3" />
+    );
+    expect(screen.getByText('0')).toBeVisible();
+    expect(screen.getByText('0.00%')).toBeVisible();
+    expect(screen.queryByText('Unavailable')).not.toBeInTheDocument();
+  });
 });
