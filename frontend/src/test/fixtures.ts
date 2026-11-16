@@ -1,4 +1,4 @@
-import type { ResearchRun } from '../types/research';
+import type { ProviderRecord, ResearchMetric, ResearchRun } from '../types/research';
 
 const baseVersions = {
   response_schema: 'research-run-response-v2' as const,
@@ -333,4 +333,231 @@ export const historicalRun: ResearchRun = {
   interpretation: null,
   snapshot: null,
   versions: { ...baseVersions, response_schema: 'research-run-response-v1' },
+};
+
+// A v3 run: relative returns, fundamentals, macro levels, filing counts, a price
+// cross-check gap, quality for the four optional roles and a provider list.
+const v3Versions = {
+  response_schema: 'research-run-response-v3' as const,
+  workflow: 'eod-research-v1' as const,
+  metrics: 'eod-metrics-v3' as const,
+  policy: 'research-policy-v2' as const,
+  code: 'git-commit-hash-test',
+};
+
+const V3_AS_OF = '2026-09-11T20:00:00Z';
+const FISCAL_YEAR_END = '2026-06-27T00:00:00Z';
+const MACRO_AS_OF = '2026-09-10T00:00:00Z';
+
+type V3Spec = [
+  key: string,
+  label: string,
+  value: number,
+  unit: ResearchMetric['unit'],
+  window: number | null,
+  asOf?: string,
+];
+
+const v3MetricSpecs: V3Spec[] = [
+  ['return_1_session', '1-session return', 0.0061, 'ratio', 1],
+  ['return_5_sessions', '5-session return', 0.0214, 'ratio', 5],
+  ['return_20_sessions', '20-session return', 0.0452, 'ratio', 20],
+  ['annualized_volatility_20', '20-session annualized volatility', 0.2215, 'ratio', 20],
+  ['max_drawdown_20', '20-session maximum drawdown', -0.0381, 'ratio', 20],
+  ['average_dollar_volume_20', '20-session average dollar volume', 12500000000, 'usd', 20],
+  ['price_observation_count', 'Accepted price observations', 21, 'count', null],
+  ['price_missing_value_count', 'Rejected missing price values', 0, 'count', null],
+  ['price_duplicate_session_count', 'Duplicate price sessions', 0, 'count', null],
+  ['news_item_count', 'Accepted news items', 7, 'count', null],
+  ['news_publisher_count', 'Distinct news publishers', 4, 'count', null],
+  ['excess_return_5_vs_spy', '5-session excess return vs SPY', 0.0052, 'ratio', 5],
+  ['excess_return_20_vs_spy', '20-session excess return vs SPY', 0.0147, 'ratio', 20],
+  ['excess_return_20_vs_sector', '20-session excess return vs XLK', -0.0033, 'ratio', 20],
+  ['revenue_growth_fy_yoy', 'Fiscal-year revenue growth', 0.0612, 'ratio', null, FISCAL_YEAR_END],
+  ['net_margin_fy', 'Fiscal-year net margin', 0.2431, 'ratio', null, FISCAL_YEAR_END],
+  ['us10y_yield', 'US 10-year Treasury yield', 4.21, 'percent', null, MACRO_AS_OF],
+  ['fed_funds_rate', 'Effective federal funds rate', 4.33, 'percent', null, MACRO_AS_OF],
+  [
+    'yield_curve_10y_2y',
+    '10-year minus 2-year Treasury spread',
+    0.52,
+    'percent',
+    null,
+    MACRO_AS_OF,
+  ],
+  ['vix_close', 'VIX close (Cboe)', 16, 'index', null, MACRO_AS_OF],
+  ['filing_count_30d', 'SEC filings in the last 30 days', 3, 'count', null],
+  ['insider_filing_count_90d', 'Form 4 filings in the last 90 days', 5, 'count', null],
+  [
+    'price_crosscheck_max_deviation',
+    'Largest adjusted-close gap vs the cross-check source',
+    0.0008,
+    'ratio',
+    null,
+  ],
+];
+
+const OPTIONAL_ROLE_KEYS = new Set([
+  'revenue_growth_fy_yoy',
+  'net_margin_fy',
+  'us10y_yield',
+  'fed_funds_rate',
+  'yield_curve_10y_2y',
+  'vix_close',
+  'filing_count_30d',
+  'insider_filing_count_90d',
+  'price_crosscheck_max_deviation',
+]);
+
+function buildV3Metrics(optionalRolesConfigured: boolean): ResearchMetric[] {
+  return v3MetricSpecs.map(([key, label, value, unit, window, asOf]) => {
+    const absent = !optionalRolesConfigured && OPTIONAL_ROLE_KEYS.has(key);
+    return {
+      key,
+      label,
+      value: absent ? null : value,
+      unit,
+      window_sessions: window,
+      as_of: asOf ?? V3_AS_OF,
+      calculation_version: 'eod-metrics-v3',
+      quality: absent ? ('missing' as const) : ('fresh' as const),
+    };
+  });
+}
+
+function providerRecord(
+  role: ProviderRecord['role'],
+  provider: string | null,
+  quality: ProviderRecord['quality']
+): ProviderRecord {
+  return {
+    role,
+    provider,
+    retrieved_at: provider ? '2026-09-14T10:00:01Z' : null,
+    quality,
+    error_code: null,
+    content_hash: provider ? `${role}-hash` : null,
+  };
+}
+
+export const informationalRunV3: ResearchRun = {
+  ...informationalRun,
+  run_id: 'a1eebc99-9c0b-4ef8-bb6d-6bb9bd380b11',
+  summary:
+    'Price, news, filings, fundamentals and macro inputs are available at sufficient quality.',
+  reasons: [
+    {
+      code: 'EOD_COMPLETE',
+      label: 'Sufficient Data & Signals',
+      severity: 'info',
+      description: 'All required inputs are available with fresh coverage.',
+      metric_keys: ['return_20_sessions', 'excess_return_20_vs_spy'],
+      evidence_ids: ['ev-101'],
+      policy_version: 'research-policy-v2',
+      threshold: null,
+    },
+  ],
+  metrics: buildV3Metrics(true),
+  data_quality: {
+    overall: 'sufficient',
+    prices: 'fresh',
+    news: 'fresh',
+    filings: 'fresh',
+    fundamentals: 'fresh',
+    macro: 'fresh',
+    crosscheck: 'fresh',
+    model: 'healthy',
+  },
+  sources: [
+    {
+      evidence_id: 'ev-101',
+      provider: 'alpaca',
+      publisher: 'Reuters',
+      title: 'Apple Expands Services Revenue in Recent Quarter',
+      url: 'https://example.com/news/apple-services',
+      event_time: '2026-09-11T14:30:00Z',
+      retrieved_at: '2026-09-14T10:00:01Z',
+      content_hash: 'abc123hash',
+      source_type: 'news',
+      details: { providers: ['alpaca', 'finnhub'], company_specific: true },
+    },
+    {
+      evidence_id: 'ev-102',
+      provider: 'sec_edgar',
+      publisher: 'SEC EDGAR',
+      title: 'Form 8-K: Results of Operations and Financial Condition',
+      url: 'https://www.sec.gov/Archives/edgar/data/320193/000032019326000001/index.htm',
+      event_time: '2026-09-09T20:05:00Z',
+      retrieved_at: '2026-09-14T10:00:01Z',
+      content_hash: 'filinghash',
+      source_type: 'filing',
+      details: { form_type: '8-K', item_codes: ['2.02', '9.01'], parse_state: 'parsed' },
+    },
+    {
+      evidence_id: 'ev-103',
+      provider: 'sec_edgar',
+      publisher: 'SEC EDGAR',
+      title: 'Form 4: statement of changes in beneficial ownership',
+      url: 'https://www.sec.gov/Archives/edgar/data/320193/000032019326000002/index.htm',
+      event_time: '2026-09-08T21:00:00Z',
+      retrieved_at: '2026-09-14T10:00:01Z',
+      content_hash: 'insiderhash',
+      source_type: 'insider_transaction',
+      details: { form_type: '4', transaction_code: 'S', direction: 'disposed' },
+    },
+  ],
+  model_info: {
+    provider: 'google',
+    model: 'gemini-2.5-flash',
+    prompt_version: 'research-interpretation-v3',
+    failure_code: null,
+  },
+  interpretation: {
+    ...informationalRun.interpretation!,
+    evidence_ids: ['ev-101'],
+    attribution: 'company',
+  },
+  snapshot: {
+    ...informationalRun.snapshot!,
+    market_provider: 'alpaca',
+    news_provider: 'alpaca+finnhub',
+    providers: [
+      providerRecord('market', 'alpaca', 'fresh'),
+      providerRecord('news', 'alpaca+finnhub', 'fresh'),
+      providerRecord('filings', 'sec_edgar', 'fresh'),
+      providerRecord('fundamentals', 'sec_edgar', 'fresh'),
+      providerRecord('macro', 'fred', 'fresh'),
+      providerRecord('crosscheck', 'tiingo', 'fresh'),
+    ],
+  },
+  versions: v3Versions,
+};
+
+// The optional roles are not configured: their metrics are absent, never zero.
+export const keylessRunV3: ResearchRun = {
+  ...informationalRunV3,
+  run_id: 'a2eebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
+  metrics: buildV3Metrics(false),
+  data_quality: {
+    overall: 'sufficient',
+    prices: 'fresh',
+    news: 'fresh',
+    filings: 'not_configured',
+    fundamentals: 'not_configured',
+    macro: 'not_configured',
+    crosscheck: 'not_configured',
+    model: 'healthy',
+  },
+  sources: [informationalRunV3.sources[0]],
+  snapshot: {
+    ...informationalRunV3.snapshot!,
+    providers: [
+      providerRecord('market', 'alpaca', 'fresh'),
+      providerRecord('news', 'alpaca+finnhub', 'fresh'),
+      providerRecord('filings', null, 'not_configured'),
+      providerRecord('fundamentals', null, 'not_configured'),
+      providerRecord('macro', null, 'not_configured'),
+      providerRecord('crosscheck', null, 'not_configured'),
+    ],
+  },
 };

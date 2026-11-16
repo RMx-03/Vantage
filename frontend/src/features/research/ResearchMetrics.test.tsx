@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import ResearchMetrics from './ResearchMetrics';
 import type { ResearchMetric } from '../../types/research';
+import { informationalRun, informationalRunV3, keylessRunV3 } from '../../test/fixtures';
 
 const baseMetric: ResearchMetric = {
   key: 'metric',
@@ -45,5 +46,54 @@ describe('ResearchMetrics', () => {
     expect(screen.getByText(/No quantitative metrics computed/i)).toBeVisible();
     expect(screen.getByText('historical-metrics-v0')).toBeVisible();
     expect(screen.queryByText(/single-security variability/i)).not.toBeInTheDocument();
+  });
+
+  it('groups a v3 run under five headings with the FRED and Cboe lines', () => {
+    render(<ResearchMetrics metrics={informationalRunV3.metrics} version="eod-metrics-v3" />);
+
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((n) => n.textContent);
+    expect(headings).toEqual([
+      'Price',
+      'Relative',
+      'Fundamentals',
+      'Macro',
+      'Evidence and checks',
+    ]);
+    expect(screen.getByText('Fiscal year ending Jun 27, 2026')).toBeVisible();
+    expect(screen.getAllByText('As of Sep 10, 2026')).toHaveLength(4);
+    expect(
+      screen.getByText(
+        'This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.'
+      )
+    ).toBeVisible();
+    expect(screen.getByText('VIX close: © Cboe, via FRED.')).toBeVisible();
+    expect(screen.getByText('16.00')).toBeVisible();
+  });
+
+  it('renders a v2 run with no new groups, role rows or fabricated zeros', () => {
+    render(<ResearchMetrics metrics={informationalRun.metrics} version="eod-metrics-v2" />);
+
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((n) => n.textContent);
+    expect(headings).toEqual(['Other']);
+    for (const name of ['Relative', 'Fundamentals', 'Macro']) {
+      expect(screen.queryByRole('heading', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText(/FRED/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/via FRED/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Fiscal year ending/)).not.toBeInTheDocument();
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
+    expect(screen.queryByText('0.00%')).not.toBeInTheDocument();
+  });
+
+  it('shows Unavailable, with no dates or attribution, when optional roles are absent', () => {
+    render(<ResearchMetrics metrics={keylessRunV3.metrics} version="eod-metrics-v3" />);
+
+    expect(screen.getByRole('heading', { name: 'Macro' })).toBeVisible();
+    expect(screen.getAllByText('Unavailable')).toHaveLength(9);
+    expect(screen.queryByText(/Fiscal year ending/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^As of /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/FRED/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/via FRED/)).not.toBeInTheDocument();
+    expect(screen.queryByText('16.00')).not.toBeInTheDocument();
   });
 });
