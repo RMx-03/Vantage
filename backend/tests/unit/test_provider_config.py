@@ -29,12 +29,12 @@ def build() -> Settings:
     return Settings(_env_file=None)  # type: ignore[call-arg]
 
 
-def test_provider_defaults_keep_yfinance() -> None:
+def test_provider_defaults_are_the_free_providers() -> None:
     s = build()
-    assert s.MARKET_PROVIDER == "yfinance"
-    assert s.NEWS_PROVIDERS == ["yfinance"]
-    assert s.FILINGS_PROVIDER == "none"
-    assert s.MACRO_PROVIDER == "none"
+    assert s.MARKET_PROVIDER == "alpaca"
+    assert s.NEWS_PROVIDERS == ["alpaca", "finnhub"]
+    assert s.FILINGS_PROVIDER == "edgar"
+    assert s.MACRO_PROVIDER == "fred"
     assert s.PRICE_CROSSCHECK_PROVIDER == "none"
     assert s.PROVIDER_TIMEOUT_SECONDS == 6
     for name in (

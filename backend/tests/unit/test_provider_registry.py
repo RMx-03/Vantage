@@ -18,23 +18,67 @@ from app.providers.registry import (
 )
 from app.providers.yfinance_provider import YFinanceSnapshotProvider
 
+PROVIDER_ENV = (
+    "ALPACA_API_KEY_ID",
+    "ALPACA_API_SECRET_KEY",
+    "FINNHUB_API_KEY",
+    "FRED_API_KEY",
+    "TIINGO_API_KEY",
+    "SEC_USER_AGENT",
+    "MARKET_PROVIDER",
+    "NEWS_PROVIDERS",
+    "FILINGS_PROVIDER",
+    "MACRO_PROVIDER",
+    "PRICE_CROSSCHECK_PROVIDER",
+)
 
-def test_default_settings_build_todays_providers() -> None:
+
+@pytest.fixture(autouse=True)
+def _clean_provider_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Settings(_env_file=None) still reads the process environment.
+    for name in PROVIDER_ENV:
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_default_settings_without_keys_configure_nothing() -> None:
     providers = build_providers(Settings(_env_file=None))
 
-    assert isinstance(providers.market, YFinanceSnapshotProvider)
-    assert len(providers.news) == 1
-    assert isinstance(providers.news[0], YFinanceSnapshotProvider)
+    assert providers.market is None
+    assert providers.news == ()
     assert providers.filings is None
     assert providers.fundamentals is None
     assert providers.macro is None
     assert providers.crosscheck is None
-    assert providers.not_configured == (
+    assert set(providers.not_configured) == {
+        "market",
+        "news",
         "filings",
         "fundamentals",
         "macro",
         "crosscheck",
+    }
+
+
+def test_default_settings_with_every_key_build_the_free_providers() -> None:
+    providers = build_providers(
+        Settings(
+            _env_file=None,
+            ALPACA_API_KEY_ID="id",
+            ALPACA_API_SECRET_KEY="secret",
+            FINNHUB_API_KEY="fh",
+            FRED_API_KEY="fr",
+            SEC_USER_AGENT="Vantage-research test@example.com",
+        )
     )
+
+    assert providers.market is not None and providers.market.name == "alpaca"
+    assert [p.name for p in providers.news] == ["alpaca", "finnhub"]
+    assert providers.filings is not None and providers.filings.name == "edgar"
+    assert providers.fundamentals is not None
+    assert providers.fundamentals.name == "edgar"
+    assert providers.macro is not None and providers.macro.name == "fred"
+    assert providers.crosscheck is None
+    assert providers.not_configured == ("crosscheck",)
 
 
 def test_unknown_name_is_config_error_without_echo() -> None:
@@ -97,7 +141,15 @@ def test_factory_returning_none_marks_role_not_configured() -> None:
         registry.register("llm", name, factory)
 
     providers = build_providers(
-        Settings(_env_file=None, LLM_PROVIDER="disabled"), registry
+        Settings(
+            _env_file=None,
+            MARKET_PROVIDER="yfinance",
+            NEWS_PROVIDERS=["yfinance"],
+            FILINGS_PROVIDER="none",
+            MACRO_PROVIDER="none",
+            LLM_PROVIDER="disabled",
+        ),
+        registry,
     )
 
     assert providers.market is None

@@ -164,6 +164,13 @@ jobs:
       POSTGRES_RUNTIME_PASSWORD: ci-container-runtime-not-for-production
       LLM_PROVIDER: disabled
       EMAIL_PROVIDER: noop
+      # The built-in fixture provider serves demo data, so the smoke test needs
+      # no data-provider keys. Compose passes these through to the backend.
+      MARKET_PROVIDER: fixture
+      NEWS_PROVIDERS: fixture
+      FILINGS_PROVIDER: fixture
+      MACRO_PROVIDER: fixture
+      PRICE_CROSSCHECK_PROVIDER: none
       TRACE_EXPORT_ENABLED: "false"
       CODE_REVISION: ${{ github.sha }}
     steps:

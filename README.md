@@ -109,6 +109,17 @@ docker compose up --build
 
 Open [http://localhost:5173](http://localhost:5173) and create an account. Locally no email is sent, so mark the account verified before running research. See [Email in local development](#email-in-local-development) for the one-line command.
 
+Vantage reads data from free providers. For a keyless start, add these four lines to `.env`; they use the built-in fixture provider, whose data is invented demo data:
+
+```bash
+MARKET_PROVIDER=fixture
+NEWS_PROVIDERS=fixture
+FILINGS_PROVIDER=fixture
+MACRO_PROVIDER=fixture
+```
+
+Real data needs the free keys listed under Data providers in [backend/README.md](backend/README.md).
+
 By default no AI model is used: runs contain metrics and evidence only. To add an interpretation, set `LLM_PROVIDER` to `gemini` or `groq` with its API key in `.env`, or use a local Ollama model (below).
 
 ## Repository layout

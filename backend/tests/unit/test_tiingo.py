@@ -13,6 +13,20 @@ from app.domain.research import ComponentQuality
 from app.providers.registry import build_providers
 from app.providers.tiingo import TIINGO_LIMITER, TiingoCrossCheckProvider
 
+PROVIDER_ENV = (
+    "ALPACA_API_KEY_ID",
+    "ALPACA_API_SECRET_KEY",
+    "FINNHUB_API_KEY",
+    "FRED_API_KEY",
+    "TIINGO_API_KEY",
+    "SEC_USER_AGENT",
+    "MARKET_PROVIDER",
+    "NEWS_PROVIDERS",
+    "FILINGS_PROVIDER",
+    "MACRO_PROVIDER",
+    "PRICE_CROSSCHECK_PROVIDER",
+)
+
 KEY = "tg-test-key-QWERTY1234567890"
 URL = "https://api.tiingo.com/tiingo/daily/AAPL/prices"
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "providers" / "tiingo"
@@ -248,7 +262,11 @@ def test_repr_is_fixed() -> None:
     assert repr(make_provider()) == "TiingoCrossCheckProvider()"
 
 
-def test_registry_builds_tiingo_only_with_a_key() -> None:
+def test_registry_builds_tiingo_only_with_a_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in PROVIDER_ENV:
+        monkeypatch.delenv(name, raising=False)
     keyed = build_providers(
         Settings(_env_file=None, PRICE_CROSSCHECK_PROVIDER="tiingo", TIINGO_API_KEY="k")
     )
