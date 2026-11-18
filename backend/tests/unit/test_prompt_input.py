@@ -4,7 +4,12 @@ from datetime import UTC, datetime
 import pytest
 
 from app.domain.errors import VantageError
-from app.domain.research import EvidenceDetails, NewsItem
+from app.domain.research import (
+    ComponentQuality,
+    EvidenceDetails,
+    NewsItem,
+    ResearchMetric,
+)
 from app.prompts.research_interpretation import (
     PROMPT_VERSION,
     SYSTEM_INSTRUCTION,
@@ -138,3 +143,45 @@ def test_reply_echoing_injected_advice_is_still_rejected() -> None:
     with pytest.raises(VantageError) as caught:
         validate_interpretation(reply, {"news-1"}, company_specific_ids={"news-1"})
     assert caught.value.code == "MODEL_OUTPUT_INVALID"
+
+
+def test_metric_entries_carry_only_what_the_model_needs() -> None:
+    metrics = [
+        ResearchMetric(
+            key="excess_return_20_vs_spy",
+            label="20-session excess return vs SPY",
+            value=0.02,
+            unit="ratio",
+            window_sessions=20,
+            as_of=MOMENT,
+            calculation_version="eod-metrics-v3",
+            quality=ComponentQuality.FRESH,
+        ),
+        ResearchMetric(
+            key="net_margin_fy",
+            label="Net margin",
+            value=None,
+            unit="ratio",
+            window_sessions=None,
+            as_of=MOMENT,
+            calculation_version="eod-metrics-v3",
+            quality=ComponentQuality.MISSING,
+        ),
+    ]
+    entries = build_interpretation_input("AAPL", metrics, [])["metrics"]
+    assert entries == [
+        {
+            "key": "excess_return_20_vs_spy",
+            "label": "20-session excess return vs SPY",
+            "value": 0.02,
+            "unit": "ratio",
+            "quality": "fresh",
+        },
+        {
+            "key": "net_margin_fy",
+            "label": "Net margin",
+            "value": None,
+            "unit": "ratio",
+            "quality": "missing",
+        },
+    ]

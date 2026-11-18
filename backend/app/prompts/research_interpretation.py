@@ -72,7 +72,16 @@ def build_interpretation_input(
 ) -> dict[str, Any]:
     return {
         "symbol": symbol,
-        "metrics": [metric.model_dump(mode="json") for metric in metrics],
+        "metrics": [
+            {
+                "key": metric.key,
+                "label": metric.label,
+                "value": metric.value,
+                "unit": metric.unit,
+                "quality": metric.quality.value,
+            }
+            for metric in metrics
+        ],
         "evidence": [_evidence_entry(item) for item in evidence],
         "response_schema": AIInterpretation.model_json_schema(),
     }
