@@ -1,5 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
 
+import pytest
+
 from app.core.config import Settings
 from app.domain.research import ComponentQuality
 from app.providers.fixture_provider import FixtureProvider
@@ -10,6 +12,26 @@ from app.providers.yfinance_provider import (
 )
 
 NOW = datetime(2026, 11, 27, 22, 0, tzinfo=UTC)
+
+PROVIDER_ENV = (
+    "ALPACA_API_KEY_ID",
+    "ALPACA_API_SECRET_KEY",
+    "FINNHUB_API_KEY",
+    "FRED_API_KEY",
+    "TIINGO_API_KEY",
+    "SEC_USER_AGENT",
+    "MARKET_PROVIDER",
+    "NEWS_PROVIDERS",
+    "FILINGS_PROVIDER",
+    "MACRO_PROVIDER",
+    "PRICE_CROSSCHECK_PROVIDER",
+    "PROVIDER_TIMEOUT_SECONDS",
+)
+
+
+def _clean_provider_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in PROVIDER_ENV:
+        monkeypatch.delenv(name, raising=False)
 
 
 def test_bars_land_on_xnys_sessions() -> None:
@@ -81,8 +103,11 @@ def test_news_outside_window_is_missing() -> None:
     assert snap.quality == ComponentQuality.MISSING
 
 
-def test_registry_selects_fixture() -> None:
-    settings = Settings(MARKET_PROVIDER="fixture", NEWS_PROVIDERS="fixture")
+def test_registry_selects_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clean_provider_env(monkeypatch)
+    settings = Settings(
+        _env_file=None, MARKET_PROVIDER="fixture", NEWS_PROVIDERS="fixture"
+    )
     providers = build_providers(settings)
     assert isinstance(providers.market, FixtureProvider)
     assert len(providers.news) == 1
@@ -247,7 +272,8 @@ def test_fixture_sector_etf_has_context_bars() -> None:
     assert len(market.context_bars[etf]) == len(market.bars)
 
 
-def test_registry_builds_fixture_for_all_roles() -> None:
+def test_registry_builds_fixture_for_all_roles(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clean_provider_env(monkeypatch)
     settings = Settings(
         _env_file=None,
         MARKET_PROVIDER="fixture",
