@@ -74,14 +74,20 @@ class _Timeout:
 _TIMEOUT = _Timeout()
 
 
-def _log_failure(role: str, error: str) -> None:
-    logger.warning("provider_role_failed role=%s error=%s", role, error)
+def _log_failure(role: str, error: str, provider: str | None = None) -> None:
+    # `provider` is a provider's fixed class-level name, never an exception text.
+    if provider is None:
+        logger.warning("provider_role_failed role=%s error=%s", role, error)
+    else:
+        logger.warning(
+            "provider_role_failed role=%s error=%s provider=%s", role, error, provider
+        )
 
 
-def _log_exception(role: str, exc: BaseException) -> None:
+def _log_exception(role: str, exc: BaseException, provider: str | None = None) -> None:
     # Only the type name: an exception message may carry provider data.
     if not isinstance(exc, VantageError):
-        _log_failure(role, type(exc).__name__)
+        _log_failure(role, type(exc).__name__, provider)
 
 
 def _run_tasks(
@@ -329,9 +335,9 @@ def collect_inputs(
             news_outcome = outcomes[f"news:{index}"]
             code = _NEWS_FAILURE_CODE
             if isinstance(news_outcome, _Timeout):
-                _log_failure("news", "Timeout")
+                _log_failure("news", "Timeout", news_provider.name)
             elif (exc := news_outcome.exception()) is not None:
-                _log_exception("news", exc)
+                _log_exception("news", exc, news_provider.name)
                 if isinstance(exc, VantageError):
                     code = exc.code
             else:
@@ -398,10 +404,17 @@ def collect_inputs(
         ),
         ProviderRecord(
             role="news",
-            provider=None if not providers.news else news.provider,
+            provider=news.provider,
             retrieved_at=news.retrieved_at,
             quality=RoleQuality(news.quality.value),
             error_code=news.error_code,
+        )
+        if providers.news
+        else ProviderRecord(
+            role="news",
+            provider=None,
+            retrieved_at=None,
+            quality=RoleQuality.NOT_CONFIGURED,
         ),
     ]
     for role in OPTIONAL_ROLES:

@@ -389,7 +389,9 @@ def test_no_news_provider_gives_none_snapshot() -> None:
     assert out.news.quality == ComponentQuality.FAILED
     assert out.news.error_code == "NEWS_PROVIDER_FAILED"
     assert out.records[1].provider is None
-    assert out.records[1].quality == RoleQuality.FAILED
+    assert out.records[1].quality == RoleQuality.NOT_CONFIGURED
+    assert out.records[1].retrieved_at is None
+    assert out.records[1].error_code is None
 
 
 def test_market_vantage_error_propagates() -> None:
@@ -491,3 +493,54 @@ def test_provider_request_spans_carry_role_and_provider_name(monkeypatch) -> Non
     trace_id = root.get_span_context().trace_id
     assert all(s.context.trace_id == trace_id for s in role_spans)
     assert all(s.parent is not None for s in role_spans)
+
+
+class HangingNews:
+    name = "slowwire"
+
+    def __init__(self, gate: threading.Event) -> None:
+        self.gate = gate
+
+    def fetch_company_news(self, symbol, cutoff, retrieved_at, lookback_days, limit):
+        self.gate.wait(timeout=30)
+        raise RuntimeError(SECRET)
+
+
+def test_news_timeout_log_names_the_provider(monkeypatch, caplog) -> None:
+    monkeypatch.setattr(data_stage, "ROLE_WAIT_MARGIN_SECONDS", 0.1)
+    gate = threading.Event()
+    try:
+        with caplog.at_level(logging.DEBUG):
+            _collect(
+                _set(news=(StubNews("alpaca"), HangingNews(gate))),
+                role_timeout_seconds=0.2,
+            )
+    finally:
+        gate.set()
+
+    lines = [r.getMessage() for r in caplog.records]
+    assert "provider_role_failed role=news error=Timeout provider=slowwire" in lines
+    assert SECRET not in caplog.text
+
+
+def test_news_exception_log_names_the_provider_not_the_error_text(caplog) -> None:
+    with caplog.at_level(logging.DEBUG):
+        _collect(_set(news=(StubNews("finnhub", error=RuntimeError(SECRET)),)))
+
+    lines = [r.getMessage() for r in caplog.records]
+    assert "provider_role_failed role=news error=RuntimeError provider=finnhub" in lines
+    assert SECRET not in caplog.text
+
+
+class FailingFundamentals(StubFundamentals):
+    def fetch_fundamentals(self, symbol, retrieved_at):
+        raise TimeoutError(SECRET)
+
+
+def test_fundamentals_failing_alone_leaves_filings_usable() -> None:
+    out = _collect(_set(fundamentals=FailingFundamentals()))
+
+    assert out.inputs.failed == {"fundamentals": "FILINGS_PROVIDER_FAILED"}
+    assert out.inputs.filings is not None
+    assert out.inputs.role_quality("filings") == RoleQuality.FRESH
+    assert out.inputs.role_quality("fundamentals") == RoleQuality.FAILED
