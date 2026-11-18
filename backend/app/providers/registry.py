@@ -189,6 +189,8 @@ def default_registry() -> ProviderRegistry:
     registry.register("crosscheck", "tiingo", _tiingo)
     registry.register("market", "fixture", _fixture)
     registry.register("news", "fixture", _fixture)
+    registry.register("filings", "fixture", _fixture)
+    registry.register("macro", "fixture", _fixture)
     registry.register("llm", "disabled", lambda s: DisabledInterpretationProvider())
     registry.register(
         "llm",

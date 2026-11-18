@@ -164,6 +164,13 @@ jobs:
       POSTGRES_RUNTIME_PASSWORD: ci-container-runtime-not-for-production
       LLM_PROVIDER: disabled
       EMAIL_PROVIDER: noop
+      # The built-in fixture provider serves demo data, so the smoke test needs
+      # no data-provider keys. Compose passes these through to the backend.
+      MARKET_PROVIDER: fixture
+      NEWS_PROVIDERS: fixture
+      FILINGS_PROVIDER: fixture
+      MACRO_PROVIDER: fixture
+      PRICE_CROSSCHECK_PROVIDER: none
       TRACE_EXPORT_ENABLED: "false"
       CODE_REVISION: ${{ github.sha }}
     steps:
@@ -262,6 +269,30 @@ jobs:
           echo "backend never became healthy" >&2
           docker compose ps
           exit 1
+
+      # The browser journey is route-mocked, so nothing else proves the fixture
+      # selectors build working providers inside the container.
+      - name: Verify the container builds fixture providers from its selectors
+        run: |
+          docker compose exec -T backend python - <<'PY'
+          from app.core.config import settings
+          from app.providers.fixture_provider import FixtureProvider
+          from app.providers.registry import build_providers
+
+          providers = build_providers(settings)
+          roles = {
+              "market": providers.market,
+              "news": providers.news[0] if providers.news else None,
+              "filings": providers.filings,
+              "fundamentals": providers.fundamentals,
+              "macro": providers.macro,
+          }
+          wrong = sorted(r for r, p in roles.items() if not isinstance(p, FixtureProvider))
+          assert not wrong, f"not fixture providers: {wrong}"
+          # Only the cross-check is left off by the selectors above.
+          assert providers.not_configured == ("crosscheck",), providers.not_configured
+          print("fixture providers built for", ", ".join(sorted(roles)))
+          PY
 
       - name: Verify frontend container serves / and the /app SPA route
         run: |

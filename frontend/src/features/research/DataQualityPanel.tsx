@@ -1,4 +1,4 @@
-import type { DataQuality, ModelInfo } from '../../types/research';
+import type { DataQuality, ModelInfo, RoleQuality } from '../../types/research';
 import { Panel, PanelHeader } from '../../components/ui';
 
 interface DataQualityPanelProps {
@@ -21,9 +21,24 @@ function getQualityBadgeClass(status: string) {
     case 'failed':
       return 'border-error-container bg-error-container/30 text-error';
     case 'not_run':
+    case 'not_configured':
     default:
       return 'border-outline-variant/30 bg-surface-container text-outline';
   }
+}
+
+const ROLE_TILES: {
+  key: 'filings' | 'fundamentals' | 'macro' | 'crosscheck';
+  label: string;
+}[] = [
+  { key: 'filings', label: 'Filings' },
+  { key: 'fundamentals', label: 'Fundamentals' },
+  { key: 'macro', label: 'Macro' },
+  { key: 'crosscheck', label: 'Price cross-check' },
+];
+
+function roleText(status: RoleQuality) {
+  return status.replace('_', ' ');
 }
 
 export default function DataQualityPanel({ dataQuality, modelInfo }: DataQualityPanelProps) {
@@ -81,6 +96,30 @@ export default function DataQualityPanel({ dataQuality, modelInfo }: DataQuality
               </span>
             </div>
           </div>
+
+          {ROLE_TILES.map(({ key, label }) => {
+            const status = dataQuality[key];
+            if (status === null || status === undefined) return null;
+            return (
+              <div
+                key={key}
+                className="border border-outline-variant/30 bg-surface-container-low p-4"
+              >
+                <div className="text-xs font-medium text-outline uppercase tracking-wider mb-2 font-label">
+                  {label}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center px-2.5 py-1 text-sm font-semibold capitalize border font-label ${getQualityBadgeClass(
+                      status
+                    )}`}
+                  >
+                    {roleText(status)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
 
           <div className="border border-outline-variant/30 bg-surface-container-low p-4">
             <div className="text-xs font-medium text-outline uppercase tracking-wider mb-2 font-label">

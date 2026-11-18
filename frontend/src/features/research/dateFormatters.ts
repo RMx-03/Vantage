@@ -11,6 +11,12 @@ const MARKET_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
 });
 
+/**
+ * An unparsable or empty value renders as "Unavailable" rather than throwing,
+ * because a RangeError here would blank the whole result page.
+ */
 export function formatUtcDate(value: string): string {
-  return MARKET_DATE_FORMATTER.format(new Date(value));
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return 'Unavailable';
+  return MARKET_DATE_FORMATTER.format(date);
 }

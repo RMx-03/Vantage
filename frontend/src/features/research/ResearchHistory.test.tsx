@@ -122,6 +122,11 @@ function neverResolves<T>(): Promise<T> {
 }
 
 describe('formatUtcDate', () => {
+  it('returns Unavailable for an unparsable or empty value', () => {
+    expect(formatUtcDate('not a date')).toBe('Unavailable');
+    expect(formatUtcDate('')).toBe('Unavailable');
+  });
+
   it('formats market dates in UTC', () => {
     expect(formatUtcDate('2025-01-02T00:30:00+05:30')).toBe('Jan 1, 2025');
   });

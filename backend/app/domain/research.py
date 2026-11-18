@@ -97,7 +97,7 @@ class ResearchMetric(StrictModel):
     key: str
     label: str
     value: float | int | None
-    unit: Literal["ratio", "percent", "usd", "count", "sessions"]
+    unit: Literal["ratio", "percent", "usd", "count", "sessions", "index"]
     window_sessions: int | None
     as_of: datetime
     calculation_version: str
@@ -132,6 +132,9 @@ class AIInterpretation(StrictModel):
     warnings: list[str] = Field(default_factory=list)
     abstained: bool = False
     abstention_reason: str | None = None
+    attribution: Literal["market", "sector", "company", "mixed", "unclear"] | None = (
+        None
+    )
 
 
 class DailyBar(StrictModel):

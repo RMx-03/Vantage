@@ -1,0 +1,9 @@
+{
+ "fiscal_year": 2025,
+ "period_end": "2025-12-31",
+ "form": "10-K",
+ "revenue": 120000000000,
+ "prior_revenue": 110000000000,
+ "net_income": 24000000000,
+ "revenue_concept": "Revenues"
+}

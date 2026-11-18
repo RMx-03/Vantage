@@ -163,7 +163,11 @@ class ResearchRunRepository:
                     "news": news.quality.value,
                 }
                 content_hash = combined_snapshot_hash(
-                    snapshot, news, fundamentals=fundamentals, macro=macro
+                    snapshot,
+                    news,
+                    evidence=sources,
+                    fundamentals=fundamentals,
+                    macro=macro,
                 )
 
                 snapshot_row = ResearchSnapshotRow(

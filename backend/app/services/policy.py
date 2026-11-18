@@ -11,11 +11,16 @@ from app.domain.research import (
     Reason,
     ResearchMetric,
     ResearchStatus,
+    RoleQuality,
     StrictModel,
 )
+from app.services.data_stage import MARKET_CONTEXT_SYMBOL
+from app.services.metrics import ROLE_METRIC_KEYS
 from app.services.quality import assess_quality
+from app.services.run_inputs import OPTIONAL_ROLES, RunInputs
 
-POLICY_VERSION: Literal["research-policy-v1"] = "research-policy-v1"
+POLICY_VERSION: Literal["research-policy-v2"] = "research-policy-v2"
+CROSSCHECK_THRESHOLD: float = 0.01
 VOLATILITY_THRESHOLD: float = 0.40
 
 REASON_ORDER: dict[str, int] = {
@@ -28,8 +33,18 @@ REASON_ORDER: dict[str, int] = {
     "PARTIAL_NEWS_COVERAGE": 12,
     "MODEL_UNAVAILABLE": 13,
     "MODEL_OUTPUT_INVALID": 14,
-    "ELEVATED_VOLATILITY": 20,
-    "NEGATIVE_NEWS_SENTIMENT": 21,
+    "FILINGS_PROVIDER_FAILED": 15,
+    "PRICE_SOURCES_DISAGREE": 16,
+    "PROVIDER_NOT_CONFIGURED": 17,
+    "NO_SEC_FILER_RECORD": 18,
+    "SECTOR_UNMAPPED": 19,
+    "FUNDAMENTALS_UNAVAILABLE": 20,
+    "MACRO_DATA_STALE": 21,
+    "MACRO_PROVIDER_FAILED": 22,
+    "PRICE_CROSSCHECK_UNAVAILABLE": 23,
+    "CONTEXT_BARS_UNAVAILABLE": 24,
+    "ELEVATED_VOLATILITY": 30,
+    "NEGATIVE_NEWS_SENTIMENT": 31,
 }
 
 
@@ -59,7 +74,9 @@ def collect_registered_reasons(
     news: NewsSnapshot,
     interpretation: AIInterpretation,
     metrics: list[ResearchMetric],
+    inputs: RunInputs | None = None,
 ) -> list[Reason]:
+    inputs = inputs if inputs is not None else RunInputs()
     reasons: list[Reason] = []
 
     # 1. Market blocking reasons
@@ -138,7 +155,9 @@ def collect_registered_reasons(
                 policy_version=POLICY_VERSION,
             )
         )
-    elif news.quality == ComponentQuality.PARTIAL:
+
+    # Not an elif: an empty merge can still hide a provider that failed.
+    if news.quality == ComponentQuality.PARTIAL:
         reasons.append(
             Reason(
                 code="PARTIAL_NEWS_COVERAGE",
@@ -211,6 +230,222 @@ def collect_registered_reasons(
             )
         )
 
+    reasons.extend(_input_reasons(market, metrics, inputs))
+    return reasons
+
+
+def _market_is_usable(market: MarketSnapshot) -> bool:
+    return (
+        market.error_code is None
+        and market.quality == ComponentQuality.FRESH
+        and len(market.bars) >= 21
+        and market.bars[-1].session_date == market.latest_completed_session
+    )
+
+
+def _input_reasons(
+    market: MarketSnapshot, metrics: list[ResearchMetric], inputs: RunInputs
+) -> list[Reason]:
+    reasons: list[Reason] = []
+
+    def add(
+        code: str,
+        label: str,
+        severity: Literal["info", "warning", "blocking"],
+        description: str,
+        metric_keys: list[str] | None = None,
+        threshold: float | None = None,
+    ) -> None:
+        reasons.append(
+            Reason(
+                code=code,
+                label=label,
+                severity=severity,
+                description=description,
+                metric_keys=metric_keys or [],
+                policy_version=POLICY_VERSION,
+                threshold=threshold,
+            )
+        )
+
+    role_names = {
+        "filings": "SEC filings",
+        "fundamentals": "Fundamentals",
+        "macro": "Macro",
+        "crosscheck": "Price cross-check",
+    }
+    quality = {role: inputs.role_quality(role) for role in OPTIONAL_ROLES}
+
+    for role in OPTIONAL_ROLES:
+        if quality[role] == RoleQuality.NOT_CONFIGURED:
+            name = role_names[role]
+            add(
+                "PROVIDER_NOT_CONFIGURED",
+                f"{name} Provider Not Configured",
+                "info",
+                f"No {name.lower()} provider is configured for this run; "
+                "its metrics are unavailable.",
+                list(ROLE_METRIC_KEYS[role]),
+            )
+
+    filings_failed = quality["filings"] == RoleQuality.FAILED
+    fundamentals_failed = quality["fundamentals"] == RoleQuality.FAILED
+    if filings_failed or fundamentals_failed:
+        if fundamentals_failed and not filings_failed:
+            edgar_description = (
+                "SEC EDGAR fundamentals could not be retrieved; fundamentals "
+                "metrics are unavailable."
+            )
+            edgar_keys = list(ROLE_METRIC_KEYS["fundamentals"])
+        else:
+            edgar_description = (
+                "SEC EDGAR data could not be retrieved; filing and fundamentals "
+                "metrics are unavailable."
+            )
+            edgar_keys = [
+                *ROLE_METRIC_KEYS["filings"],
+                *ROLE_METRIC_KEYS["fundamentals"],
+            ]
+        add(
+            "FILINGS_PROVIDER_FAILED",
+            "SEC Filings Provider Failed",
+            "warning",
+            edgar_description,
+            edgar_keys,
+        )
+
+    if inputs.role_error("filings") == "NO_SEC_FILER_RECORD":
+        add(
+            "NO_SEC_FILER_RECORD",
+            "No SEC Filer Record",
+            "info",
+            "No SEC filer record was found for this ticker; filing metrics are "
+            "unavailable.",
+            list(ROLE_METRIC_KEYS["filings"]),
+        )
+
+    if (
+        inputs.filings is not None
+        and inputs.filings.sic_code
+        and inputs.sector_etf is None
+        and quality["filings"] not in (RoleQuality.NOT_CONFIGURED, RoleQuality.FAILED)
+    ):
+        add(
+            "SECTOR_UNMAPPED",
+            "Sector Not Mapped",
+            "info",
+            "The company's SIC code does not map to a sector ETF; the sector "
+            "excess-return metric is unavailable.",
+            ["excess_return_20_vs_sector"],
+        )
+
+    if (
+        inputs.filings is not None
+        and not inputs.filings.sic_code
+        and inputs.sector_etf is None
+        and quality["filings"] not in (RoleQuality.NOT_CONFIGURED, RoleQuality.FAILED)
+        and inputs.role_error("filings") != "NO_SEC_FILER_RECORD"
+    ):
+        add(
+            "SECTOR_UNMAPPED",
+            "Sector Not Mapped",
+            "info",
+            "No SEC industry code was available, so no sector ETF comparison "
+            "was made; the sector excess-return metric is unavailable.",
+            ["excess_return_20_vs_sector"],
+        )
+
+    if inputs.role_error("fundamentals") == "FUNDAMENTALS_UNAVAILABLE":
+        add(
+            "FUNDAMENTALS_UNAVAILABLE",
+            "Fundamentals Unavailable",
+            "info",
+            "No annual (10-K) financial facts were found; fundamentals metrics "
+            "are unavailable.",
+            list(ROLE_METRIC_KEYS["fundamentals"]),
+        )
+
+    if inputs.macro is not None and any(
+        obs.quality == ComponentQuality.STALE for obs in inputs.macro.observations
+    ):
+        add(
+            "MACRO_DATA_STALE",
+            "Macro Data Stale",
+            "info",
+            "At least one macro series has an observation older than its "
+            "freshness window.",
+            list(ROLE_METRIC_KEYS["macro"]),
+        )
+
+    if quality["macro"] == RoleQuality.FAILED:
+        add(
+            "MACRO_PROVIDER_FAILED",
+            "Macro Provider Failed",
+            "info",
+            "Macro series could not be retrieved; macro metrics are unavailable.",
+            list(ROLE_METRIC_KEYS["macro"]),
+        )
+
+    for metric in metrics:
+        if (
+            metric.key == "price_crosscheck_max_deviation"
+            and metric.value is not None
+            and metric.value > CROSSCHECK_THRESHOLD
+        ):
+            add(
+                "PRICE_SOURCES_DISAGREE",
+                "Price Sources Disagree",
+                "warning",
+                f"Adjusted closes differ between price sources by up to "
+                f"{metric.value:.1%}, above the {CROSSCHECK_THRESHOLD:.1%} "
+                "threshold.",
+                ["price_crosscheck_max_deviation"],
+                CROSSCHECK_THRESHOLD,
+            )
+
+    if quality["crosscheck"] in (RoleQuality.FAILED, RoleQuality.MISSING):
+        add(
+            "PRICE_CROSSCHECK_UNAVAILABLE",
+            "Price Cross-Check Unavailable",
+            "info",
+            "The second price source returned no usable data; the price "
+            "cross-check metric is unavailable.",
+            list(ROLE_METRIC_KEYS["crosscheck"]),
+        )
+
+    if _market_is_usable(market):
+        by_key = {metric.key: metric for metric in metrics}
+
+        def unaligned(keys: list[str]) -> bool:
+            # A context series that exists but shares no session with the run's
+            # window leaves its relative metric with no value.
+            present = [by_key[key] for key in keys if key in by_key]
+            return any(m.value is None for m in present)
+
+        market_keys = ["excess_return_5_vs_spy", "excess_return_20_vs_spy"]
+        sector_keys = ["excess_return_20_vs_sector"]
+        # A run for the benchmark itself has no benchmark comparison to make.
+        wants_market = market.symbol != MARKET_CONTEXT_SYMBOL
+        wants_sector = bool(inputs.sector_etf)
+        market_gap = wants_market and (
+            not market.context_bars.get(MARKET_CONTEXT_SYMBOL) or unaligned(market_keys)
+        )
+        sector_gap = wants_sector and (
+            not market.context_bars.get(inputs.sector_etf or "")
+            or unaligned(sector_keys)
+        )
+        if market_gap or sector_gap:
+            add(
+                "CONTEXT_BARS_UNAVAILABLE",
+                "Context Price Bars Unavailable",
+                "info",
+                "Price bars for SPY or the sector ETF were not retrieved or did "
+                "not line up with this symbol's sessions; relative-return "
+                "metrics are unavailable.",
+                (market_keys if market_gap else [])
+                + (sector_keys if sector_gap else []),
+            )
+
     return reasons
 
 
@@ -241,9 +476,10 @@ def apply_policy(
     news: NewsSnapshot,
     interpretation: AIInterpretation,
     metrics: list[ResearchMetric],
+    inputs: RunInputs | None = None,
 ) -> PolicyResult:
-    reasons = collect_registered_reasons(market, news, interpretation, metrics)
-    quality = assess_quality(market, news, interpretation)
+    reasons = collect_registered_reasons(market, news, interpretation, metrics, inputs)
+    quality = assess_quality(market, news, interpretation, inputs)
 
     if quality.overall == OverallQuality.INSUFFICIENT:
         status = ResearchStatus.INSUFFICIENT_DATA

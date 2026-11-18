@@ -98,7 +98,7 @@ def mock_market(sample_bars: list[DailyBar]):
     market.name = "mock_market"
 
     def fetch(
-        symbol: str, start: date, end: date, retrieved_at: datetime
+        symbol: str, start: date, end: date, retrieved_at: datetime, **kwargs: object
     ) -> MarketSnapshot:
         now = retrieved_at
         session_shift = end - sample_bars[-1].session_date
@@ -165,7 +165,7 @@ def mock_llm():
     llm.model = "gemini-2.5-flash"
 
     def interpret(
-        *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> AIInterpretation:
         return AIInterpretation(
             sentiment_label="positive",

@@ -1099,7 +1099,7 @@ def test_new_snapshot_fields_round_trip(
         macro=macro,
     )
     assert content_hash == combined_snapshot_hash(
-        market, news, fundamentals=fundamentals, macro=macro
+        market, news, evidence=[filing], fundamentals=fundamentals, macro=macro
     )
 
     stored = repo.get_owned(user_id=user_id, public_id=running_run.public_id)

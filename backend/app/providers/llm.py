@@ -1,7 +1,7 @@
 import json
 import re
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Sequence
 from typing import Any
 import httpx
 from groq import APIConnectionError
@@ -11,7 +11,7 @@ from app.core.config import GROQ_STRICT_JSON_SCHEMA_MODELS
 from app.domain.errors import VantageError
 from app.domain.research import (
     AIInterpretation,
-    NewsSnapshot,
+    NewsItem,
     ResearchMetric,
 )
 from app.prompts.research_interpretation import (
@@ -132,13 +132,52 @@ class DisabledInterpretationProvider(InterpretationProvider):
     enabled: bool = False
 
     def interpret(
-        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        self, *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> None:
         return None
 
 
+UNCLEAR_ATTRIBUTION_WARNING = (
+    "Attribution was set to unclear because no company-specific evidence was cited."
+)
+
+
+NO_SECTOR_COMPARISON_WARNING = (
+    "Attribution was set to unclear because no sector comparison was available."
+)
+NO_MARKET_COMPARISON_WARNING = (
+    "Attribution was set to unclear because no market comparison was available."
+)
+_MARKET_RELATIVE_KEYS = ("excess_return_5_vs_spy", "excess_return_20_vs_spy")
+_SECTOR_RELATIVE_KEY = "excess_return_20_vs_sector"
+
+
+def comparison_availability(metrics: Sequence[ResearchMetric]) -> dict[str, bool]:
+    """Which relative comparisons have a value, as keyword arguments for the gate."""
+    values = {metric.key: metric.value for metric in metrics}
+    return {
+        "market_comparison_available": any(
+            values.get(key) is not None for key in _MARKET_RELATIVE_KEYS
+        ),
+        "sector_comparison_available": values.get(_SECTOR_RELATIVE_KEY) is not None,
+    }
+
+
+def _company_specific_ids(evidence: list[NewsItem]) -> set[str]:
+    return {
+        item.evidence_id
+        for item in evidence
+        if item.details is not None and item.details.company_specific is True
+    }
+
+
 def validate_interpretation(
-    payload: object, allowed_evidence_ids: set[str]
+    payload: object,
+    allowed_evidence_ids: set[str],
+    *,
+    company_specific_ids: Collection[str] = (),
+    market_comparison_available: bool = True,
+    sector_comparison_available: bool = True,
 ) -> AIInterpretation:
     try:
         if isinstance(payload, str):
@@ -187,6 +226,34 @@ def validate_interpretation(
         raise VantageError(
             code="MODEL_OUTPUT_INVALID",
             safe_message="AI interpretation contained inconsistent abstention fields.",
+        )
+    if result.abstained:
+        return result.model_copy(update={"attribution": None})
+    if result.attribution is None:
+        return result.model_copy(update={"attribution": "unclear"})
+    if result.attribution in {"company", "mixed"} and not (
+        set(result.evidence_ids) & set(company_specific_ids)
+    ):
+        # Appended in code after the text checks, so it is not itself checked.
+        return result.model_copy(
+            update={
+                "attribution": "unclear",
+                "warnings": [*result.warnings, UNCLEAR_ATTRIBUTION_WARNING],
+            }
+        )
+    if result.attribution == "sector" and not sector_comparison_available:
+        return result.model_copy(
+            update={
+                "attribution": "unclear",
+                "warnings": [*result.warnings, NO_SECTOR_COMPARISON_WARNING],
+            }
+        )
+    if result.attribution == "market" and not market_comparison_available:
+        return result.model_copy(
+            update={
+                "attribution": "unclear",
+                "warnings": [*result.warnings, NO_MARKET_COMPARISON_WARNING],
+            }
         )
     return result
 
@@ -240,10 +307,10 @@ class GeminiInterpretationProvider(InterpretationProvider):
         )
 
     def interpret(
-        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        self, *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> AIInterpretation:
-        allowed_evidence_ids = {item.evidence_id for item in news.items}
-        input_data = build_interpretation_input(symbol, metrics, news)
+        allowed_evidence_ids = {item.evidence_id for item in evidence}
+        input_data = build_interpretation_input(symbol, metrics, evidence)
         user_content = json.dumps(input_data)
 
         from google.genai import types
@@ -271,7 +338,10 @@ class GeminiInterpretationProvider(InterpretationProvider):
                     safe_message="Model refused or blocked content.",
                 )
         return validate_interpretation(
-            getattr(response, "text", "") or "", allowed_evidence_ids
+            getattr(response, "text", "") or "",
+            allowed_evidence_ids,
+            company_specific_ids=_company_specific_ids(evidence),
+            **comparison_availability(metrics),
         )
 
 
@@ -309,10 +379,10 @@ class GroqInterpretationProvider(InterpretationProvider):
         )
 
     def interpret(
-        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        self, *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> AIInterpretation:
-        allowed_evidence_ids = {item.evidence_id for item in news.items}
-        input_data = build_interpretation_input(symbol, metrics, news)
+        allowed_evidence_ids = {item.evidence_id for item in evidence}
+        input_data = build_interpretation_input(symbol, metrics, evidence)
         user_content = json.dumps(input_data)
 
         messages = [
@@ -352,7 +422,10 @@ class GroqInterpretationProvider(InterpretationProvider):
                 safe_message="AI interpretation provider refused the request.",
             )
         return validate_interpretation(
-            getattr(message, "content", "") or "", allowed_evidence_ids
+            getattr(message, "content", "") or "",
+            allowed_evidence_ids,
+            company_specific_ids=_company_specific_ids(evidence),
+            **comparison_availability(metrics),
         )
 
 
@@ -382,10 +455,10 @@ class OllamaInterpretationProvider(InterpretationProvider):
         return httpx.Client(timeout=float(self.timeout_seconds))
 
     def interpret(
-        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        self, *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> AIInterpretation:
-        allowed_evidence_ids = {item.evidence_id for item in news.items}
-        input_data = build_interpretation_input(symbol, metrics, news)
+        allowed_evidence_ids = {item.evidence_id for item in evidence}
+        input_data = build_interpretation_input(symbol, metrics, evidence)
         user_content = json.dumps(input_data)
 
         payload = {
@@ -420,4 +493,9 @@ class OllamaInterpretationProvider(InterpretationProvider):
                 code="MODEL_OUTPUT_INVALID",
                 safe_message="Failed to parse Ollama response.",
             ) from exc
-        return validate_interpretation(content, allowed_evidence_ids)
+        return validate_interpretation(
+            content,
+            allowed_evidence_ids,
+            company_specific_ids=_company_specific_ids(evidence),
+            **comparison_availability(metrics),
+        )

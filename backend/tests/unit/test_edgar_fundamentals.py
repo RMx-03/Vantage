@@ -307,6 +307,20 @@ def test_second_call_uses_the_cache_and_payload_is_reduced() -> None:
 
 
 @respx.mock
+def test_ticker_map_is_downloaded_once_across_filings_and_fundamentals() -> None:
+    # The run's cutoff is the previous session; its retrieval is the next day.
+    cutoff = datetime(2026, 11, 13, 21, 0, tzinfo=UTC)
+    retrieved = datetime(2026, 11, 14, 22, 0, tzinfo=UTC)
+    tickers = mock_tickers()
+    provider = make_provider()
+
+    provider.fetch_filing_evidence("zzzz", cutoff, retrieved, 30)
+    provider.fetch_fundamentals("zzzz", retrieved)
+
+    assert tickers.call_count == 1
+
+
+@respx.mock
 def test_cache_failure_is_a_miss(caplog: pytest.LogCaptureFixture) -> None:
     mock_tickers()
     mock_facts()

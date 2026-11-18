@@ -1,0 +1,50 @@
+{
+ "company_name": "Fixture Company Inc.",
+ "cik": "0009990001",
+ "sic_code": "3571",
+ "filings": [
+  {
+   "key": "8k",
+   "offset_hours": 30,
+   "form_type": "8-K",
+   "item_codes": ["2.02", "9.01"],
+   "url_path": "/filings/fixture-8k"
+  },
+  {
+   "key": "10q",
+   "offset_hours": 216,
+   "form_type": "10-Q",
+   "item_codes": [],
+   "url_path": "/filings/fixture-10q"
+  }
+ ],
+ "insiders": [
+  {
+   "key": "form4-a",
+   "offset_hours": 52,
+   "owner": "Fixture Officer One",
+   "transaction_code": "S",
+   "direction": "disposed",
+   "parse_state": "parsed",
+   "url_path": "/filings/fixture-form4-a"
+  },
+  {
+   "key": "form4-b",
+   "offset_hours": 400,
+   "owner": "Fixture Officer Two",
+   "transaction_code": "P",
+   "direction": "acquired",
+   "parse_state": "parsed",
+   "url_path": "/filings/fixture-form4-b"
+  },
+  {
+   "key": "form4-c",
+   "offset_hours": 1200,
+   "owner": null,
+   "transaction_code": null,
+   "direction": null,
+   "parse_state": "unparsed",
+   "url_path": "/filings/fixture-form4-c"
+  }
+ ]
+}

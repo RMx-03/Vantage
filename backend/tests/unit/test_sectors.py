@@ -127,3 +127,36 @@ def test_ranges_do_not_overlap() -> None:
 
 def test_every_etf_is_used() -> None:
     assert {etf for _, _, etf in sectors._RANGES} == set(SECTOR_ETFS)
+
+
+# The sector map decides which relative-return metric a run gets, so editing it changes
+# stored numbers. A change needs a new METRICS_VERSION; then update both values below.
+PINNED_METRICS_VERSION = "eod-metrics-v3"
+PINNED_SECTOR_MAP_DIGEST = (
+    "1dcb9d3506b9fe457a82aed4d4684aedaadba31eb8cfedb162a5c509676fdfa4"
+)
+
+
+def _sector_map_digest() -> str:
+    import hashlib
+    import json
+
+    from app.services import sectors
+
+    canonical = json.dumps(
+        [list(row) for row in sectors._RANGES], separators=(",", ":")
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def test_sector_map_is_pinned_to_the_metrics_version() -> None:
+    from app.services.metrics import METRICS_VERSION
+
+    assert (
+        METRICS_VERSION == PINNED_METRICS_VERSION
+        and _sector_map_digest() == PINNED_SECTOR_MAP_DIGEST
+    ), (
+        "The sector map or METRICS_VERSION changed. Editing the SIC to sector-ETF "
+        "table changes stored metrics, so bump METRICS_VERSION, then update "
+        "PINNED_METRICS_VERSION and PINNED_SECTOR_MAP_DIGEST in this test."
+    )

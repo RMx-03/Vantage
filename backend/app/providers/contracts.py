@@ -7,6 +7,7 @@ from app.domain.research import (
     FundamentalsSnapshot,
     MacroSnapshot,
     MarketSnapshot,
+    NewsItem,
     NewsSnapshot,
     PriceCrossCheckSnapshot,
     ResearchMetric,
@@ -86,5 +87,5 @@ class InterpretationProvider(Protocol):
     enabled: bool
 
     def interpret(
-        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        self, *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> AIInterpretation | None: ...

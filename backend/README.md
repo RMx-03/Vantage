@@ -84,7 +84,7 @@ Other settings that matter in a deployment:
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP delivery. For Gmail: `smtp.gmail.com`, `587` (STARTTLS; `465` uses implicit TLS), the account address and a Google app password. TLS is always negotiated before the password is sent. |
 | `BREVO_API_KEY` | A Brevo API key (`xkeysib-…`), not an SMTP key. |
 | `EMAIL_FROM` | The sender. With Gmail, the account address or a verified alias; with Brevo, a sender verified there. |
-| `MARKET_PROVIDER`, `NEWS_PROVIDERS`, `FILINGS_PROVIDER`, `MACRO_PROVIDER`, `PRICE_CROSSCHECK_PROVIDER` | Which provider serves each data role. Defaults: `yfinance`, `yfinance` (comma list), `none`, `none`, `none`. Allowed values are listed in `.env.example`; see Data providers below. |
+| `MARKET_PROVIDER`, `NEWS_PROVIDERS`, `FILINGS_PROVIDER`, `MACRO_PROVIDER`, `PRICE_CROSSCHECK_PROVIDER` | Which provider serves each data role. Defaults: `alpaca`, `alpaca,finnhub` (comma list), `edgar`, `fred`, `none`. Allowed values are listed in `.env.example`; see Data providers below. |
 | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, `FINNHUB_API_KEY`, `FRED_API_KEY`, `TIINGO_API_KEY` | Provider credentials, empty by default and redacted. A missing key leaves that role not configured; it does not stop startup. |
 | `SEC_USER_AGENT` | User-Agent for SEC EDGAR; the SEC requires it and a contact in it. No default; redacted. |
 | `PROVIDER_TIMEOUT_SECONDS` | Time budget for one provider call, covering all of its requests and the retry (default `6`). |
@@ -132,7 +132,30 @@ Running the file directly fails with `No module named 'app'`.
 
 ## Data providers
 
-Each data role names its provider in configuration; the defaults keep `yfinance` for prices and news, and filings, macro and the price cross-check stay off. Keys are optional and are read from the environment only. Never commit them.
+Each data role names its provider in configuration. The defaults are the free providers:
+
+| Setting | Default | Supplies |
+|---|---|---|
+| `MARKET_PROVIDER` | `alpaca` | End-of-day prices, plus the benchmark and context series used for relative metrics |
+| `NEWS_PROVIDERS` | `alpaca,finnhub` | Cited news evidence, merged and de-duplicated across both |
+| `FILINGS_PROVIDER` | `edgar` | SEC filings and fundamentals |
+| `MACRO_PROVIDER` | `fred` | Macro series and the VIX close |
+| `PRICE_CROSSCHECK_PROVIDER` | `none` | Optional second price source (`tiingo`) used to cross-check the first |
+
+Keys are read from the environment only. Never commit them. A missing key never stops startup. The role is reported as not configured on the run, and the affected metrics show as missing with a reason. The market role is the exception: without an Alpaca key there is no market provider, so the run fails with "Market data provider is not configured.".
+
+### Keyless quick start
+
+To try Vantage without any keys, select the built-in fixture provider for each role:
+
+```bash
+MARKET_PROVIDER=fixture
+NEWS_PROVIDERS=fixture
+FILINGS_PROVIDER=fixture
+MACRO_PROVIDER=fixture
+```
+
+Fixture data is invented demo data. It is for development and CI, not for research.
 
 | Provider | Role | Where the free key comes from |
 |---|---|---|
@@ -146,7 +169,13 @@ SEC EDGAR's fair-access policy requires every request to identify the caller. Se
 
 Alpaca's free market data uses the SIP feed, which excludes the most recent 15 minutes. The provider clamps its end time to that boundary, so a session that has only just closed can come back incomplete and is shown as stale until the data catches up.
 
-EDGAR, FRED and Tiingo are registered and can be selected, but research runs do not call them yet. They are wired into runs in the next stage.
+This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
+
+The VIX close is © Cboe and is shown with that label.
+
+### Emergency fallback
+
+`MARKET_PROVIDER=yfinance` and `NEWS_PROVIDERS=yfinance` restore yfinance for prices and news without a deploy. yfinance serves no benchmark or context series, so relative metrics are then unavailable and show as missing.
 
 A manual parity report compares Alpaca prices with yfinance, with an optional Tiingo cross-check. Run it from `backend/` with `uv run python -m scripts.compare_providers --output report.md`. It needs the Alpaca keys; Tiingo is optional. It is never run in CI, and a second run within the hour can exhaust Tiingo's hourly limit.
 
