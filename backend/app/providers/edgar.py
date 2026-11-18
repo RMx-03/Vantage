@@ -157,7 +157,11 @@ class EdgarProvider:
 
         try:
             deadline = self._http.deadline()
-            tickers = self._ticker_map(cutoff_date, retrieved_utc, deadline)
+            # Keyed by retrieval date, as the fundamentals path keys it, so a run
+            # downloads the ticker map once however far its cutoff trails.
+            tickers = self._ticker_map(
+                retrieved_utc.astimezone(_NY).date(), retrieved_utc, deadline
+            )
             entry = tickers.get(primary.replace(".", "-"))
             if entry is None:
                 found = False
@@ -196,9 +200,9 @@ class EdgarProvider:
         )
 
     def _ticker_map(
-        self, cutoff_date: date, retrieved_at: datetime, deadline: float
+        self, valid_for: date, retrieved_at: datetime, deadline: float
     ) -> dict[str, tuple[int, str]]:
-        cached = self._cache_get("company_tickers", cutoff_date)
+        cached = self._cache_get("company_tickers", valid_for)
         if isinstance(cached, dict):
             return {
                 k: (v[0], v[1])
@@ -222,7 +226,7 @@ class EdgarProvider:
             )
         if not reduced:
             raise ProviderHttpError("malformed")
-        self._cache_put("company_tickers", cutoff_date, reduced, retrieved_at)
+        self._cache_put("company_tickers", valid_for, reduced, retrieved_at)
         return {k: (v[0], v[1]) for k, v in reduced.items()}
 
     def _submissions(
