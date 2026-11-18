@@ -1,7 +1,7 @@
 import json
 import re
 import unicodedata
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from typing import Any
 import httpx
 from groq import APIConnectionError
@@ -142,6 +142,27 @@ UNCLEAR_ATTRIBUTION_WARNING = (
 )
 
 
+NO_SECTOR_COMPARISON_WARNING = (
+    "Attribution was set to unclear because no sector comparison was available."
+)
+NO_MARKET_COMPARISON_WARNING = (
+    "Attribution was set to unclear because no market comparison was available."
+)
+_MARKET_RELATIVE_KEYS = ("excess_return_5_vs_spy", "excess_return_20_vs_spy")
+_SECTOR_RELATIVE_KEY = "excess_return_20_vs_sector"
+
+
+def comparison_availability(metrics: Sequence[ResearchMetric]) -> dict[str, bool]:
+    """Which relative comparisons have a value, as keyword arguments for the gate."""
+    values = {metric.key: metric.value for metric in metrics}
+    return {
+        "market_comparison_available": any(
+            values.get(key) is not None for key in _MARKET_RELATIVE_KEYS
+        ),
+        "sector_comparison_available": values.get(_SECTOR_RELATIVE_KEY) is not None,
+    }
+
+
 def _company_specific_ids(evidence: list[NewsItem]) -> set[str]:
     return {
         item.evidence_id
@@ -155,6 +176,8 @@ def validate_interpretation(
     allowed_evidence_ids: set[str],
     *,
     company_specific_ids: Collection[str] = (),
+    market_comparison_available: bool = True,
+    sector_comparison_available: bool = True,
 ) -> AIInterpretation:
     try:
         if isinstance(payload, str):
@@ -216,6 +239,20 @@ def validate_interpretation(
             update={
                 "attribution": "unclear",
                 "warnings": [*result.warnings, UNCLEAR_ATTRIBUTION_WARNING],
+            }
+        )
+    if result.attribution == "sector" and not sector_comparison_available:
+        return result.model_copy(
+            update={
+                "attribution": "unclear",
+                "warnings": [*result.warnings, NO_SECTOR_COMPARISON_WARNING],
+            }
+        )
+    if result.attribution == "market" and not market_comparison_available:
+        return result.model_copy(
+            update={
+                "attribution": "unclear",
+                "warnings": [*result.warnings, NO_MARKET_COMPARISON_WARNING],
             }
         )
     return result
@@ -304,6 +341,7 @@ class GeminiInterpretationProvider(InterpretationProvider):
             getattr(response, "text", "") or "",
             allowed_evidence_ids,
             company_specific_ids=_company_specific_ids(evidence),
+            **comparison_availability(metrics),
         )
 
 
@@ -387,6 +425,7 @@ class GroqInterpretationProvider(InterpretationProvider):
             getattr(message, "content", "") or "",
             allowed_evidence_ids,
             company_specific_ids=_company_specific_ids(evidence),
+            **comparison_availability(metrics),
         )
 
 
@@ -458,4 +497,5 @@ class OllamaInterpretationProvider(InterpretationProvider):
             content,
             allowed_evidence_ids,
             company_specific_ids=_company_specific_ids(evidence),
+            **comparison_availability(metrics),
         )

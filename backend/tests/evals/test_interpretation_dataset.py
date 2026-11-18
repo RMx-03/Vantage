@@ -12,6 +12,15 @@ EVAL_FIXTURE_PATH = (
 EVAL_CASES = json.loads(EVAL_FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
+def _availability(case: dict) -> dict[str, bool]:
+    # Cases that name neither flag behave as before: both comparisons exist.
+    return {
+        key: case[key]
+        for key in ("market_comparison_available", "sector_comparison_available")
+        if key in case
+    }
+
+
 def test_eval_dataset_structure_and_completeness() -> None:
     assert len(EVAL_CASES) >= 20
     case_ids = [case["case_id"] for case in EVAL_CASES]
@@ -46,6 +55,7 @@ def test_eval_dataset_uses_runtime_safety_gate(case: dict) -> None:
             case["payload"],
             set(case["allowed_evidence_ids"]),
             company_specific_ids=set(case.get("company_specific_evidence_ids", [])),
+            **_availability(case),
         )
         if "expected" in case:
             expected = case["expected"]
@@ -62,5 +72,6 @@ def test_eval_dataset_uses_runtime_safety_gate(case: dict) -> None:
                 case["payload"],
                 set(case["allowed_evidence_ids"]),
                 company_specific_ids=set(case.get("company_specific_evidence_ids", [])),
+                **_availability(case),
             )
         assert caught.value.code == "MODEL_OUTPUT_INVALID"

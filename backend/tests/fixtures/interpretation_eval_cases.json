@@ -2258,8 +2258,7 @@
       "f3"
     ],
     "company_specific_evidence_ids": [
-      "f3",
-      "i1"
+      "f3"
     ],
     "payload": {
       "sentiment_label": "neutral",
@@ -2395,6 +2394,76 @@
       ],
       "warnings": [
         "Attribution was set to unclear because no company-specific evidence was cited."
+      ],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "unclear"
+    }
+  },
+  {
+    "case_id": "attr-downgrade-sector-no-comparison",
+    "category": "attribution_downgrade",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n3"
+    ],
+    "sector_comparison_available": false,
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.1,
+      "summary": "The supplied coverage mentions the sector, but no sector comparison backs a call.",
+      "evidence_ids": [
+        "n3"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "sector"
+    },
+    "expected": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.1,
+      "summary": "The supplied coverage mentions the sector, but no sector comparison backs a call.",
+      "evidence_ids": [
+        "n3"
+      ],
+      "warnings": [
+        "Attribution was set to unclear because no sector comparison was available."
+      ],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "unclear"
+    }
+  },
+  {
+    "case_id": "attr-downgrade-market-no-comparison",
+    "category": "attribution_downgrade",
+    "accepted": true,
+    "allowed_evidence_ids": [
+      "n3"
+    ],
+    "market_comparison_available": false,
+    "payload": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.1,
+      "summary": "The supplied coverage mentions the broad market, but no market comparison backs a call.",
+      "evidence_ids": [
+        "n3"
+      ],
+      "warnings": [],
+      "abstained": false,
+      "abstention_reason": null,
+      "attribution": "market"
+    },
+    "expected": {
+      "sentiment_label": "mixed",
+      "sentiment_score": 0.1,
+      "summary": "The supplied coverage mentions the broad market, but no market comparison backs a call.",
+      "evidence_ids": [
+        "n3"
+      ],
+      "warnings": [
+        "Attribution was set to unclear because no market comparison was available."
       ],
       "abstained": false,
       "abstention_reason": null,

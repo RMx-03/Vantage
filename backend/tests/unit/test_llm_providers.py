@@ -875,6 +875,98 @@ def test_company_specific_id_must_be_cited() -> None:
     assert result.attribution == "unclear"
 
 
+NO_SECTOR_WARNING = (
+    "Attribution was set to unclear because no sector comparison was available."
+)
+NO_MARKET_WARNING = (
+    "Attribution was set to unclear because no market comparison was available."
+)
+
+
+def test_sector_without_sector_comparison_is_downgraded() -> None:
+    result = validate_interpretation(
+        {**valid_interpretation_json(), "attribution": "sector"},
+        {"news-1"},
+        sector_comparison_available=False,
+    )
+    assert result.attribution == "unclear"
+    assert result.warnings == [NO_SECTOR_WARNING]
+
+
+def test_market_without_market_comparison_is_downgraded() -> None:
+    result = validate_interpretation(
+        {**valid_interpretation_json(), "attribution": "market"},
+        {"news-1"},
+        market_comparison_available=False,
+    )
+    assert result.attribution == "unclear"
+    assert result.warnings == [NO_MARKET_WARNING]
+
+
+@pytest.mark.parametrize("value", ["market", "sector"])
+def test_market_and_sector_are_kept_when_the_comparison_exists(value: str) -> None:
+    result = validate_interpretation(
+        {**valid_interpretation_json(), "attribution": value},
+        {"news-1"},
+        market_comparison_available=True,
+        sector_comparison_available=True,
+    )
+    assert result.attribution == value
+    assert result.warnings == []
+
+
+def _relative_metric(key: str, value: float | None, now: datetime) -> ResearchMetric:
+    return ResearchMetric(
+        key=key,
+        label=key,
+        value=value,
+        unit="ratio",
+        window_sessions=20,
+        as_of=now,
+        calculation_version="eod-metrics-v3",
+        quality=ComponentQuality.FRESH
+        if value is not None
+        else ComponentQuality.MISSING,
+    )
+
+
+def test_comparison_availability_reads_the_relative_metrics(
+    fixed_now: datetime,
+) -> None:
+    from app.providers.llm import comparison_availability
+
+    none = [
+        _relative_metric("excess_return_5_vs_spy", None, fixed_now),
+        _relative_metric("excess_return_20_vs_spy", None, fixed_now),
+        _relative_metric("excess_return_20_vs_sector", None, fixed_now),
+    ]
+    assert comparison_availability(none) == {
+        "market_comparison_available": False,
+        "sector_comparison_available": False,
+    }
+    some = [
+        _relative_metric("excess_return_5_vs_spy", None, fixed_now),
+        _relative_metric("excess_return_20_vs_spy", 0.01, fixed_now),
+        _relative_metric("excess_return_20_vs_sector", 0.02, fixed_now),
+    ]
+    assert comparison_availability(some) == {
+        "market_comparison_available": True,
+        "sector_comparison_available": True,
+    }
+
+
+@pytest.mark.parametrize("factory", [gemini_factory, groq_factory, ollama_factory])
+def test_providers_downgrade_sector_when_no_comparison_exists(
+    factory, metrics: list[ResearchMetric], news: NewsSnapshot
+) -> None:
+    reply = {**valid_interpretation_json(), "attribution": "sector"}
+    result = factory(response=reply).interpret(
+        symbol="AAPL", metrics=metrics, evidence=news.items
+    )
+    assert result.attribution == "unclear"
+    assert result.warnings == [NO_SECTOR_WARNING]
+
+
 def test_stored_v2_interpretation_still_validates() -> None:
     parsed = AIInterpretation.model_validate(valid_interpretation_json())
     assert parsed.attribution is None
