@@ -621,14 +621,161 @@ def test_expected_gaps_are_info_only(
     assert result.research_status == ResearchStatus.INFORMATIONAL
 
 
-def test_sector_unmapped_needs_a_sic_code(
+def test_missing_sic_code_on_a_usable_filer_explains_the_sector_gap(
     valid_market: MarketSnapshot,
     healthy_news: NewsSnapshot,
     healthy_model: AIInterpretation,
 ) -> None:
     inputs = _configured(sector_etf=None, filings=_filings(sic_code=None))
     result = _run(valid_market, healthy_news, healthy_model, inputs)
+    reason = next(r for r in result.reasons if r.code == "SECTOR_UNMAPPED")
+    assert reason.severity == "info"
+    assert reason.metric_keys == ["excess_return_20_vs_sector"]
+    assert "No SEC industry code" in reason.description
+
+
+@pytest.mark.parametrize(
+    "filings",
+    [
+        _filings(
+            sic_code=None,
+            quality=ComponentQuality.MISSING,
+            error_code="NO_SEC_FILER_RECORD",
+        ),
+        None,
+    ],
+)
+def test_missing_sic_code_stays_quiet_when_another_reason_explains_it(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+    filings: FilingsSnapshot | None,
+) -> None:
+    failed = {} if filings is not None else {"filings": "SEC_PROVIDER_FAILED"}
+    inputs = _configured(sector_etf=None, filings=filings, failed=failed)
+    result = _run(valid_market, healthy_news, healthy_model, inputs)
     assert "SECTOR_UNMAPPED" not in [r.code for r in result.reasons]
+    unconfigured = _configured(
+        sector_etf=None, filings=None, not_configured=frozenset({"filings"})
+    )
+    result = _run(valid_market, healthy_news, healthy_model, unconfigured)
+    assert "SECTOR_UNMAPPED" not in [r.code for r in result.reasons]
+
+
+def test_fundamentals_only_failure_is_worded_for_fundamentals(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    inputs = _configured(
+        fundamentals=None, failed={"fundamentals": "FILINGS_PROVIDER_FAILED"}
+    )
+    result = _run(valid_market, healthy_news, healthy_model, inputs)
+    reason = next(r for r in result.reasons if r.code == "FILINGS_PROVIDER_FAILED")
+    assert reason.severity == "warning"
+    assert reason.description == (
+        "SEC EDGAR fundamentals could not be retrieved; fundamentals metrics "
+        "are unavailable."
+    )
+    assert reason.metric_keys == ["revenue_growth_fy_yoy", "net_margin_fy"]
+
+
+def test_both_edgar_roles_failing_keeps_the_combined_wording(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    inputs = _configured(
+        filings=None,
+        fundamentals=None,
+        failed={"filings": "X", "fundamentals": "X"},
+    )
+    result = _run(valid_market, healthy_news, healthy_model, inputs)
+    reason = next(r for r in result.reasons if r.code == "FILINGS_PROVIDER_FAILED")
+    assert reason.description == (
+        "SEC EDGAR data could not be retrieved; filing and fundamentals "
+        "metrics are unavailable."
+    )
+    assert reason.metric_keys == [
+        "filing_count_30d",
+        "insider_filing_count_90d",
+        "revenue_growth_fy_yoy",
+        "net_margin_fy",
+    ]
+
+
+def test_empty_merged_news_still_reports_a_failed_provider(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    partial_empty = healthy_news.model_copy(
+        update={"items": [], "quality": ComponentQuality.PARTIAL}
+    )
+    result = apply_policy(valid_market, partial_empty, healthy_model, [], None)
+    codes = [r.code for r in result.reasons]
+    assert "NO_RECENT_NEWS" in codes
+    assert codes.count("PARTIAL_NEWS_COVERAGE") == 1
+
+
+def _relative(key: str, value: float | None) -> ResearchMetric:
+    return ResearchMetric(
+        key=key,
+        label=key,
+        value=value,
+        unit="ratio",
+        window_sessions=20,
+        as_of=_NOW,
+        calculation_version="eod-metrics-v3",
+        quality=(
+            ComponentQuality.FRESH if value is not None else ComponentQuality.MISSING
+        ),
+    )
+
+
+def test_context_bars_present_but_unaligned_is_explained(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    metrics = [
+        _relative("excess_return_5_vs_spy", None),
+        _relative("excess_return_20_vs_spy", None),
+        _relative("excess_return_20_vs_sector", 0.01),
+    ]
+    result = _run(valid_market, healthy_news, healthy_model, _configured(), metrics)
+    reason = next(r for r in result.reasons if r.code == "CONTEXT_BARS_UNAVAILABLE")
+    assert reason.metric_keys == ["excess_return_5_vs_spy", "excess_return_20_vs_spy"]
+
+
+def test_context_bars_reason_absent_when_relative_metrics_have_values(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    metrics = [
+        _relative("excess_return_5_vs_spy", 0.01),
+        _relative("excess_return_20_vs_spy", 0.01),
+        _relative("excess_return_20_vs_sector", 0.01),
+    ]
+    result = _run(valid_market, healthy_news, healthy_model, _configured(), metrics)
+    assert "CONTEXT_BARS_UNAVAILABLE" not in [r.code for r in result.reasons]
+
+
+def test_spy_run_does_not_report_its_own_benchmark_as_missing(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    spy_market = valid_market.model_copy(update={"symbol": "SPY"})
+    result = apply_policy(
+        spy_market,
+        healthy_news,
+        healthy_model,
+        [],
+        _configured(sector_etf=None),
+    )
+    assert "CONTEXT_BARS_UNAVAILABLE" not in [r.code for r in result.reasons]
 
 
 def test_crosscheck_gap_of_1_2_percent_is_a_warning(

@@ -14,6 +14,7 @@ from app.domain.research import (
     RoleQuality,
     StrictModel,
 )
+from app.services.data_stage import MARKET_CONTEXT_SYMBOL
 from app.services.metrics import ROLE_METRIC_KEYS
 from app.services.quality import assess_quality
 from app.services.run_inputs import OPTIONAL_ROLES, RunInputs
@@ -154,7 +155,9 @@ def collect_registered_reasons(
                 policy_version=POLICY_VERSION,
             )
         )
-    elif news.quality == ComponentQuality.PARTIAL:
+
+    # Not an elif: an empty merge can still hide a provider that failed.
+    if news.quality == ComponentQuality.PARTIAL:
         reasons.append(
             Reason(
                 code="PARTIAL_NEWS_COVERAGE",
@@ -285,14 +288,30 @@ def _input_reasons(
                 list(ROLE_METRIC_KEYS[role]),
             )
 
-    if RoleQuality.FAILED in (quality["filings"], quality["fundamentals"]):
+    filings_failed = quality["filings"] == RoleQuality.FAILED
+    fundamentals_failed = quality["fundamentals"] == RoleQuality.FAILED
+    if filings_failed or fundamentals_failed:
+        if fundamentals_failed and not filings_failed:
+            edgar_description = (
+                "SEC EDGAR fundamentals could not be retrieved; fundamentals "
+                "metrics are unavailable."
+            )
+            edgar_keys = list(ROLE_METRIC_KEYS["fundamentals"])
+        else:
+            edgar_description = (
+                "SEC EDGAR data could not be retrieved; filing and fundamentals "
+                "metrics are unavailable."
+            )
+            edgar_keys = [
+                *ROLE_METRIC_KEYS["filings"],
+                *ROLE_METRIC_KEYS["fundamentals"],
+            ]
         add(
             "FILINGS_PROVIDER_FAILED",
             "SEC Filings Provider Failed",
             "warning",
-            "SEC EDGAR data could not be retrieved; filing and fundamentals "
-            "metrics are unavailable.",
-            [*ROLE_METRIC_KEYS["filings"], *ROLE_METRIC_KEYS["fundamentals"]],
+            edgar_description,
+            edgar_keys,
         )
 
     if inputs.role_error("filings") == "NO_SEC_FILER_RECORD":
@@ -317,6 +336,22 @@ def _input_reasons(
             "info",
             "The company's SIC code does not map to a sector ETF; the sector "
             "excess-return metric is unavailable.",
+            ["excess_return_20_vs_sector"],
+        )
+
+    if (
+        inputs.filings is not None
+        and not inputs.filings.sic_code
+        and inputs.sector_etf is None
+        and quality["filings"] not in (RoleQuality.NOT_CONFIGURED, RoleQuality.FAILED)
+        and inputs.role_error("filings") != "NO_SEC_FILER_RECORD"
+    ):
+        add(
+            "SECTOR_UNMAPPED",
+            "Sector Not Mapped",
+            "info",
+            "No SEC industry code was available, so no sector ETF comparison "
+            "was made; the sector excess-return metric is unavailable.",
             ["excess_return_20_vs_sector"],
         )
 
@@ -379,16 +414,36 @@ def _input_reasons(
         )
 
     if _market_is_usable(market):
-        wanted = ["SPY"] + ([inputs.sector_etf] if inputs.sector_etf else [])
-        if any(not market.context_bars.get(symbol) for symbol in wanted):
+        by_key = {metric.key: metric for metric in metrics}
+
+        def unaligned(keys: list[str]) -> bool:
+            # A context series that exists but shares no session with the run's
+            # window leaves its relative metric with no value.
+            present = [by_key[key] for key in keys if key in by_key]
+            return any(m.value is None for m in present)
+
+        market_keys = ["excess_return_5_vs_spy", "excess_return_20_vs_spy"]
+        sector_keys = ["excess_return_20_vs_sector"]
+        # A run for the benchmark itself has no benchmark comparison to make.
+        wants_market = market.symbol != MARKET_CONTEXT_SYMBOL
+        wants_sector = bool(inputs.sector_etf)
+        market_gap = wants_market and (
+            not market.context_bars.get(MARKET_CONTEXT_SYMBOL) or unaligned(market_keys)
+        )
+        sector_gap = wants_sector and (
+            not market.context_bars.get(inputs.sector_etf or "")
+            or unaligned(sector_keys)
+        )
+        if market_gap or sector_gap:
             add(
                 "CONTEXT_BARS_UNAVAILABLE",
                 "Context Price Bars Unavailable",
                 "info",
-                "Price bars for SPY or the sector ETF were not retrieved; "
-                "relative-return metrics are unavailable.",
-                ["excess_return_5_vs_spy", "excess_return_20_vs_spy"]
-                + (["excess_return_20_vs_sector"] if inputs.sector_etf else []),
+                "Price bars for SPY or the sector ETF were not retrieved or did "
+                "not line up with this symbol's sessions; relative-return "
+                "metrics are unavailable.",
+                (market_keys if market_gap else [])
+                + (sector_keys if sector_gap else []),
             )
 
     return reasons
