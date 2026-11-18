@@ -9,6 +9,7 @@ import {
   failedMarketRun,
   informationalRunV3,
   keylessRunV3,
+  storedProviderRegistryRun,
 } from '../../test/fixtures';
 
 describe('ResearchResult', () => {
@@ -243,5 +244,21 @@ describe('ResearchResult', () => {
     expect(screen.queryByText('Filings')).not.toBeInTheDocument();
     expect(screen.queryByText(/FRED/i)).not.toBeInTheDocument();
     expect(screen.queryByText('not configured')).not.toBeInTheDocument();
+  });
+
+  it('renders a run stored before metrics v3 with its provider list and no v3 sections', () => {
+    render(<ResearchResult run={storedProviderRegistryRun} historical />);
+
+    expect(screen.getByRole('heading', { name: 'Price' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Evidence and checks' })).toBeVisible();
+    for (const name of ['Relative', 'Fundamentals', 'Macro']) {
+      expect(screen.queryByRole('heading', { name })).not.toBeInTheDocument();
+    }
+    const list = screen.getByRole('list', { name: 'Providers by role' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(list).getAllByText('not configured')).toHaveLength(4);
+    expect(within(list).getAllByText('alpaca')).toHaveLength(2);
+    expect(screen.queryByText(/FRED/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Attribution/i)).not.toBeInTheDocument();
   });
 });

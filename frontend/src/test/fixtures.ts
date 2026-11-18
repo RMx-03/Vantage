@@ -561,3 +561,56 @@ export const keylessRunV3: ResearchRun = {
     ],
   },
 };
+
+function storedMetric(
+  key: string,
+  label: string,
+  value: number,
+  unit: ResearchMetric['unit'],
+  windowSessions: number | null
+): ResearchMetric {
+  return {
+    key,
+    label,
+    value,
+    unit,
+    window_sessions: windowSessions,
+    as_of: '2026-09-11T20:00:00Z',
+    calculation_version: 'eod-metrics-v2',
+    quality: 'fresh',
+  };
+}
+
+// A run stored after the provider registry (stages 3b and 3c) and before metrics v3:
+// the v2 response schema and v2 metric keys, a provider list that records the four
+// optional roles as not configured, and none of the v3 fields.
+export const storedProviderRegistryRun: ResearchRun = {
+  ...informationalRun,
+  run_id: 'a3eebc99-9c0b-4ef8-bb6d-6bb9bd380b33',
+  metrics: [
+    storedMetric('return_1_session', '1-session return', 0.0123, 'ratio', 1),
+    storedMetric('return_20_sessions', '20-session return', 0.0452, 'ratio', 20),
+    storedMetric(
+      'annualized_volatility_20',
+      '20-session annualized volatility',
+      0.2215,
+      'ratio',
+      20
+    ),
+    storedMetric('news_item_count', 'News items', 4, 'count', null),
+  ],
+  snapshot: {
+    ...informationalRun.snapshot!,
+    market_provider: 'alpaca',
+    news_provider: 'alpaca',
+    providers: [
+      providerRecord('market', 'alpaca', 'fresh'),
+      providerRecord('news', 'alpaca', 'fresh'),
+      providerRecord('filings', null, 'not_configured'),
+      providerRecord('fundamentals', null, 'not_configured'),
+      providerRecord('macro', null, 'not_configured'),
+      providerRecord('crosscheck', null, 'not_configured'),
+    ],
+  },
+  versions: baseVersions,
+};
