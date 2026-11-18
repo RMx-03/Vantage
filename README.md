@@ -109,7 +109,7 @@ docker compose up --build
 
 Open [http://localhost:5173](http://localhost:5173) and create an account. Locally no email is sent, so mark the account verified before running research. See [Email in local development](#email-in-local-development) for the one-line command.
 
-Vantage reads data from free providers. For a keyless start, add these four lines to `.env`; they use the built-in fixture provider, whose data is invented demo data:
+Vantage reads data from free providers. For a keyless start, set these four values in `.env`; they use the built-in fixture provider, whose data is invented demo data:
 
 ```bash
 MARKET_PROVIDER=fixture
