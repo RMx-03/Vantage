@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { NAV_ITEMS } from './navItems';
+import { navItems } from './navItems';
 import { MicroLabel } from '../ui';
 
 const BASE =
@@ -11,7 +11,7 @@ export default function SideNav() {
       <div className="px-3 pt-1 pb-2 text-[10px] font-label font-medium uppercase tracking-[0.2em] text-outline/70 border-b border-outline-variant/20 mb-1">
         Navigation
       </div>
-      {NAV_ITEMS.map((item) =>
+      {navItems().map((item) =>
         item.to ? (
           <NavLink
             key={item.label}

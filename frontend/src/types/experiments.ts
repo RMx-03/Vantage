@@ -1,7 +1,17 @@
 // Mirrors backend/app/domain/experiments.py (ADR-0008).
 import type { ResearchStatus, WorkflowStatus } from './research';
 
+// Same text as SURVIVORSHIP_LABEL in the backend; every result carries it.
+export const SURVIVORSHIP_LABEL =
+  'Exploratory: list chosen today, survivorship bias possible';
+
 export type Template = 'buy_and_hold' | 'sma_crossover' | 'momentum_top_k';
+
+export const TEMPLATE_LABELS: Record<Template, string> = {
+  buy_and_hold: 'Buy and hold',
+  sma_crossover: 'MA crossover',
+  momentum_top_k: 'Momentum top k',
+};
 
 export interface BuyAndHoldParams {
   template: 'buy_and_hold';
