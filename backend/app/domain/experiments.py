@@ -106,3 +106,20 @@ class Finding(StrictModel):
     message: str
     symbol: str | None = None
     count: int | None = None
+
+
+class SimulationMetrics(StrictModel):
+    """Deterministic metrics (backtest-metrics-v1). Sharpe uses a 0% risk-free rate."""
+
+    sessions: int
+    total_return: float
+    cagr: float | None
+    volatility: float | None
+    sharpe: float | None
+    sharpe_note: str | None = None
+    max_drawdown: float
+    max_drawdown_start: date | None = None
+    max_drawdown_end: date | None = None
+    turnover: float  # two-sided traded notional / average NAV, whole period
+    costs: float  # total costs / starting NAV
+    exposure: float  # average invested fraction of NAV
