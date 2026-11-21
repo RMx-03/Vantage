@@ -58,6 +58,10 @@ def get_experiment_executor() -> RunExecutor:
     return RunExecutor(settings.EXPERIMENT_EXECUTOR_MAX_WORKERS)
 
 
+def get_experiment_service() -> "ExperimentService":
+    return ExperimentService()
+
+
 def _configured_history() -> HistoryProvider | None:
     market = default_registry().build("market", settings.MARKET_PROVIDER, settings)
     return history_provider(market)

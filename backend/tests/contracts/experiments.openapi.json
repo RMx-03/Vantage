@@ -1,0 +1,1429 @@
+{
+  "components": {
+    "schemas": {
+      "BuyAndHoldParams": {
+        "additionalProperties": false,
+        "properties": {
+          "template": {
+            "const": "buy_and_hold",
+            "default": "buy_and_hold",
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "title": "BuyAndHoldParams",
+        "type": "object"
+      },
+      "CandidateTrial": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "params": {
+            "discriminator": {
+              "mapping": {
+                "buy_and_hold": "#/components/schemas/BuyAndHoldParams",
+                "momentum_top_k": "#/components/schemas/MomentumTopKParams",
+                "sma_crossover": "#/components/schemas/SmaCrossoverParams"
+              },
+              "propertyName": "template"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BuyAndHoldParams"
+              },
+              {
+                "$ref": "#/components/schemas/SmaCrossoverParams"
+              },
+              {
+                "$ref": "#/components/schemas/MomentumTopKParams"
+              }
+            ],
+            "title": "Params"
+          },
+          "status": {
+            "enum": [
+              "succeeded",
+              "failed",
+              "not_run"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "params",
+          "status"
+        ],
+        "title": "CandidateTrial",
+        "type": "object"
+      },
+      "CostStress": {
+        "additionalProperties": false,
+        "properties": {
+          "cost_bps": {
+            "title": "Cost Bps",
+            "type": "number"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/SimulationMetrics"
+          },
+          "multiplier": {
+            "title": "Multiplier",
+            "type": "number"
+          }
+        },
+        "required": [
+          "multiplier",
+          "cost_bps",
+          "metrics"
+        ],
+        "title": "CostStress",
+        "type": "object"
+      },
+      "ExperimentPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "title": "Candidates",
+            "type": "integer"
+          },
+          "end": {
+            "format": "date",
+            "title": "End",
+            "type": "string"
+          },
+          "engine_invocations": {
+            "title": "Engine Invocations",
+            "type": "integer"
+          },
+          "fetch_start": {
+            "format": "date",
+            "title": "Fetch Start",
+            "type": "string"
+          },
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "warmup_sessions": {
+            "title": "Warmup Sessions",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "windows": {
+            "title": "Windows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "end",
+          "fetch_start",
+          "sessions",
+          "warmup_sessions",
+          "windows",
+          "candidates",
+          "engine_invocations",
+          "warnings"
+        ],
+        "title": "ExperimentPlan",
+        "type": "object"
+      },
+      "ExperimentRecord": {
+        "additionalProperties": false,
+        "description": "A saved experiment as its owner sees it; frozen inputs are read separately.",
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs_bytes": {
+            "default": 0,
+            "title": "Inputs Bytes",
+            "type": "integer"
+          },
+          "inputs_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputs Hash"
+          },
+          "label": {
+            "default": "Exploratory: list chosen today, survivorship bias possible",
+            "title": "Label",
+            "type": "string"
+          },
+          "replay_of": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Of"
+          },
+          "research_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExperimentResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spec": {
+            "$ref": "#/components/schemas/ExperimentSpec"
+          },
+          "spec_hash": {
+            "title": "Spec Hash",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkflowStatus"
+          },
+          "versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Versions",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "research_status",
+          "created_at",
+          "started_at",
+          "spec",
+          "spec_hash",
+          "versions"
+        ],
+        "title": "ExperimentRecord",
+        "type": "object"
+      },
+      "ExperimentResult": {
+        "additionalProperties": false,
+        "properties": {
+          "benchmark_metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SimulationMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost_stress": {
+            "items": {
+              "$ref": "#/components/schemas/CostStress"
+            },
+            "title": "Cost Stress",
+            "type": "array"
+          },
+          "engine_version": {
+            "title": "Engine Version",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "label": {
+            "default": "Exploratory: list chosen today, survivorship bias possible",
+            "title": "Label",
+            "type": "string"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SimulationMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metrics_version": {
+            "title": "Metrics Version",
+            "type": "string"
+          },
+          "research_status": {
+            "$ref": "#/components/schemas/ResearchStatus"
+          },
+          "result_hash": {
+            "default": "",
+            "title": "Result Hash",
+            "type": "string"
+          },
+          "series": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SimulationSeries"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trades": {
+            "items": {
+              "$ref": "#/components/schemas/SimulatedTrade"
+            },
+            "title": "Trades",
+            "type": "array"
+          },
+          "walk_forward": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WalkForwardResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "research_status",
+          "engine_version",
+          "metrics_version"
+        ],
+        "title": "ExperimentResult",
+        "type": "object"
+      },
+      "ExperimentSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "benchmark": {
+            "default": "SPY",
+            "pattern": "^[A-Z][A-Z0-9.]{0,9}$",
+            "title": "Benchmark",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "buy_and_hold": "#/components/schemas/BuyAndHoldParams",
+                  "momentum_top_k": "#/components/schemas/MomentumTopKParams",
+                  "sma_crossover": "#/components/schemas/SmaCrossoverParams"
+                },
+                "propertyName": "template"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/BuyAndHoldParams"
+                },
+                {
+                  "$ref": "#/components/schemas/SmaCrossoverParams"
+                },
+                {
+                  "$ref": "#/components/schemas/MomentumTopKParams"
+                }
+              ]
+            },
+            "maxItems": 12,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "cost_bps": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Cost Bps",
+            "type": "number"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "hypothesis": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Hypothesis",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Notes",
+            "type": "string"
+          },
+          "question": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "start": {
+            "format": "date",
+            "title": "Start",
+            "type": "string"
+          },
+          "strategy": {
+            "discriminator": {
+              "mapping": {
+                "buy_and_hold": "#/components/schemas/BuyAndHoldParams",
+                "momentum_top_k": "#/components/schemas/MomentumTopKParams",
+                "sma_crossover": "#/components/schemas/SmaCrossoverParams"
+              },
+              "propertyName": "template"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BuyAndHoldParams"
+              },
+              {
+                "$ref": "#/components/schemas/SmaCrossoverParams"
+              },
+              {
+                "$ref": "#/components/schemas/MomentumTopKParams"
+              }
+            ],
+            "title": "Strategy"
+          },
+          "symbols": {
+            "items": {
+              "pattern": "^[A-Z][A-Z0-9.]{0,9}$",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "question",
+          "symbols",
+          "start",
+          "strategy"
+        ],
+        "title": "ExperimentSpec",
+        "type": "object"
+      },
+      "ExperimentSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "replay_of": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Of"
+          },
+          "research_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start": {
+            "format": "date",
+            "title": "Start",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkflowStatus"
+          },
+          "symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Symbols",
+            "type": "array"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "research_status",
+          "created_at",
+          "question",
+          "template",
+          "symbols",
+          "start",
+          "end"
+        ],
+        "title": "ExperimentSummary",
+        "type": "object"
+      },
+      "Finding": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Finding",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MomentumTopKParams": {
+        "additionalProperties": false,
+        "properties": {
+          "k": {
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "K",
+            "type": "integer"
+          },
+          "lookback": {
+            "enum": [
+              126,
+              252
+            ],
+            "title": "Lookback",
+            "type": "integer"
+          },
+          "skip": {
+            "const": 21,
+            "default": 21,
+            "title": "Skip",
+            "type": "integer"
+          },
+          "template": {
+            "const": "momentum_top_k",
+            "default": "momentum_top_k",
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lookback",
+          "k"
+        ],
+        "title": "MomentumTopKParams",
+        "type": "object"
+      },
+      "ResearchStatus": {
+        "enum": [
+          "informational",
+          "review",
+          "insufficient_data",
+          "failed"
+        ],
+        "title": "ResearchStatus",
+        "type": "string"
+      },
+      "SimulatedTrade": {
+        "additionalProperties": false,
+        "properties": {
+          "notional": {
+            "title": "Notional",
+            "type": "number"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "session": {
+            "format": "date",
+            "title": "Session",
+            "type": "string"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "symbol",
+          "shares",
+          "price",
+          "notional"
+        ],
+        "title": "SimulatedTrade",
+        "type": "object"
+      },
+      "SimulationMetrics": {
+        "additionalProperties": false,
+        "description": "Deterministic metrics (backtest-metrics-v1). Sharpe uses a 0% risk-free rate.",
+        "properties": {
+          "cagr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cagr"
+          },
+          "costs": {
+            "title": "Costs",
+            "type": "number"
+          },
+          "exposure": {
+            "title": "Exposure",
+            "type": "number"
+          },
+          "max_drawdown": {
+            "title": "Max Drawdown",
+            "type": "number"
+          },
+          "max_drawdown_end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Drawdown End"
+          },
+          "max_drawdown_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Drawdown Start"
+          },
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharpe"
+          },
+          "sharpe_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharpe Note"
+          },
+          "total_return": {
+            "title": "Total Return",
+            "type": "number"
+          },
+          "turnover": {
+            "title": "Turnover",
+            "type": "number"
+          },
+          "volatility": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volatility"
+          }
+        },
+        "required": [
+          "sessions",
+          "total_return",
+          "cagr",
+          "volatility",
+          "sharpe",
+          "max_drawdown",
+          "turnover",
+          "costs",
+          "exposure"
+        ],
+        "title": "SimulationMetrics",
+        "type": "object"
+      },
+      "SimulationSeries": {
+        "additionalProperties": false,
+        "properties": {
+          "benchmark_nav": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Nav"
+          },
+          "dates": {
+            "items": {
+              "format": "date",
+              "type": "string"
+            },
+            "title": "Dates",
+            "type": "array"
+          },
+          "gross_nav": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Gross Nav",
+            "type": "array"
+          },
+          "nav": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Nav",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dates",
+          "nav",
+          "gross_nav"
+        ],
+        "title": "SimulationSeries",
+        "type": "object"
+      },
+      "SmaCrossoverParams": {
+        "additionalProperties": false,
+        "properties": {
+          "fast": {
+            "maximum": 100.0,
+            "minimum": 5.0,
+            "title": "Fast",
+            "type": "integer"
+          },
+          "slow": {
+            "maximum": 250.0,
+            "minimum": 20.0,
+            "title": "Slow",
+            "type": "integer"
+          },
+          "template": {
+            "const": "sma_crossover",
+            "default": "sma_crossover",
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fast",
+          "slow"
+        ],
+        "title": "SmaCrossoverParams",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WalkForwardResult": {
+        "additionalProperties": false,
+        "properties": {
+          "oos_metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SimulationMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "oos_series": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SimulationSeries"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "insufficient_data"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trial_count": {
+            "title": "Trial Count",
+            "type": "integer"
+          },
+          "trials": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateTrial"
+            },
+            "title": "Trials",
+            "type": "array"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/WalkForwardWindow"
+            },
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "windows",
+          "trials",
+          "trial_count"
+        ],
+        "title": "WalkForwardResult",
+        "type": "object"
+      },
+      "WalkForwardWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "selected": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected"
+          },
+          "test_end": {
+            "format": "date",
+            "title": "Test End",
+            "type": "string"
+          },
+          "test_start": {
+            "format": "date",
+            "title": "Test Start",
+            "type": "string"
+          },
+          "train_end": {
+            "format": "date",
+            "title": "Train End",
+            "type": "string"
+          },
+          "train_sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Train Sharpe"
+          },
+          "train_start": {
+            "format": "date",
+            "title": "Train Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "train_start",
+          "train_end",
+          "test_start",
+          "test_end",
+          "selected",
+          "train_sharpe"
+        ],
+        "title": "WalkForwardWindow",
+        "type": "object"
+      },
+      "WorkflowStatus": {
+        "enum": [
+          "running",
+          "succeeded",
+          "failed"
+        ],
+        "title": "WorkflowStatus",
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "title": "Vantage",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/experiments": {
+      "get": {
+        "description": "The owner's experiments, newest first, as summaries.",
+        "operationId": "list_experiments_api_v1_experiments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExperimentSummary"
+                  },
+                  "title": "Response List Experiments Api V1 Experiments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Experiments",
+        "tags": [
+          "experiments"
+        ]
+      },
+      "post": {
+        "description": "Start a simulation; poll the `Location` for the outcome.",
+        "operationId": "create_experiment_api_v1_experiments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExperimentSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/api/v1/experiments/plan": {
+      "post": {
+        "description": "Size an experiment without fetching data or starting anything.",
+        "operationId": "plan_experiment_api_v1_experiments_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExperimentSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Plan Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/api/v1/experiments/{experiment_id}": {
+      "delete": {
+        "operationId": "delete_experiment_api_v1_experiments__experiment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Experiment",
+        "tags": [
+          "experiments"
+        ]
+      },
+      "get": {
+        "operationId": "get_experiment_api_v1_experiments__experiment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/api/v1/experiments/{experiment_id}/export": {
+      "get": {
+        "description": "Derived data only: spec, metrics, series, trades, findings, versions.",
+        "operationId": "export_experiment_api_v1_experiments__experiment_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "enum": [
+                "json",
+                "csv"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/api/v1/experiments/{experiment_id}/replay": {
+      "post": {
+        "description": "Re-run a finished experiment from its frozen inputs, with no provider call.",
+        "operationId": "replay_experiment_api_v1_experiments__experiment_id__replay_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Replay Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    }
+  }
+}
