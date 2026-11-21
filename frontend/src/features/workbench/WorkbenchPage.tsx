@@ -17,9 +17,9 @@ export default function WorkbenchPage() {
   const queryClient = useQueryClient();
   const ownerId = useAuth().user?.id ?? null;
 
-  const preview = useMutation({ mutationFn: planExperiment });
+  const preview = useMutation({ mutationFn: (spec: ExperimentSpec) => planExperiment(spec) });
   const start = useMutation({
-    mutationFn: createExperiment,
+    mutationFn: (spec: ExperimentSpec) => createExperiment(spec),
     onSuccess: (experiment) => {
       void queryClient.invalidateQueries({ queryKey: ['experiments', ownerId] });
       navigate(`/app/workbench/${experiment.id}`);

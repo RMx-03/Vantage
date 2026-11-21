@@ -129,4 +129,21 @@ describe('WorkbenchPage', () => {
     );
     expect(screen.getByRole('alert')).toHaveTextContent('EXPERIMENT_IN_FLIGHT');
   });
+
+  it('links to compare once 2 to 4 experiments are picked', async () => {
+    vi.spyOn(api, 'listExperiments').mockResolvedValue([
+      summary,
+      { ...summary, id: 'exp-b', question: 'Second question' },
+    ]);
+    renderPage();
+    const user = userEvent.setup();
+    expect(screen.queryByRole('link', { name: /Compare/ })).toBeNull();
+    await user.click(await screen.findByRole('checkbox', { name: /Earlier question/ }));
+    await user.click(screen.getByRole('checkbox', { name: /Second question/ }));
+    expect(screen.getByRole('link', { name: /Compare 2/ })).toHaveAttribute(
+      'href',
+      '/app/workbench/compare?ids=exp-old,exp-b'
+    );
+  });
 });
+

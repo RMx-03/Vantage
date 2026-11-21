@@ -4,3 +4,4 @@ export { default as MicroLabel } from './MicroLabel';
 export { default as StatusChip } from './StatusChip';
 export { default as Drawer } from './Drawer';
 export { default as CopyButton } from './CopyButton';
+export { default as LineChart } from './LineChart';
