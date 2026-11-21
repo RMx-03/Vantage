@@ -10,7 +10,7 @@ export default function ExperimentHistory() {
   const ownerId = useAuth().user?.id ?? null;
   const { data, isLoading, isError } = useQuery({
     queryKey: ['experiments', ownerId],
-    queryFn: () => listExperiments(20),
+    queryFn: () => listExperiments(50),
   });
   const [picked, setPicked] = useState<string[]>([]);
   const toggle = (id: string) =>

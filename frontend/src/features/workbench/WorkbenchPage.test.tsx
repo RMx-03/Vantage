@@ -70,6 +70,8 @@ describe('WorkbenchPage', () => {
     expect(screen.getAllByText(SURVIVORSHIP_LABEL).length).toBeGreaterThan(0);
     const link = await screen.findByRole('link', { name: /Earlier question/ });
     expect(link).toHaveAttribute('href', '/app/workbench/exp-old');
+    // Every saved experiment (quota 25) must be reachable, so ask for the server cap.
+    expect(api.listExperiments).toHaveBeenCalledWith(50);
   });
 
   it('shows field errors that name the field and calls nothing', async () => {
