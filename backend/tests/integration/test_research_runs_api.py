@@ -44,6 +44,7 @@ from app.repositories.users import UserRepository
 from app.services.policy import PolicyResult
 from app.services.run_executor import RunExecutor, get_run_executor
 from app.providers.registry import build_interpretation_provider
+from tests.run_helpers import run_to_completion
 from app.agents.research_graph import create_research_graph
 
 
@@ -215,7 +216,7 @@ def test_service_shares_exchange_cutoff_across_market_news_and_persistence(
     service.workflow = MagicMock()
     service.workflow.invoke.return_value = {"policy": MagicMock()}
 
-    service.create(user_id=test_user_id, symbol="AAPL", now=request_time)
+    run_to_completion(service, user_id=test_user_id, symbol="AAPL", now=request_time)
 
     assert market.fetch_daily_snapshot.call_args.args[2:] == (
         date(2025, 11, 28),
@@ -279,7 +280,7 @@ def test_invalid_price_fallback_preserves_exchange_cutoff(
     service.workflow = MagicMock()
     service.workflow.invoke.return_value = {"policy": MagicMock()}
 
-    service.create(user_id=test_user_id, symbol="AAPL", now=request_time)
+    run_to_completion(service, user_id=test_user_id, symbol="AAPL", now=request_time)
 
     saved_market = repo.save_snapshot.call_args.args[2]
     assert saved_market.as_of == cutoff
@@ -312,7 +313,7 @@ def mock_llm():
 
 
 def test_disabled_model_skips_workflow_call_and_exposes_null_model_info(
-    test_user_id, mock_market, mock_news, monkeypatch
+    test_user_id, mock_market, mock_news, monkeypatch, executor
 ):
     now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
     provider = build_interpretation_provider(
@@ -333,39 +334,9 @@ def test_disabled_model_skips_workflow_call_and_exposes_null_model_info(
     assert state["policy"].metrics
     assert not any(r.code.startswith("MODEL_") for r in state["policy"].reasons)
 
-    class MemoryRepo:
-        def create_running(self, *, versions, **kwargs):
-            self.versions = versions
-            self.row = RunningResearchRun(
-                id=1,
-                public_id=uuid4(),
-                user_id=test_user_id,
-                symbol="AAPL",
-                workflow_status="running",
-                created_at=now,
-                started_at=now,
-            )
-            return self.row
-
-        def save_snapshot(self, internal_id, user_id, market, news, sources, **kwargs):
-            self.sources = sources
-            return "c" * 64
-
-        def finalize_success(self, *, internal_id, user_id, **kwargs):
-            return ResearchRun(
-                run_id=self.row.public_id,
-                symbol="AAPL",
-                created_at=now,
-                completed_at=now,
-                workflow_status="succeeded",
-                sources=self.sources,
-                snapshot=None,
-                versions=self.versions,
-                **kwargs,
-            )
-
+    repo = ResearchRunRepository()
     service = ResearchRunService(
-        repo=MemoryRepo(),
+        repo=repo,
         market_provider=mock_market,
         news_provider=mock_news,
         interpretation_provider=provider,
@@ -375,13 +346,12 @@ def test_disabled_model_skips_workflow_call_and_exposes_null_model_info(
         email_verified=True,
     )
     app.dependency_overrides[get_research_service] = lambda: service
+    app.dependency_overrides[get_run_executor] = lambda: executor
     try:
         with TestClient(app) as client:
-            response = client.post("/api/v1/research-runs", json={"symbol": "AAPL"})
+            body = _complete(client, executor, {})
     finally:
         app.dependency_overrides.clear()
-    assert response.status_code == 201
-    body = response.json()
     assert body["model_info"] is None
     assert body["interpretation"] is None
     assert body["data_quality"]["model"] == "not_run"
@@ -448,7 +418,15 @@ def service(tracking_repo, mock_market, mock_news, mock_llm):
 
 
 @pytest.fixture
-def client(service, tracking_repo, test_user_id: UUID, other_user_id: UUID):
+def executor():
+    pool = RunExecutor(max_workers=2)
+    yield pool
+    assert pool.wait_idle(5)
+    pool.shutdown()
+
+
+@pytest.fixture
+def client(service, tracking_repo, executor, test_user_id: UUID, other_user_id: UUID):
     def fake_auth(request: Request) -> AuthenticatedUser:
         auth_str = request.headers.get("authorization", "") or request.headers.get(
             "Authorization", ""
@@ -460,6 +438,7 @@ def client(service, tracking_repo, test_user_id: UUID, other_user_id: UUID):
     app.dependency_overrides[get_current_user] = fake_auth
     app.dependency_overrides[get_research_service] = lambda: service
     app.dependency_overrides[get_research_repository] = lambda: tracking_repo
+    app.dependency_overrides[get_run_executor] = lambda: executor
 
     with TestClient(app) as test_client:
         yield test_client
@@ -467,75 +446,87 @@ def client(service, tracking_repo, test_user_id: UUID, other_user_id: UUID):
     app.dependency_overrides.clear()
 
 
+def _complete(
+    client: TestClient,
+    executor: RunExecutor,
+    headers: dict,
+    symbol: str = "AAPL",
+) -> dict:
+    """POST a run, wait for the detached worker, and return the stored run."""
+    accepted = client.post(
+        "/api/v1/research-runs", json={"symbol": symbol}, headers=headers
+    )
+    assert accepted.status_code == 202
+    run_id = accepted.json()["run_id"]
+    assert executor.wait_idle(10)
+    fetched = client.get(f"/api/v1/research-runs/{run_id}", headers=headers)
+    assert fetched.status_code == 200
+    return fetched.json()
+
+
 def test_post_persists_before_fetch_and_uses_each_provider_once(
     client: TestClient,
+    executor: RunExecutor,
     auth_headers: dict,
     tracking_repo: TrackingRepo,
     mock_market,
     mock_news,
 ) -> None:
-    response = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    )
-    assert response.status_code == 201
+    data = _complete(client, executor, auth_headers)
     assert tracking_repo.events[0] == "create_running"
     assert mock_market.calls == 1
     assert mock_news.calls == 1
-    data = response.json()
     assert data["workflow_status"] == "succeeded"
     assert data["symbol"] == "AAPL"
 
 
-def test_market_failure_finalizes_and_returns_run_id(
-    client: TestClient, auth_headers: dict, tracking_repo: TrackingRepo, mock_market
+def test_market_failure_finalizes_and_stores_the_error(
+    client: TestClient,
+    executor: RunExecutor,
+    auth_headers: dict,
+    tracking_repo: TrackingRepo,
+    mock_market,
 ) -> None:
     mock_market.fetch_daily_snapshot.side_effect = VantageError(
         code="MARKET_DATA_PROVIDER_FAILED",
         safe_message="Failed to retrieve market prices.",
     )
-    response = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    )
-    assert response.status_code == 503
-    detail = response.json()["detail"]
-    assert detail["code"] == "MARKET_DATA_PROVIDER_FAILED"
-    assert detail["run_id"]
+    body = _complete(client, executor, auth_headers)
+    assert body["workflow_status"] == "failed"
+    assert body["error_code"] == "MARKET_DATA_PROVIDER_FAILED"
+    assert body["error_message_safe"] == "Failed to retrieve market prices."
     assert tracking_repo.last_run.workflow_status == "failed"
 
 
 def test_unexpected_failure_is_sanitized_and_finalized(
-    client: TestClient, auth_headers: dict, tracking_repo: TrackingRepo, mock_market
+    client: TestClient,
+    executor: RunExecutor,
+    auth_headers: dict,
+    tracking_repo: TrackingRepo,
+    mock_market,
 ) -> None:
     mock_market.fetch_daily_snapshot.side_effect = RuntimeError(
         "database-password-must-not-leak"
     )
 
-    response = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    )
+    body = _complete(client, executor, auth_headers)
 
-    assert response.status_code == 500
-    detail = response.json()["detail"]
-    assert detail["code"] == "INTERNAL_ERROR"
-    assert detail["run_id"]
-    assert "password" not in detail["message"]
+    assert body["workflow_status"] == "failed"
+    assert body["error_code"] == "INTERNAL_ERROR"
+    assert "password" not in body["error_message_safe"]
     assert tracking_repo.last_run.workflow_status == "failed"
     assert tracking_repo.last_run.error_code == "INTERNAL_ERROR"
 
 
 def test_invalid_price_series_is_persisted_as_insufficient_data(
-    client: TestClient, auth_headers: dict, mock_market, mock_llm
+    client: TestClient, executor: RunExecutor, auth_headers: dict, mock_market, mock_llm
 ) -> None:
     mock_market.fetch_daily_snapshot.side_effect = VantageError(
         code="INVALID_PRICE_SERIES",
         safe_message="Market price series failed integrity checks.",
         duplicate_session_count=1,
     )
-    response = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    )
-    assert response.status_code == 201
-    body = response.json()
+    body = _complete(client, executor, auth_headers)
     assert body["workflow_status"] == "succeeded"
     assert body["research_status"] == "insufficient_data"
     assert body["data_quality"]["model"] == "not_run"
@@ -549,17 +540,13 @@ def test_invalid_price_series_is_persisted_as_insufficient_data(
 
 
 def test_model_failure_is_a_persisted_degraded_success(
-    client: TestClient, auth_headers: dict, mock_llm
+    client: TestClient, executor: RunExecutor, auth_headers: dict, mock_llm
 ) -> None:
     mock_llm.interpret.side_effect = VantageError(
         code="MODEL_UNAVAILABLE",
         safe_message="LLM service unavailable.",
     )
-    response = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    )
-    assert response.status_code == 201
-    body = response.json()
+    body = _complete(client, executor, auth_headers)
     assert body["research_status"] == "review"
     assert body["data_quality"]["model"] == "failed"
     assert body["model_info"]["failure_code"] == "MODEL_UNAVAILABLE"
@@ -576,7 +563,7 @@ def test_model_failure_is_a_persisted_degraded_success(
 
 
 def test_inadequate_prices_skip_model_and_return_typed_outcome(
-    client: TestClient, auth_headers: dict, mock_market, mock_llm
+    client: TestClient, executor: RunExecutor, auth_headers: dict, mock_market, mock_llm
 ) -> None:
     """The second `model=not_run` path: the model is enabled but never called.
 
@@ -589,11 +576,7 @@ def test_inadequate_prices_skip_model_and_return_typed_outcome(
         return market.model_copy(update={"quality": ComponentQuality.STALE})
 
     mock_market.fetch_daily_snapshot.side_effect = stale_fetch
-    response = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    )
-    assert response.status_code == 201
-    body = response.json()
+    body = _complete(client, executor, auth_headers)
     assert body["research_status"] == "insufficient_data"
     assert body["data_quality"]["model"] == "not_run"
     assert body["interpretation"] is None
@@ -612,7 +595,7 @@ def test_inadequate_prices_skip_model_and_return_typed_outcome(
 
 
 def test_no_news_evidence_skips_the_model_instead_of_reporting_it_failed(
-    client: TestClient, auth_headers: dict, mock_news, mock_llm
+    client: TestClient, executor: RunExecutor, auth_headers: dict, mock_news, mock_llm
 ) -> None:
     """With no evidence the model can only abstain: it must cite an article.
 
@@ -631,11 +614,7 @@ def test_no_news_evidence_skips_the_model_instead_of_reporting_it_failed(
         )
 
     mock_news.fetch_company_news.side_effect = no_news
-    response = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    )
-    assert response.status_code == 201
-    body = response.json()
+    body = _complete(client, executor, auth_headers)
     mock_llm.interpret.assert_not_called()
     assert body["data_quality"]["news"] == "missing"
     assert body["data_quality"]["model"] == "not_run"
@@ -646,14 +625,10 @@ def test_no_news_evidence_skips_the_model_instead_of_reporting_it_failed(
 
 
 def test_new_run_records_the_prompt_version_the_code_sends(
-    client: TestClient, auth_headers: dict, mock_llm
+    client: TestClient, executor: RunExecutor, auth_headers: dict, mock_llm
 ) -> None:
     """Recorded provenance must name the prompt that actually produced the output."""
-    response = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    )
-    assert response.status_code == 201
-    body = response.json()
+    body = _complete(client, executor, auth_headers)
     assert PROMPT_VERSION == "research-interpretation-v3"
     assert body["model_info"]["prompt_version"] == PROMPT_VERSION
 
@@ -669,13 +644,12 @@ def test_new_run_records_the_prompt_version_the_code_sends(
 
 
 def test_get_cross_user_returns_404(
-    client: TestClient, auth_headers: dict, other_auth_headers: dict
+    client: TestClient,
+    executor: RunExecutor,
+    auth_headers: dict,
+    other_auth_headers: dict,
 ) -> None:
-    create_resp = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    )
-    assert create_resp.status_code == 201
-    run_id = create_resp.json()["run_id"]
+    run_id = _complete(client, executor, auth_headers)["run_id"]
 
     # Other user lookup must return 404
     other_resp = client.get(
@@ -689,12 +663,11 @@ def test_get_cross_user_returns_404(
     assert owner_resp.json()["run_id"] == run_id
 
 
-def test_list_owned_pagination(client: TestClient, auth_headers: dict) -> None:
+def test_list_owned_pagination(
+    client: TestClient, executor: RunExecutor, auth_headers: dict
+) -> None:
     for sym in ["MSFT", "GOOGL", "AMZN"]:
-        r = client.post(
-            "/api/v1/research-runs", json={"symbol": sym}, headers=auth_headers
-        )
-        assert r.status_code == 201
+        _complete(client, executor, auth_headers, sym)
 
     page1 = client.get("/api/v1/research-runs?limit=2", headers=auth_headers)
     assert page1.status_code == 200
@@ -807,11 +780,17 @@ def test_finalization_conflict_is_propagated_without_opposite_finalization(
         )
     }
 
+    # `_execute` is what the detached worker runs; the worker swallows this error,
+    # so call it directly to see the propagation and that no failure finalization
+    # is attempted (the fake's finalize_failure would raise AssertionError).
+    row = service._create_row(user_id=test_user_id, norm_symbol="AAPL", root_span=None)
     with pytest.raises(VantageError) as exc:
-        service.create(
+        service._execute(
+            row,
             user_id=test_user_id,
-            symbol="AAPL",
+            norm_symbol="AAPL",
             now=datetime(2026, 9, 14, 21, 0, tzinfo=UTC),
+            root_span=None,
         )
 
     assert exc.value.code == "RUN_ALREADY_FINALIZED"
@@ -825,7 +804,7 @@ def test_run_already_finalized_maps_to_conflict(
     public_id = uuid4()
 
     class ConflictService:
-        def create(self, **kwargs: Any) -> None:
+        def start_async(self, **kwargs: Any) -> None:
             raise VantageError(
                 code="RUN_ALREADY_FINALIZED",
                 safe_message="Research run has already been finalized.",
@@ -857,12 +836,10 @@ def test_run_already_finalized_maps_to_conflict(
     }
 
 
-def test_completed_response_is_v3(client: TestClient, auth_headers: dict) -> None:
-    response = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    )
-    assert response.status_code == 201
-    body = response.json()
+def test_completed_response_is_v3(
+    client: TestClient, executor: RunExecutor, auth_headers: dict
+) -> None:
+    body = _complete(client, executor, auth_headers)
 
     assert body["versions"]["response_schema"] == "research-run-response-v3"
     assert body["interpretation"]["evidence_ids"] == ["news-1"]
@@ -885,11 +862,9 @@ def test_completed_response_is_v3(client: TestClient, auth_headers: dict) -> Non
 
 
 def test_persisted_v2_run_is_re_readable_by_id(
-    client: TestClient, auth_headers: dict
+    client: TestClient, executor: RunExecutor, auth_headers: dict
 ) -> None:
-    created = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    ).json()
+    created = _complete(client, executor, auth_headers)
 
     fetched = client.get(
         f"/api/v1/research-runs/{created['run_id']}", headers=auth_headers
@@ -901,11 +876,9 @@ def test_persisted_v2_run_is_re_readable_by_id(
 
 
 def test_run_records_the_immutable_code_revision(
-    client: TestClient, auth_headers: dict
+    client: TestClient, executor: RunExecutor, auth_headers: dict
 ) -> None:
-    created = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    ).json()
+    created = _complete(client, executor, auth_headers)
 
     assert created["versions"]["code"] == settings.CODE_REVISION
 
@@ -916,12 +889,10 @@ def test_run_records_the_immutable_code_revision(
 
 
 def test_legacy_hostile_stored_url_is_dropped_by_the_read_path(
-    client: TestClient, auth_headers: dict
+    client: TestClient, executor: RunExecutor, auth_headers: dict
 ) -> None:
     """A row persisted before the write-side allowlist must not leave the API."""
-    created = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    ).json()
+    created = _complete(client, executor, auth_headers)
 
     with SessionFactory() as session, session.begin():
         updated = session.execute(
@@ -980,16 +951,6 @@ def test_legacy_hostile_stored_url_is_dropped_by_the_read_path(
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def executor(client: TestClient):
-    # Depends on `client` so the override survives its teardown ordering.
-    pool = RunExecutor(max_workers=2)
-    app.dependency_overrides[get_run_executor] = lambda: pool
-    yield pool
-    assert pool.wait_idle(5)
-    pool.shutdown()
-
-
 def test_post_with_prefer_async_returns_202_running_with_location(
     client: TestClient, auth_headers: dict, executor: RunExecutor
 ) -> None:
@@ -1015,15 +976,21 @@ def test_post_with_prefer_async_returns_202_running_with_location(
     assert final["workflow_status"] == "succeeded"
 
 
-def test_post_without_prefer_stays_synchronous_201(
+def test_post_without_prefer_still_runs_asynchronously(
     client: TestClient, auth_headers: dict, executor: RunExecutor
 ) -> None:
     response = client.post(
         "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
     )
-    assert response.status_code == 201
-    assert response.json()["workflow_status"] in {"succeeded", "failed"}
+    assert response.status_code == 202
+    body = response.json()
+    assert body["workflow_status"] == "running"
+    assert response.headers["Location"].endswith(f"/research-runs/{body['run_id']}")
+    # RFC 7240: only echo a preference the client actually sent.
     assert "Preference-Applied" not in response.headers
+    assert executor.wait_idle(5)
+    final = client.get(f"/api/v1/research-runs/{body['run_id']}", headers=auth_headers)
+    assert final.json()["workflow_status"] == "succeeded"
 
 
 def test_capacity_exceeded_returns_429_retry_after_and_no_row(
@@ -1123,6 +1090,7 @@ def test_run_records_provider_roles(
     tracking_repo: TrackingRepo,
     mock_llm,
     client: TestClient,
+    executor: RunExecutor,
     auth_headers: dict,
     test_user_id: UUID,
 ) -> None:
@@ -1137,12 +1105,7 @@ def test_run_records_provider_roles(
     )
     app.dependency_overrides[get_research_service] = lambda: svc
 
-    response = client.post(
-        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=auth_headers
-    )
-
-    assert response.status_code == 201
-    body = response.json()
+    body = _complete(client, executor, auth_headers)
     records = {r["role"]: r for r in body["snapshot"]["providers"]}
     assert len(body["snapshot"]["providers"]) == 6
     assert records["market"]["provider"] == "fixture"

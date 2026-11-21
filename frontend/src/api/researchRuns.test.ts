@@ -28,7 +28,7 @@ describe('research-runs API client', () => {
   it('normalizes a symbol and sends the bearer token', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify(informationalRun), {
-        status: 201,
+        status: 202,
         headers: { 'Content-Type': 'application/json' },
       })
     );

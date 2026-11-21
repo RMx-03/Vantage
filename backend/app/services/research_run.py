@@ -42,7 +42,7 @@ WORKFLOW_VERSION: Literal["eod-research-v1"] = "eod-research-v1"
 
 
 def _recording_root_span(root_span: Any) -> Any:
-    """Fall back to the current span when it records, as ``create`` always has."""
+    """Fall back to the current span when it records."""
     if root_span is None:
         current_span = trace.get_current_span()
         if current_span.is_recording():
@@ -103,27 +103,6 @@ class ResearchRunService:
             code=settings.CODE_REVISION,
         )
         self.workflow = create_research_graph(self.llm)
-
-    def create(
-        self,
-        *,
-        user_id: UUID,
-        symbol: str,
-        now: datetime,
-        root_span: Any = None,
-    ) -> ResearchRun:
-        norm_symbol = symbol.strip().upper()
-        root_span = _recording_root_span(root_span)
-        row = self._create_row(
-            user_id=user_id, norm_symbol=norm_symbol, root_span=root_span
-        )
-        return self._execute(
-            row,
-            user_id=user_id,
-            norm_symbol=norm_symbol,
-            now=now,
-            root_span=root_span,
-        )
 
     def start_async(
         self,

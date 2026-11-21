@@ -37,6 +37,7 @@ from app.services.research_run import (
     ResearchRunService,
     get_research_service,
 )
+from app.services.run_executor import RunExecutor, get_run_executor
 from app.repositories.users import UserRepository
 from app.telemetry.redaction import (
     ALLOWED_ATTRIBUTES,
@@ -192,13 +193,26 @@ def service(mock_market, mock_news, mock_llm):
 
 
 @pytest.fixture
+def executor():
+    pool = RunExecutor(max_workers=2)
+    yield pool
+    assert pool.wait_idle(5)
+    pool.shutdown()
+
+
+@pytest.fixture
 def memory_exporter():
     return InMemorySpanExporter()
 
 
 @pytest.fixture
 def traced_client(
-    memory_exporter, service, test_user_id: UUID, secret_token: str, user_email: str
+    memory_exporter,
+    service,
+    executor,
+    test_user_id: UUID,
+    secret_token: str,
+    user_email: str,
 ):
     trace._TRACER_PROVIDER = None
     trace._TRACER_PROVIDER_SET_ONCE._done = False
@@ -214,6 +228,7 @@ def traced_client(
 
     app.dependency_overrides[get_current_user] = fake_auth
     app.dependency_overrides[get_research_service] = lambda: service
+    app.dependency_overrides[get_run_executor] = lambda: executor
 
     with TestClient(app) as test_client:
         yield test_client
@@ -285,7 +300,7 @@ def test_redaction_supports_plain_attribute_mappings() -> None:
 
 
 @pytest.fixture
-def client_with_failing_exporter(service, test_user_id: UUID):
+def client_with_failing_exporter(service, executor, test_user_id: UUID):
     trace._TRACER_PROVIDER = None
     trace._TRACER_PROVIDER_SET_ONCE._done = False
     provider = TracerProvider()
@@ -302,6 +317,7 @@ def client_with_failing_exporter(service, test_user_id: UUID):
 
     app.dependency_overrides[get_current_user] = fake_auth
     app.dependency_overrides[get_research_service] = lambda: service
+    app.dependency_overrides[get_run_executor] = lambda: executor
 
     with TestClient(app) as test_client:
         yield test_client
@@ -344,29 +360,31 @@ def test_redaction_helpers(test_user_id: UUID) -> None:
 
 
 def test_trace_has_stable_tree_and_run_correlation(
-    traced_client: TestClient, memory_exporter: InMemorySpanExporter, secret_token: str
+    traced_client: TestClient,
+    executor: RunExecutor,
+    memory_exporter: InMemorySpanExporter,
+    secret_token: str,
 ) -> None:
     response = traced_client.post(
         "/api/v1/research-runs",
         json={"symbol": "AAPL"},
         headers={"Authorization": f"Bearer {secret_token}"},
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
+    assert executor.wait_idle(10)
     spans = memory_exporter.get_finished_spans()
     span_names = {s.name for s in spans}
-    expected_spans = {
-        "research_run",
-        "authenticate_request",
-        "create_run_record",
+    request_spans = {"research_run", "authenticate_request", "create_run_record"}
+    worker_spans = {
+        "research_run_execute",
         "fetch_market_snapshot",
         "fetch_news_snapshot",
         "calculate_metrics",
         "generate_interpretation",
         "apply_research_policy",
         "persist_result",
-        "serialize_response",
     }
-    assert span_names >= expected_spans
+    assert span_names >= request_spans | worker_spans
 
     run_id = response.json()["run_id"]
     for s in spans:
@@ -375,15 +393,25 @@ def test_trace_has_stable_tree_and_run_correlation(
 
     research_span = next(span for span in spans if span.name == "research_run")
     for span in spans:
-        if span.name in expected_spans - {"research_run"}:
+        if span.name in request_spans - {"research_run"}:
             assert span.context.trace_id == research_span.context.trace_id
     auth_span = next(span for span in spans if span.name == "authenticate_request")
     assert auth_span.parent is not None
     assert auth_span.parent.span_id == research_span.context.span_id
 
+    # The detached worker owns its own trace, linked back to the request span.
+    execute_span = next(s for s in spans if s.name == "research_run_execute")
+    assert [link.context.span_id for link in execute_span.links] == [
+        research_span.context.span_id
+    ]
+    for span in spans:
+        if span.name in worker_spans - {"research_run_execute"}:
+            assert span.context.trace_id == execute_span.context.trace_id
+
 
 def test_secrets_and_identity_are_never_exported(
     traced_client: TestClient,
+    executor: RunExecutor,
     memory_exporter: InMemorySpanExporter,
     secret_token: str,
     test_user_id: UUID,
@@ -394,6 +422,7 @@ def test_secrets_and_identity_are_never_exported(
         json={"symbol": "AAPL"},
         headers={"Authorization": f"Bearer {secret_token}"},
     )
+    assert executor.wait_idle(10)
     spans = memory_exporter.get_finished_spans()
     encoded = repr(spans)
     assert secret_token not in encoded
@@ -403,15 +432,19 @@ def test_secrets_and_identity_are_never_exported(
 
 
 def test_export_failure_does_not_change_run_result(
-    client_with_failing_exporter: TestClient, secret_token: str
+    client_with_failing_exporter: TestClient, executor: RunExecutor, secret_token: str
 ) -> None:
+    headers = {"Authorization": f"Bearer {secret_token}"}
     response = client_with_failing_exporter.post(
-        "/api/v1/research-runs",
-        json={"symbol": "AAPL"},
-        headers={"Authorization": f"Bearer {secret_token}"},
+        "/api/v1/research-runs", json={"symbol": "AAPL"}, headers=headers
     )
-    assert response.status_code == 201
-    assert response.json()["workflow_status"] == "succeeded"
+    assert response.status_code == 202
+    assert executor.wait_idle(10)
+    run_id = response.json()["run_id"]
+    final = client_with_failing_exporter.get(
+        f"/api/v1/research-runs/{run_id}", headers=headers
+    )
+    assert final.json()["workflow_status"] == "succeeded"
 
 
 def test_redaction_removes_exception_event_and_status_details() -> None:
