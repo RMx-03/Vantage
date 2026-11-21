@@ -10,6 +10,7 @@ from app.domain.research import (
     MarketSnapshot,
     NewsItem,
     NewsSnapshot,
+    PriceCrossCheckSnapshot,
 )
 
 
@@ -47,6 +48,7 @@ def combined_snapshot_hash(
     evidence: Sequence[NewsItem] | None = None,
     fundamentals: FundamentalsSnapshot | None = None,
     macro: MacroSnapshot | None = None,
+    crosscheck: PriceCrossCheckSnapshot | None = None,
 ) -> str:
     """Hash accepted inputs independent of provider item ordering.
 
@@ -114,5 +116,12 @@ def combined_snapshot_hash(
             }
         )
         payload["macro"] = _without_retrieved_at(ordered.model_dump(mode="json"))
+    if crosscheck is not None:
+        ordered_checks = crosscheck.model_copy(
+            update={"closes": sorted(crosscheck.closes, key=lambda c: c.session_date)}
+        )
+        payload["crosscheck"] = _without_retrieved_at(
+            ordered_checks.model_dump(mode="json")
+        )
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

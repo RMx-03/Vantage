@@ -19,6 +19,7 @@ from app.domain.errors import RUN_INTERRUPTED, RUN_INTERRUPTED_MESSAGE, VantageE
 from app.domain.research import (
     AIInterpretation,
     ComponentQuality,
+    CrossCheckClose,
     DailyBar,
     DataQuality,
     EvidenceDetails,
@@ -30,6 +31,7 @@ from app.domain.research import (
     ModelQuality,
     NewsSnapshot,
     OverallQuality,
+    PriceCrossCheckSnapshot,
     ProviderRecord,
     Reason,
     ResearchMetric,
@@ -1078,6 +1080,13 @@ def test_new_snapshot_fields_round_trip(
     macro = MacroSnapshot(
         provider="fred", retrieved_at=now, quality=ComponentQuality.FRESH
     )
+    crosscheck = PriceCrossCheckSnapshot(
+        symbol="AAPL",
+        provider="tiingo",
+        retrieved_at=now,
+        quality=ComponentQuality.FRESH,
+        closes=[CrossCheckClose(session_date=date(2026, 9, 14), adjusted_close=100.0)],
+    )
     filing = EvidenceSource(
         evidence_id="ev-f",
         provider="sec",
@@ -1097,9 +1106,15 @@ def test_new_snapshot_fields_round_trip(
         providers=providers,
         fundamentals=fundamentals,
         macro=macro,
+        crosscheck=crosscheck,
     )
     assert content_hash == combined_snapshot_hash(
-        market, news, evidence=[filing], fundamentals=fundamentals, macro=macro
+        market,
+        news,
+        evidence=[filing],
+        fundamentals=fundamentals,
+        macro=macro,
+        crosscheck=crosscheck,
     )
 
     stored = repo.get_owned(user_id=user_id, public_id=running_run.public_id)
@@ -1114,7 +1129,7 @@ def test_new_snapshot_fields_round_trip(
     with SessionFactory() as session:
         row = session.execute(
             text(
-                "SELECT context_bars, fundamentals, macro "
+                "SELECT context_bars, fundamentals, macro, crosscheck "
                 "FROM vantage_app.research_snapshots WHERE run_id = :r"
             ),
             {"r": running_run.id},
@@ -1122,6 +1137,7 @@ def test_new_snapshot_fields_round_trip(
     assert list(row.context_bars) == ["SPY"]
     assert row.fundamentals["provider"] == "sec"
     assert row.macro["provider"] == "fred"
+    assert row.crosscheck["closes"][0]["adjusted_close"] == 100.0
 
 
 def test_pre_0005_rows_map_new_fields_to_null(

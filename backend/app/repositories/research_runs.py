@@ -27,6 +27,7 @@ from app.domain.research import (
     ModelInfo,
     ModelQuality,
     NewsSnapshot,
+    PriceCrossCheckSnapshot,
     OverallQuality,
     ProviderRecord,
     Reason,
@@ -114,6 +115,7 @@ class ResearchRunRepository:
         providers: list[ProviderRecord] | None = None,
         fundamentals: FundamentalsSnapshot | None = None,
         macro: MacroSnapshot | None = None,
+        crosscheck: PriceCrossCheckSnapshot | None = None,
     ) -> str:
         with SessionFactory() as session:
             with session.begin():
@@ -168,6 +170,7 @@ class ResearchRunRepository:
                     evidence=sources,
                     fundamentals=fundamentals,
                     macro=macro,
+                    crosscheck=crosscheck,
                 )
 
                 snapshot_row = ResearchSnapshotRow(
@@ -208,6 +211,11 @@ class ResearchRunRepository:
                         else None
                     ),
                     macro=macro.model_dump(mode="json") if macro is not None else None,
+                    crosscheck=(
+                        crosscheck.model_dump(mode="json")
+                        if crosscheck is not None
+                        else None
+                    ),
                 )
                 session.add(snapshot_row)
                 session.flush()

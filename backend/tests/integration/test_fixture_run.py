@@ -163,6 +163,7 @@ def test_all_roles_from_the_fixture_provider(make_user) -> None:
         evidence=reread.sources,
         fundamentals=collected.inputs.fundamentals,
         macro=collected.inputs.macro,
+        crosscheck=collected.inputs.crosscheck,
     )
 
 

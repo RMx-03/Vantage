@@ -12,6 +12,8 @@ from app.domain.research import (
     MarketSnapshot,
     NewsItem,
     NewsSnapshot,
+    CrossCheckClose,
+    PriceCrossCheckSnapshot,
 )
 from app.services.snapshots import combined_snapshot_hash
 
@@ -265,3 +267,49 @@ def test_hash_changes_when_a_filing_is_added() -> None:
     assert combined_snapshot_hash(
         market, news, evidence=[*news.items, filing]
     ) != combined_snapshot_hash(market, news)
+
+
+def _crosscheck(
+    retrieved_at: datetime, closes: list[tuple[int, float]]
+) -> PriceCrossCheckSnapshot:
+    return PriceCrossCheckSnapshot(
+        symbol="AAPL",
+        provider="tiingo",
+        retrieved_at=retrieved_at,
+        quality=ComponentQuality.FRESH,
+        closes=[
+            CrossCheckClose(session_date=date(2026, 9, day), adjusted_close=close)
+            for day, close in closes
+        ],
+    )
+
+
+def test_crosscheck_none_leaves_the_hash_unchanged() -> None:
+    market, news = _snapshots()
+    assert combined_snapshot_hash(
+        market, news, crosscheck=None
+    ) == combined_snapshot_hash(market, news)
+
+
+def test_crosscheck_closes_enter_the_hash() -> None:
+    market, news = _snapshots()
+    now = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
+    base = combined_snapshot_hash(market, news)
+    a = combined_snapshot_hash(
+        market, news, crosscheck=_crosscheck(now, [(12, 99.0), (14, 100.0)])
+    )
+    b = combined_snapshot_hash(
+        market, news, crosscheck=_crosscheck(now, [(12, 99.0), (14, 100.5)])
+    )
+    assert len({base, a, b}) == 3
+
+
+def test_crosscheck_close_order_and_retrieved_at_do_not_change_the_hash() -> None:
+    market, news = _snapshots()
+    t1 = datetime(2026, 9, 14, 21, 0, tzinfo=UTC)
+    t2 = datetime(2026, 9, 15, 3, 0, tzinfo=UTC)
+    assert combined_snapshot_hash(
+        market, news, crosscheck=_crosscheck(t1, [(12, 99.0), (14, 100.0)])
+    ) == combined_snapshot_hash(
+        market, news, crosscheck=_crosscheck(t2, [(14, 100.0), (12, 99.0)])
+    )

@@ -313,6 +313,7 @@ class ResearchRunService:
                 providers=provider_records,
                 fundamentals=inputs.fundamentals,
                 macro=inputs.macro,
+                crosscheck=inputs.crosscheck,
             )
             if root_span is not None:
                 root_span.set_attribute("vantage.snapshot_hash", snapshot_hash)
