@@ -77,7 +77,7 @@ Vantage reads market and news data from third-party providers that you configure
 | Database | PostgreSQL 17 |
 | Accounts | First-party email and password: Argon2id, short-lived JWTs, rotating refresh cookies, email verification and password reset |
 | AI models | Gemini, Groq, or a local Ollama model; or none at all |
-| Market data | yfinance (development and research use) |
+| Market data | Alpaca free tier (needs keys; `fixture` for a keyless local stack), with Finnhub, SEC EDGAR, FRED and Tiingo for other roles |
 | Email | Any SMTP server (Gmail with an app password by default), or Brevo |
 | Observability | OpenTelemetry, Langfuse |
 | Hosting | Vercel (frontend) and Heroku (backend and database) |

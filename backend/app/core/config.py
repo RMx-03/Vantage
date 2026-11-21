@@ -191,7 +191,8 @@ class Settings(BaseSettings):
     SEC_USER_AGENT: str = ""
     # One provider per role. The free providers are the default; a role whose
     # key is missing is reported as not configured. "none" switches an
-    # optional role off, and yfinance stays registered as an emergency fallback.
+    # optional role off. The market role needs Alpaca keys, or "fixture" for a
+    # keyless local stack.
     MARKET_PROVIDER: str = "alpaca"
     NEWS_PROVIDERS: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["alpaca", "finnhub"]

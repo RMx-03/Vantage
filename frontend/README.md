@@ -1,6 +1,6 @@
 # Vantage Frontend — Transparent Research Workspace
 
-The React workspace handles sign-in and account flows, and creates and inspects synchronous US-equity end-of-day research runs. It shows deterministic metrics, data/model quality, registered reasons, evidence sources, version information, owner-scoped history, and safe actionable error states.
+The React workspace handles sign-in and account flows, and starts, polls and inspects US-equity end-of-day research runs. It shows deterministic metrics, data/model quality, registered reasons, evidence sources, version information, owner-scoped history, and safe actionable error states.
 
 ## Stack
 
