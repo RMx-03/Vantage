@@ -1,5 +1,7 @@
 from datetime import date, datetime
-from typing import Protocol
+from typing import Protocol, runtime_checkable
+
+from app.backtest.inputs import HistoryInputs
 
 from app.domain.research import (
     AIInterpretation,
@@ -12,6 +14,22 @@ from app.domain.research import (
     PriceCrossCheckSnapshot,
     ResearchMetric,
 )
+
+
+@runtime_checkable
+class HistoryProvider(Protocol):
+    """Daily history for Research Workbench simulations (ADR-0008)."""
+
+    name: str
+
+    def fetch_daily_history(
+        self,
+        symbols: tuple[str, ...],
+        benchmark: str,
+        start: date,
+        end: date,
+        retrieved_at: datetime,
+    ) -> HistoryInputs: ...
 
 
 class MarketDataProvider(Protocol):
