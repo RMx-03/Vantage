@@ -25,6 +25,7 @@ from app.providers.llm import DisabledInterpretationProvider
 from app.providers.registry import ProviderSet
 from app.repositories.research_runs import ResearchRunRepository
 from app.services.research_run import ResearchRunService
+from tests.run_helpers import run_to_completion
 
 
 def test_service_completes_a_run_with_fixture(make_user) -> None:
@@ -37,7 +38,8 @@ def test_service_completes_a_run_with_fixture(make_user) -> None:
         interpretation_provider=DisabledInterpretationProvider(),
     )
 
-    run = service.create(
+    run = run_to_completion(
+        service,
         user_id=user_id,
         symbol="AAPL",
         now=datetime(2026, 11, 27, 22, 0, tzinfo=UTC),
@@ -93,7 +95,7 @@ def test_all_roles_from_the_fixture_provider(make_user) -> None:
         repo=repo, providers=_provider_set(FixtureProvider(), all_roles=True)
     )
 
-    run = service.create(user_id=user_id, symbol="AAPL", now=NOW)
+    run = run_to_completion(service, user_id=user_id, symbol="AAPL", now=NOW)
 
     assert run.workflow_status == WorkflowStatus.SUCCEEDED
     assert run.versions.metrics == "eod-metrics-v3"
@@ -174,7 +176,7 @@ def test_keyless_fixture_run_shows_four_not_configured_reasons(make_user) -> Non
         providers=_provider_set(FixtureProvider(), all_roles=False),
     )
 
-    run = service.create(user_id=user_id, symbol="AAPL", now=NOW)
+    run = run_to_completion(service, user_id=user_id, symbol="AAPL", now=NOW)
 
     assert run.workflow_status == WorkflowStatus.SUCCEEDED
     assert run.research_status != ResearchStatus.FAILED

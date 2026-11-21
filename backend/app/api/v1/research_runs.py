@@ -26,8 +26,6 @@ from app.services.research_run import ResearchRunService
 from app.services.run_executor import RunExecutor, get_run_executor
 from app.services.run_expiry import expire_stale_runs
 
-from app.telemetry.tracing import get_tracer
-
 router = APIRouter(tags=["research-runs"])
 
 _ASYNC_PREFERENCE = "respond-async"
@@ -43,13 +41,13 @@ _ACCEPTED_RESPONSES: dict[int | str, dict[str, Any]] = {
 @router.post(
     "",
     response_model=ResearchRun,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
     responses=_ACCEPTED_RESPONSES,
 )
 @router.post(
     "/",
     response_model=ResearchRun,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
     include_in_schema=False,
 )
 def create_run(
@@ -62,44 +60,33 @@ def create_run(
     """
     Create a durable, bounded research run.
 
-    Executes synchronously and returns 201 by default. With
-    `Prefer: respond-async` the run is accepted (202) and executes in the
-    background; poll `GET /research-runs/{run_id}` for the outcome.
+    Every run is accepted (202) and executes in the background; poll
+    `GET /research-runs/{run_id}` for the outcome. `Prefer: respond-async` is
+    accepted and echoed in `Preference-Applied`, but it is not required.
     """
-    tracer = get_tracer()
     root_span = trace.get_current_span()
-    if prefer is not None and _ASYNC_PREFERENCE in prefer.lower():
-        try:
-            accepted = service.start_async(
-                user_id=user.id,
-                symbol=request.symbol,
-                now=datetime.now(UTC),
-                executor=executor,
-                root_span=root_span if root_span.is_recording() else None,
-            )
-        except VantageError as exc:
-            if exc.code in {RUN_CAPACITY_EXCEEDED, SERVICE_DRAINING}:
-                return vantage_error_response(
-                    exc, headers={"Retry-After": _RETRY_AFTER_SECONDS}
-                )
-            raise
-        return JSONResponse(
-            status_code=status.HTTP_202_ACCEPTED,
-            content=jsonable_encoder(accepted),
-            headers={
-                "Location": f"/api/v1/research-runs/{accepted.run_id}",
-                "Preference-Applied": _ASYNC_PREFERENCE,
-            },
+    try:
+        accepted = service.start_async(
+            user_id=user.id,
+            symbol=request.symbol,
+            now=datetime.now(UTC),
+            executor=executor,
+            root_span=root_span if root_span.is_recording() else None,
         )
-    run = service.create(
-        user_id=user.id,
-        symbol=request.symbol,
-        now=datetime.now(UTC),
-        root_span=root_span if root_span.is_recording() else None,
+    except VantageError as exc:
+        if exc.code in {RUN_CAPACITY_EXCEEDED, SERVICE_DRAINING}:
+            return vantage_error_response(
+                exc, headers={"Retry-After": _RETRY_AFTER_SECONDS}
+            )
+        raise
+    headers = {"Location": f"/api/v1/research-runs/{accepted.run_id}"}
+    if prefer is not None and _ASYNC_PREFERENCE in prefer.lower():
+        headers["Preference-Applied"] = _ASYNC_PREFERENCE
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content=jsonable_encoder(accepted),
+        headers=headers,
     )
-    with tracer.start_as_current_span("serialize_response") as s_span:
-        s_span.set_attribute("vantage.run_id", str(run.run_id))
-        return run
 
 
 @router.get("/{run_id}", response_model=ResearchRun)

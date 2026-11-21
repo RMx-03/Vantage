@@ -6,10 +6,7 @@ from app.core.config import Settings
 from app.domain.research import ComponentQuality
 from app.providers.fixture_provider import FixtureProvider
 from app.providers.registry import build_providers
-from app.providers.yfinance_provider import (
-    latest_completed_xnys_close,
-    trailing_xnys_sessions,
-)
+from app.services.sessions import latest_completed_xnys_close, trailing_xnys_sessions
 
 NOW = datetime(2026, 11, 27, 22, 0, tzinfo=UTC)
 

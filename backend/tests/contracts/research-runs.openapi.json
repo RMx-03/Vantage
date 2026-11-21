@@ -1160,7 +1160,7 @@
         ]
       },
       "post": {
-        "description": "Create a durable, bounded research run.\n\nExecutes synchronously and returns 201 by default. With\n`Prefer: respond-async` the run is accepted (202) and executes in the\nbackground; poll `GET /research-runs/{run_id}` for the outcome.",
+        "description": "Create a durable, bounded research run.\n\nEvery run is accepted (202) and executes in the background; poll\n`GET /research-runs/{run_id}` for the outcome. `Prefer: respond-async` is\naccepted and echoed in `Preference-Applied`, but it is not required.",
         "operationId": "create_run_api_v1_research_runs_post",
         "parameters": [
           {
@@ -1191,16 +1191,6 @@
           "required": true
         },
         "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResearchRun"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
           "202": {
             "content": {
               "application/json": {

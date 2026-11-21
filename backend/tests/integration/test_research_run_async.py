@@ -488,21 +488,6 @@ def test_expire_ignores_fresh_running_rows(
     assert row.workflow_status == WorkflowStatus.RUNNING
 
 
-def test_sync_create_is_unchanged(
-    service: ResearchRunService,
-    repo: TrackingRepo,
-    llm: GatedInterpreter,
-    user_id: UUID,
-) -> None:
-    llm.gate.set()
-
-    run = service.create(user_id=user_id, symbol="AAPL", now=NOW)
-
-    assert run.workflow_status == WorkflowStatus.SUCCEEDED
-    assert run.metrics
-    assert repo.events.count("create_running") == 1
-
-
 def test_detached_execution_span_links_to_request_span(
     service: ResearchRunService,
     executor: RunExecutor,

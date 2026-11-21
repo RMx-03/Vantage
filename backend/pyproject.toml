@@ -14,7 +14,6 @@ dependencies = [
     "pydantic-settings>=2.13.1",
     "python-dotenv>=1.2.2",
     "uvicorn[standard]>=0.44.0",
-    "yfinance>=1.2.1",
     "groq>=0.4.0",
     "pyjwt>=2.9.0",
     "argon2-cffi>=23.1.0",

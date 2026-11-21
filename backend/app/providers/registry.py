@@ -33,7 +33,6 @@ from app.providers.llm import (
     OllamaInterpretationProvider,
 )
 from app.providers.tiingo import TiingoCrossCheckProvider
-from app.providers.yfinance_provider import YFinanceSnapshotProvider
 from app.repositories.provider_cache import PostgresProviderCache
 
 logger = logging.getLogger(__name__)
@@ -86,10 +85,6 @@ class ProviderSet:
 
 def _fixture(_: Settings) -> object:
     return FixtureProvider()
-
-
-def _yfinance(_: Settings) -> object:
-    return YFinanceSnapshotProvider()
 
 
 def _usable_secret(value: str | None) -> str | None:
@@ -180,10 +175,8 @@ def _tiingo(s: Settings) -> object | None:
 def default_registry() -> ProviderRegistry:
     registry = ProviderRegistry()
     registry.register("market", "alpaca", _alpaca_market)
-    registry.register("market", "yfinance", _yfinance)
     registry.register("news", "alpaca", _alpaca_news)
     registry.register("news", "finnhub", _finnhub_news)
-    registry.register("news", "yfinance", _yfinance)
     registry.register("filings", "edgar", _edgar)
     registry.register("macro", "fred", _fred)
     registry.register("crosscheck", "tiingo", _tiingo)

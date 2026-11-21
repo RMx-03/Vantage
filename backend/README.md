@@ -1,6 +1,6 @@
 # Vantage Backend — Transparent Research Runs
 
-The backend executes durable, end-of-day research runs (accepted and polled when the client sends `Prefer: respond-async`, synchronous otherwise) for supported US-listed equities. It returns deterministic metrics, typed quality states, registered reasons, evidence provenance, version identifiers, and an optional bounded AI interpretation. It does not place trades or provide investment advice.
+The backend executes durable, end-of-day research runs (accepted with `202` and polled until finished) for supported US-listed equities. It returns deterministic metrics, typed quality states, registered reasons, evidence provenance, version identifiers, and an optional bounded AI interpretation. It does not place trades or provide investment advice.
 
 ## Stack and boundaries
 
@@ -8,11 +8,11 @@ The backend executes durable, end-of-day research runs (accepted and polled when
 - PostgreSQL 17 through SQLAlchemy 2 and psycopg 3; Alembic owns schema changes
 - First-party email/password identity: Argon2id password hashes, 15-minute HS256 access tokens, rotating refresh tokens in an HttpOnly cookie, email verification and password reset. Accounts and research data are stored in PostgreSQL
 - Transactional email through any SMTP server (Gmail with an app password), Brevo's API, or a no-op sender for development and tests
-- Provider protocols in `app/providers/contracts.py`; the Phase 1 adapter is `YFinanceSnapshotProvider`
+- Provider protocols in `app/providers/contracts.py`; adapters live beside it in `app/providers/` (Alpaca, Finnhub, SEC EDGAR, FRED, Tiingo and a fixture provider)
 - LangGraph for the deterministic metrics → optional interpretation → policy workflow
 - OpenTelemetry spans with allowlisted attributes and optional Langfuse v4 export
 
-`yfinance` is suitable for development and research prototyping, not a licensed production market-data entitlement. The adapter verifies `quoteType=EQUITY`, a supported US exchange code, and USD currency before accepting data.
+The market role needs Alpaca keys (`ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`), or `MARKET_PROVIDER=fixture` for a keyless local stack with invented demo data.
 
 ## API
 
@@ -38,8 +38,7 @@ The refresh cookie is scoped to `Path=/api/v1/auth`. `refresh` and `logout` reje
 
 All research routes require a valid Vantage access token. Creating a run also requires a verified email address; an unverified account receives `403`.
 
-- `POST /api/v1/research-runs` creates and completes one run synchronously (`201`)
-- `POST /api/v1/research-runs` with `Prefer: respond-async` accepts the run and returns `202` with a `running` run, a `Location` header and `Preference-Applied: respond-async`; the run executes in the background
+- `POST /api/v1/research-runs` accepts the run and returns `202` with a `running` run and a `Location` header; the run executes in the background. A client that sends `Prefer: respond-async` also gets `Preference-Applied: respond-async`, but the header is not required
 - `GET /api/v1/research-runs/{run_id}` retrieves an owner-scoped run
 - `GET /api/v1/research-runs?limit=20&before=...` lists owner-scoped history
 
@@ -172,12 +171,6 @@ Alpaca's free market data uses the SIP feed, which excludes the most recent 15 m
 This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
 
 The VIX close is © Cboe and is shown with that label.
-
-### Emergency fallback
-
-`MARKET_PROVIDER=yfinance` and `NEWS_PROVIDERS=yfinance` restore yfinance for prices and news without a deploy. yfinance serves no benchmark or context series, so relative metrics are then unavailable and show as missing.
-
-A manual parity report compares Alpaca prices with yfinance, with an optional Tiingo cross-check. Run it from `backend/` with `uv run python -m scripts.compare_providers --output report.md`. It needs the Alpaca keys; Tiingo is optional. It is never run in CI, and a second run within the hour can exhaust Tiingo's hourly limit.
 
 ## Telemetry
 

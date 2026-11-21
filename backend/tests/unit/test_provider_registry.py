@@ -16,7 +16,7 @@ from app.providers.registry import (
     build_providers,
     default_registry,
 )
-from app.providers.yfinance_provider import YFinanceSnapshotProvider
+from app.providers.fixture_provider import FixtureProvider
 
 PROVIDER_ENV = (
     "ALPACA_API_KEY_ID",
@@ -120,6 +120,17 @@ def test_llm_names_build_the_same_classes(
     assert isinstance(provider, expected_cls)
 
 
+@pytest.mark.parametrize("role", ["market", "news"])
+def test_yfinance_is_no_longer_a_registered_provider(role: str) -> None:
+    assert "yfinance" not in default_registry().names(role)  # type: ignore[arg-type]
+    with pytest.raises(VantageError) as exc:
+        default_registry().build(role, "yfinance", Settings(_env_file=None))  # type: ignore[arg-type]
+    assert exc.value.code == "CONFIG_ERROR"
+    assert (
+        exc.value.safe_message == f"The configured {role} data provider is unsupported."
+    )
+
+
 def test_unknown_llm_keeps_its_message() -> None:
     with pytest.raises(VantageError) as exc:
         build_interpretation_provider(Settings(_env_file=None, LLM_PROVIDER="nope"))
@@ -132,8 +143,8 @@ def test_unknown_llm_keeps_its_message() -> None:
 
 def test_factory_returning_none_marks_role_not_configured() -> None:
     registry = ProviderRegistry()
-    registry.register("market", "yfinance", lambda s: None)
-    registry.register("news", "yfinance", lambda s: YFinanceSnapshotProvider())
+    registry.register("market", "fixture", lambda s: None)
+    registry.register("news", "fixture", lambda s: FixtureProvider())
     for name, factory in (
         ("disabled", lambda s: DisabledInterpretationProvider()),
         ("gemini", lambda s: DisabledInterpretationProvider()),
@@ -143,8 +154,8 @@ def test_factory_returning_none_marks_role_not_configured() -> None:
     providers = build_providers(
         Settings(
             _env_file=None,
-            MARKET_PROVIDER="yfinance",
-            NEWS_PROVIDERS=["yfinance"],
+            MARKET_PROVIDER="fixture",
+            NEWS_PROVIDERS=["fixture"],
             FILINGS_PROVIDER="none",
             MACRO_PROVIDER="none",
             LLM_PROVIDER="disabled",
