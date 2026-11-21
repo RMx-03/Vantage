@@ -38,6 +38,7 @@ from app.providers.registry import default_registry, history_provider
 from app.repositories.experiments import ExperimentRepository
 from app.services.run_executor import RunExecutor
 from app.services.sessions import latest_completed_xnys_session
+from app.telemetry.tracing import get_tracer
 
 logger = logging.getLogger(__name__)
 
@@ -297,22 +298,22 @@ class ExperimentService:
         self._guard(experiment_id, work)
 
     def _guard(self, experiment_id: UUID, work: Callable[[], None]) -> None:
-        # Wall-clock time: completed_at must never precede the row's started_at.
-        try:
-            work()
-        except ExperimentDataError as exc:
-            self.repo.fail_if_running(
-                experiment_id, exc.code, exc.message, datetime.now(UTC)
-            )
-        except VantageError as exc:
-            self.repo.fail_if_running(
-                experiment_id, exc.code, exc.safe_message, datetime.now(UTC)
-            )
-        except Exception:
-            logger.exception("experiment failed experiment_id=%s", experiment_id)
-            self.repo.fail_if_running(
-                experiment_id,
-                "EXPERIMENT_FAILED",
-                "The simulation could not be completed.",
-                datetime.now(UTC),
-            )
+        # Span attributes stay on the allowlist: never the spec's free text.
+        with get_tracer().start_as_current_span("experiment_execute") as span:
+            span.set_attribute("vantage.workflow_version", ENGINE_VERSION)
+            try:
+                work()
+                return
+            except ExperimentDataError as exc:
+                code, message = exc.code, exc.message
+            except VantageError as exc:
+                code, message = exc.code, exc.safe_message
+            except Exception:
+                logger.exception("experiment failed experiment_id=%s", experiment_id)
+                code, message = (
+                    "EXPERIMENT_FAILED",
+                    "The simulation could not be completed.",
+                )
+            span.set_attribute("error.type", code)
+            # Wall-clock time: completed_at must never precede the row's started_at.
+            self.repo.fail_if_running(experiment_id, code, message, datetime.now(UTC))

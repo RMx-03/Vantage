@@ -60,13 +60,16 @@ Each run also emits an OpenTelemetry trace (optionally exported to Langfuse), so
 ## What it is not
 
 - Not investment advice, a recommendation engine, or a signal service
-- No portfolio construction, position sizing, backtesting, or forecasting
+- No portfolio construction, position sizing, or forecasting
+- No open-ended backtesting. The optional research workbench (off by default) runs narrow historical simulations: long-only, three fixed templates, at most 50 symbols, each result labelled exploratory because the list is chosen today and survivorship bias is possible
 - No trading, broker integration, or order placement
 - No intraday or real-time data; US-listed equities at end of day only
 
 ## Data terms
 
 Vantage reads market and news data from third-party providers that you configure with your own keys. The Alpaca, Finnhub and Tiingo free tiers allow personal and internal use. Self-host Vantage with your own keys. A public, multi-user deployment that shows this data to other people is likely to count as redistribution, which those free tiers do not cover. Check each provider's current terms before you rely on a deployment. This note is not legal advice.
+
+The research workbench stores each experiment's price history in your database so it can be replayed exactly, and shows results only to the account that ran them. Its exports contain derived numbers (metrics, the simulated value series and trades), never the provider's bars. The same position applies: run it on your own deployment with your own keys.
 
 ## Tech stack
 
@@ -89,6 +92,7 @@ Vantage is under active development.
 
 - **Research runs:** working end to end, from ticker to saved, reopenable result.
 - **Accounts:** first-party sign-up, sign-in, email verification, and password reset, replacing the earlier hosted auth provider.
+- **Research workbench:** historical simulations through the API, behind `RESEARCH_WORKBENCH_ENABLED` (off by default). See `backend/README.md`.
 - **Planned areas** such as portfolio and risk views appear in the navigation as disabled placeholders.
 
 ## Quick start
