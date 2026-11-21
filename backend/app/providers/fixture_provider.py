@@ -30,11 +30,7 @@ from app.providers.contracts import (
     MarketDataProvider,
     NewsProvider,
 )
-from app.providers.yfinance_provider import (
-    XNYS,
-    snapshot_hash,
-    trailing_xnys_sessions,
-)
+from app.services.sessions import XNYS, market_snapshot_hash, trailing_xnys_sessions
 
 
 @lru_cache(maxsize=None)
@@ -111,7 +107,7 @@ class FixtureProvider(
             retrieved_at=now,
             as_of=XNYS.session_close(last).to_pydatetime().astimezone(UTC),
             latest_completed_session=last,
-            content_hash=snapshot_hash(normalized, bars),
+            content_hash=market_snapshot_hash(normalized, bars),
             quality=ComponentQuality.FRESH,
             context_bars=context,
         )

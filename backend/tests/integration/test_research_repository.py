@@ -884,9 +884,7 @@ def test_read_path_drops_a_hostile_stored_url(
 def test_write_and_read_paths_share_one_url_allowlist() -> None:
     """Two entry points, one allowlist, so the boundaries cannot drift apart."""
     from app.domain import urls as shared_urls
-    import app.providers.yfinance_provider as yfinance_provider
 
-    assert yfinance_provider.normalize_url is shared_urls.normalize_url
     assert research_runs_module.safe_stored_url is shared_urls.safe_stored_url
 
     hostile = [
@@ -1176,7 +1174,7 @@ def test_pre_0005_rows_map_new_fields_to_null(
             assert source.source_type == "news"
 
 
-def test_yfinance_shaped_run_hash_unchanged(
+def test_single_source_run_hash_unchanged(
     repo: ResearchRunRepository, running_run, valid_snapshot, user_id: UUID
 ) -> None:
     market, news, sources = valid_snapshot

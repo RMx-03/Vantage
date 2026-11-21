@@ -36,6 +36,7 @@ def _item() -> dict:
 
 
 def test_v2_payloads_still_validate() -> None:
+    # "yfinance" is a provider string in rows stored before it was removed.
     news = NewsItem.model_validate(_item())
     assert news.source_type == "news"
     assert news.summary is None

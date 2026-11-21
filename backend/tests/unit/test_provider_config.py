@@ -60,15 +60,15 @@ def test_provider_defaults_are_the_free_providers() -> None:
 def test_selectors_are_trimmed_and_lowercased(
     monkeypatch: pytest.MonkeyPatch, name: str
 ) -> None:
-    monkeypatch.setenv(name, " YFinance ")
-    assert getattr(build(), name) == "yfinance"
+    monkeypatch.setenv(name, " Alpaca ")
+    assert getattr(build(), name) == "alpaca"
 
 
 def test_news_providers_parse_comma_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("NEWS_PROVIDERS", "yfinance, fixture")
-    assert build().NEWS_PROVIDERS == ["yfinance", "fixture"]
-    monkeypatch.setenv("NEWS_PROVIDERS", "yfinance, yfinance,")
-    assert build().NEWS_PROVIDERS == ["yfinance"]
+    monkeypatch.setenv("NEWS_PROVIDERS", "alpaca, fixture")
+    assert build().NEWS_PROVIDERS == ["alpaca", "fixture"]
+    monkeypatch.setenv("NEWS_PROVIDERS", "alpaca, alpaca,")
+    assert build().NEWS_PROVIDERS == ["alpaca"]
     monkeypatch.setenv("NEWS_PROVIDERS", " ")
     with pytest.raises(ValidationError, match="NEWS_PROVIDERS"):
         build()

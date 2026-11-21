@@ -455,6 +455,7 @@ def test_registry_returns_none_when_a_key_is_missing(key_id: str, secret: str) -
 
 
 def test_old_runs_without_tagged_symbols_still_validate() -> None:
+    # "yfinance" is a provider string in rows stored before it was removed.
     legacy = {
         "evidence_id": "news-abc",
         "provider": "yfinance",

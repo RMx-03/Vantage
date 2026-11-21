@@ -78,7 +78,7 @@ def test_normalize_title() -> None:
 
 
 def test_one_snapshot_is_returned_unchanged() -> None:
-    snap = _snap("yfinance", [_item("yfinance", "A")])
+    snap = _snap("alpaca", [_item("alpaca", "A")])
     assert merge_news([snap], symbol="AAPL", limit=10) is snap
 
 
@@ -148,19 +148,19 @@ def test_dedup_does_not_depend_on_pairwise_order() -> None:
     a = _item("alpaca", "Alpha", url="https://x.com/s", event_time=T0)
     b = _item("finnhub", "Gamma", event_time=T0 + timedelta(hours=1))
     c = _item(
-        "yfinance",
+        "tiingo",
         "Gamma",
         url="https://x.com/s?utm_medium=m",
         event_time=T0 + timedelta(hours=2),
     )
     merged = merge_news(
-        [_snap("alpaca", [a]), _snap("finnhub", [b]), _snap("yfinance", [c])],
+        [_snap("alpaca", [a]), _snap("finnhub", [b]), _snap("tiingo", [c])],
         symbol="AAPL",
         limit=10,
     )
     assert [i.provider for i in merged.items] == ["finnhub", "alpaca"]
     assert merged.items[1].details is not None
-    assert merged.items[1].details.providers == ["alpaca", "yfinance"]
+    assert merged.items[1].details.providers == ["alpaca", "tiingo"]
     assert merged.items[0].details is not None
     assert merged.items[0].details.providers == ["finnhub"]
 

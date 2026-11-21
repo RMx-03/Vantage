@@ -111,7 +111,7 @@ def test_strict_model_rejects_naive_datetime() -> None:
             adjusted_close=152.0,
             volume=1000000,
             currency="USD",
-            provider="yfinance",
+            provider="alpaca",
             retrieved_at=naive_dt,
             adjustment_state="split_and_dividend_adjusted",
         )
@@ -130,7 +130,7 @@ def test_strict_model_forbids_extra_fields() -> None:
             adjusted_close=152.0,
             volume=1000000,
             currency="USD",
-            provider="yfinance",
+            provider="alpaca",
             retrieved_at=now,
             adjustment_state="split_and_dividend_adjusted",
             extra_unwanted_field="bad",  # type: ignore[call-arg]

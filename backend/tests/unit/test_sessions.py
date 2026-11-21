@@ -6,7 +6,7 @@ from app.services.sessions import market_snapshot_hash
 from app.services.snapshots import bar_fields
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
-# Recorded from yfinance_provider.snapshot_hash before the helpers moved.
+# Recorded from the original market snapshot hash before the helpers moved.
 PINNED_FIXTURE_HASH = "9566d4bede3eeb52bc63f9966be6442fada3a1403392354936b59f470580c169"
 
 
