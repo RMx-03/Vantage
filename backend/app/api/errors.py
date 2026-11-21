@@ -32,6 +32,7 @@ def vantage_error_response(
             "MARKET_DATA_PROVIDER_FAILED",
             "MODEL_UNAVAILABLE",
             "EXTERNAL_SERVICE_UNAVAILABLE",
+            "PROVIDER_NOT_CONFIGURED",
         }:
             status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         elif exc.code in {"RUN_NOT_FOUND", "NOT_FOUND"}:
@@ -40,7 +41,13 @@ def vantage_error_response(
             status_code = status.HTTP_429_TOO_MANY_REQUESTS
         elif exc.code == SERVICE_DRAINING:
             status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        elif exc.code == RUN_ALREADY_FINALIZED:
+        elif exc.code in {
+            RUN_ALREADY_FINALIZED,
+            "EXPERIMENT_IN_FLIGHT",
+            "EXPERIMENT_QUOTA_REACHED",
+            "EXPERIMENT_STORAGE_FULL",
+            "EXPERIMENT_NOT_REPLAYABLE",
+        }:
             status_code = status.HTTP_409_CONFLICT
         elif exc.code in {
             "INVALID_SYMBOL",

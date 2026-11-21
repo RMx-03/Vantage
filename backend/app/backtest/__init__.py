@@ -99,7 +99,7 @@ def validate_inputs(inputs: HistoryInputs) -> list[Finding]:
     return findings
 
 
-def _with_hash(result: ExperimentResult) -> ExperimentResult:
+def with_hash(result: ExperimentResult) -> ExperimentResult:
     payload = result.model_dump(mode="json", exclude={"result_hash"})
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return result.model_copy(
@@ -113,7 +113,7 @@ def run_experiment(spec: ExperimentSpec, inputs: HistoryInputs) -> ExperimentRes
     first_decision = max(eval_start - 1, 0)
     findings = validate_inputs(inputs)
     if len(dates) - first_decision - 1 < MIN_EVAL_SESSIONS:
-        return _with_hash(
+        return with_hash(
             ExperimentResult(
                 research_status=ResearchStatus.INSUFFICIENT_DATA,
                 engine_version=ENGINE_VERSION,
@@ -190,4 +190,4 @@ def run_experiment(spec: ExperimentSpec, inputs: HistoryInputs) -> ExperimentRes
         walk_forward=wf,
         findings=findings,
     )
-    return _with_hash(result)
+    return with_hash(result)
