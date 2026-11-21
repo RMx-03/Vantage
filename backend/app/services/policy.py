@@ -39,10 +39,12 @@ REASON_ORDER: dict[str, int] = {
     "NO_SEC_FILER_RECORD": 18,
     "SECTOR_UNMAPPED": 19,
     "FUNDAMENTALS_UNAVAILABLE": 20,
-    "MACRO_DATA_STALE": 21,
-    "MACRO_PROVIDER_FAILED": 22,
-    "PRICE_CROSSCHECK_UNAVAILABLE": 23,
-    "CONTEXT_BARS_UNAVAILABLE": 24,
+    "FUNDAMENTALS_PARTIAL": 21,
+    "MACRO_DATA_STALE": 22,
+    "MACRO_DATA_PARTIAL": 23,
+    "MACRO_PROVIDER_FAILED": 24,
+    "PRICE_CROSSCHECK_UNAVAILABLE": 25,
+    "CONTEXT_BARS_UNAVAILABLE": 26,
     "ELEVATED_VOLATILITY": 30,
     "NEGATIVE_NEWS_SENTIMENT": 31,
 }
@@ -365,6 +367,29 @@ def _input_reasons(
             list(ROLE_METRIC_KEYS["fundamentals"]),
         )
 
+    def missing_keys(role: str) -> list[str]:
+        return [
+            m.key
+            for m in metrics
+            if m.key in ROLE_METRIC_KEYS[role] and m.value is None
+        ]
+
+    if (
+        inputs.fundamentals is not None
+        and quality["fundamentals"]
+        not in (RoleQuality.NOT_CONFIGURED, RoleQuality.FAILED)
+        and inputs.fundamentals.quality == ComponentQuality.PARTIAL
+        and (keys := missing_keys("fundamentals"))
+    ):
+        add(
+            "FUNDAMENTALS_PARTIAL",
+            "Fundamentals Partly Unavailable",
+            "info",
+            "Part of the latest annual SEC data was unavailable; the affected "
+            "fundamentals metrics are unavailable.",
+            keys,
+        )
+
     if inputs.macro is not None and any(
         obs.quality == ComponentQuality.STALE for obs in inputs.macro.observations
     ):
@@ -375,6 +400,21 @@ def _input_reasons(
             "At least one macro series has an observation older than its "
             "freshness window.",
             list(ROLE_METRIC_KEYS["macro"]),
+        )
+
+    if (
+        inputs.macro is not None
+        and quality["macro"] not in (RoleQuality.NOT_CONFIGURED, RoleQuality.FAILED)
+        and inputs.macro.quality == ComponentQuality.PARTIAL
+        and (keys := missing_keys("macro"))
+    ):
+        add(
+            "MACRO_DATA_PARTIAL",
+            "Macro Data Partly Unavailable",
+            "info",
+            "Some macro series had no recent value; those macro metrics are "
+            "unavailable.",
+            keys,
         )
 
     if quality["macro"] == RoleQuality.FAILED:

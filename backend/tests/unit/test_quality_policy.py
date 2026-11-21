@@ -859,3 +859,75 @@ def test_v2_reasons_are_ordered_by_severity_then_registry(
     assert (
         REASON_ORDER["CONTEXT_BARS_UNAVAILABLE"] < REASON_ORDER["ELEVATED_VOLATILITY"]
     )
+
+
+def _gap(key: str, value: float | None) -> ResearchMetric:
+    return ResearchMetric(
+        key=key,
+        label=key,
+        value=value,
+        unit="ratio",
+        window_sessions=None,
+        as_of=_NOW,
+        calculation_version="eod-metrics-v3",
+        quality=ComponentQuality.FRESH
+        if value is not None
+        else ComponentQuality.MISSING,
+    )
+
+
+def test_partial_macro_lists_only_the_missing_macro_metrics(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    inputs = _configured(macro=_macro(quality=ComponentQuality.PARTIAL))
+    metrics = [
+        _gap("us10y_yield", 4.1),
+        _gap("fed_funds_rate", None),
+        _gap("yield_curve_10y_2y", 0.3),
+        _gap("vix_close", None),
+    ]
+
+    result = _run(valid_market, healthy_news, healthy_model, inputs, metrics)
+
+    reason = next(r for r in result.reasons if r.code == "MACRO_DATA_PARTIAL")
+    assert reason.severity == "info"
+    assert reason.metric_keys == ["fed_funds_rate", "vix_close"]
+    assert reason.description == (
+        "Some macro series had no recent value; those macro metrics are unavailable."
+    )
+    assert _codes(result, "warning") == []
+    assert result.research_status == ResearchStatus.INFORMATIONAL
+
+
+def test_partial_fundamentals_lists_only_the_missing_metrics(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    inputs = _configured(fundamentals=_funds(quality=ComponentQuality.PARTIAL))
+    metrics = [_gap("revenue_growth_fy_yoy", 0.05), _gap("net_margin_fy", None)]
+
+    result = _run(valid_market, healthy_news, healthy_model, inputs, metrics)
+
+    reason = next(r for r in result.reasons if r.code == "FUNDAMENTALS_PARTIAL")
+    assert reason.severity == "info"
+    assert reason.metric_keys == ["net_margin_fy"]
+    assert reason.description == (
+        "Part of the latest annual SEC data was unavailable; the affected "
+        "fundamentals metrics are unavailable."
+    )
+    assert _codes(result, "warning") == []
+    assert result.research_status == ResearchStatus.INFORMATIONAL
+
+
+def test_complete_macro_and_fundamentals_add_no_partial_reasons(
+    valid_market: MarketSnapshot,
+    healthy_news: NewsSnapshot,
+    healthy_model: AIInterpretation,
+) -> None:
+    result = _run(valid_market, healthy_news, healthy_model, _configured())
+    codes = [r.code for r in result.reasons]
+    assert "MACRO_DATA_PARTIAL" not in codes
+    assert "FUNDAMENTALS_PARTIAL" not in codes
