@@ -32,7 +32,11 @@ async function send(path: string, init: RequestInit, token: string): Promise<Res
   });
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+/** Fetch with the access token, refreshing it once on a 401. */
+export async function authorizedFetch(
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
   let token = getAccessToken();
 
   if (!token) {
@@ -53,7 +57,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (!retryToken) throw new ApiError(401, AUTH_REQUIRED);
     response = await send(path, init, retryToken);
   }
+  return response;
+}
 
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await authorizedFetch(path, init);
   let body: unknown;
   try {
     body = await response.json();
@@ -61,18 +69,19 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     body = null;
   }
 
-  if (!response.ok) {
-    const errorBody = body as { detail?: SafeError } | null;
-    const errorDetail: SafeError = errorBody?.detail ?? {
-      code: 'REQUEST_FAILED',
-      message:
-        response.statusText || 'An error occurred while communicating with the server.',
-      retryable: response.status >= 500,
-    };
-    throw new ApiError(response.status, errorDetail);
-  }
-
+  if (!response.ok) throw apiError(response, body);
   return body as T;
+}
+
+export function apiError(response: Response, body: unknown): ApiError {
+  const errorBody = body as { detail?: SafeError } | null;
+  const errorDetail: SafeError = errorBody?.detail ?? {
+    code: 'REQUEST_FAILED',
+    message:
+      response.statusText || 'An error occurred while communicating with the server.',
+    retryable: response.status >= 500,
+  };
+  return new ApiError(response.status, errorDetail);
 }
 
 export const createResearchRun = (symbol: string): Promise<ResearchRun> =>

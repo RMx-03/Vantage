@@ -14,8 +14,12 @@ export function runPollInterval(
   run: ResearchRun | undefined,
   updateCount: number
 ): number | false {
-  if (!run || run.workflow_status !== 'running') return false;
-  if (updateCount > POLL_MAX_COUNT) return false;
+  return pollInterval(run?.workflow_status === 'running', updateCount);
+}
+
+/** The same schedule for anything that reports whether it is still running. */
+export function pollInterval(running: boolean, updateCount: number): number | false {
+  if (!running || updateCount > POLL_MAX_COUNT) return false;
   return updateCount <= POLL_FAST_COUNT ? POLL_FAST_MS : POLL_SLOW_MS;
 }
 
