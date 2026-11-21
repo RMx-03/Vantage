@@ -47,6 +47,7 @@ HOLIDAY = json.loads((FIXTURES / "holiday.json").read_text())
 
 MESSAGES = {
     "auth": "FRED refused the configured API key.",
+    "rejected": "FRED refused the request; check the configured API key.",
     "rate_limited": "FRED rate limit was reached.",
     "other": "Macro series could not be retrieved.",
 }
@@ -300,14 +301,52 @@ def test_cache_failure_never_fails_the_role(caplog: pytest.LogCaptureFixture) ->
 
 
 @respx.mock
-def test_status_400_is_rejected_with_the_generic_message() -> None:
+def test_status_400_is_rejected_with_the_api_key_message() -> None:
     by_series(lambda s: httpx.Response(400, text="Bad Request"))
 
     with pytest.raises(VantageError) as exc:
         make_provider().fetch_macro(END, RETRIEVED)
 
     assert exc.value.code == "MACRO_PROVIDER_FAILED"
-    assert exc.value.safe_message == MESSAGES["other"]
+    assert exc.value.safe_message == MESSAGES["rejected"]
+
+
+@respx.mock
+def test_one_series_timing_out_leaves_the_other_three() -> None:
+    def handler(series_id: str) -> httpx.Response:
+        if series_id == "DGS10":
+            raise httpx.ReadTimeout("slow")
+        return ok(series_id)
+
+    by_series(handler)
+
+    snapshot = make_provider().fetch_macro(END, RETRIEVED)
+
+    assert snapshot.quality is ComponentQuality.PARTIAL
+    by_id = {o.series_id: o for o in snapshot.observations}
+    assert by_id["DGS10"].value is None
+    assert by_id["DGS10"].quality is ComponentQuality.MISSING
+    assert [o.value is not None for o in snapshot.observations].count(True) == 3
+
+
+@respx.mock
+def test_rate_limit_on_one_series_still_fails_the_role() -> None:
+    by_series(lambda s: httpx.Response(429) if s == "DGS10" else ok(s))
+
+    with pytest.raises(VantageError) as exc:
+        make_provider().fetch_macro(END, RETRIEVED)
+
+    assert exc.value.safe_message == MESSAGES["rate_limited"]
+
+
+@respx.mock
+def test_auth_failure_on_one_series_still_fails_the_role() -> None:
+    by_series(lambda s: httpx.Response(401) if s == "VIXCLS" else ok(s))
+
+    with pytest.raises(VantageError) as exc:
+        make_provider().fetch_macro(END, RETRIEVED)
+
+    assert exc.value.safe_message == MESSAGES["auth"]
 
 
 @respx.mock
@@ -343,7 +382,8 @@ def test_500_retries_once_then_fails_with_the_generic_message() -> None:
         make_provider().fetch_macro(END, RETRIEVED)
 
     assert exc.value.safe_message == MESSAGES["other"]
-    assert route.call_count == 2
+    # Every series is tried, each retried once, before the role is declared down.
+    assert route.call_count == 2 * len(MACRO_SERIES)
 
 
 @respx.mock
@@ -412,11 +452,11 @@ def test_all_series_requests_share_one_deadline() -> None:
     provider = make_provider()
     provider._http._clock = lambda: now["t"]
 
-    with pytest.raises(VantageError) as exc:
-        provider.fetch_macro(END, RETRIEVED)
+    snapshot = provider.fetch_macro(END, RETRIEVED)
 
-    # Four 2 s requests cannot fit one 6 s budget.
-    assert exc.value.code == "MACRO_PROVIDER_FAILED"
+    # Four 2 s requests cannot fit one 6 s budget: the fourth never goes out.
+    assert snapshot.quality is ComponentQuality.PARTIAL
+    assert [o.value is None for o in snapshot.observations].count(True) == 1
 
 
 @respx.mock
