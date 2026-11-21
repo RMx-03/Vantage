@@ -280,7 +280,9 @@ def collect_inputs(
                 "fundamentals",
                 fundamentals_provider.name,
                 run_id,
-                lambda: fundamentals_provider.fetch_fundamentals(symbol, now),
+                lambda: fundamentals_provider.fetch_fundamentals(
+                    symbol, now, cutoff=cutoff
+                ),
             )
     if providers.macro is not None:
         macro_provider = providers.macro

@@ -262,7 +262,7 @@ class EdgarProvider:
     # ------------------------------------------------------------ fundamentals
 
     def fetch_fundamentals(
-        self, symbol: str, retrieved_at: datetime
+        self, symbol: str, retrieved_at: datetime, *, cutoff: datetime | None = None
     ) -> FundamentalsSnapshot:
         primary = symbol.strip().upper()
         retrieved_utc = retrieved_at.astimezone(UTC)
@@ -289,7 +289,8 @@ class EdgarProvider:
                 quality=ComponentQuality.MISSING,
                 error_code="NO_SEC_FILER_RECORD",
             )
-        selected = _select_fundamentals(facts) if facts is not None else None
+        filed_by = cutoff.astimezone(_NY).date() if cutoff is not None else None
+        selected = _select_fundamentals(facts, filed_by) if facts is not None else None
         if selected is None:
             return FundamentalsSnapshot(
                 **base,
@@ -576,14 +577,17 @@ def _reduce_facts(payload: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     return reduced
 
 
-def _latest_by_end(rows: object) -> dict[date, _Annual]:
-    """Annual facts keyed by period end, keeping the latest filed of each end."""
+def _latest_by_end(rows: object, filed_by: date | None = None) -> dict[date, _Annual]:
+    """Annual facts keyed by period end, keeping the latest filed of each end.
+
+    Facts filed after `filed_by` are ignored, so a run never sees a later filing.
+    """
     out: dict[date, _Annual] = {}
     if not isinstance(rows, list):
         return out
     for raw in rows:
         fact = _annual(raw)
-        if fact is None:
+        if fact is None or (filed_by is not None and fact.filed > filed_by):
             continue
         current = out.get(fact.end)
         if current is None or fact.filed > current.filed:
@@ -592,11 +596,11 @@ def _latest_by_end(rows: object) -> dict[date, _Annual]:
 
 
 def _select_fundamentals(
-    facts: dict[str, list[dict[str, Any]]],
+    facts: dict[str, list[dict[str, Any]]], filed_by: date | None = None
 ) -> dict[str, Any] | None:
     best: tuple[str, dict[date, _Annual], date] | None = None
     for concept in REVENUE_CONCEPTS:
-        by_end = _latest_by_end(facts.get(concept))
+        by_end = _latest_by_end(facts.get(concept), filed_by)
         if not by_end:
             continue
         latest = max(by_end)
@@ -610,7 +614,7 @@ def _select_fundamentals(
         e for e in by_end if ANNUAL_MIN_DAYS <= (end - e).days <= ANNUAL_MAX_DAYS
     ]
     prior = by_end[max(prior_ends)] if prior_ends else None
-    income = _latest_by_end(facts.get(NET_INCOME_CONCEPT)).get(end)
+    income = _latest_by_end(facts.get(NET_INCOME_CONCEPT), filed_by).get(end)
     return {
         "fiscal_year": end.year,
         "period_end": end,

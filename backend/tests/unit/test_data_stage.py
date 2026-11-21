@@ -118,9 +118,10 @@ class StubFundamentals:
         self.calls = 0
         self.args: tuple = ()
 
-    def fetch_fundamentals(self, symbol, retrieved_at):
+    def fetch_fundamentals(self, symbol, retrieved_at, *, cutoff=None):
         self.calls += 1
         self.args = (symbol, retrieved_at)
+        self.cutoff = cutoff
         return FundamentalsSnapshot(
             symbol=symbol,
             provider=self.name,
@@ -231,6 +232,7 @@ def test_happy_path_passes_context_symbols_and_builds_six_records() -> None:
     assert providers.filings.args == ("AAPL", CUTOFF, NOW, 30)
     assert providers.news[0].args == ("AAPL", CUTOFF, NOW, 7, 10)
     assert providers.fundamentals.args == ("AAPL", NOW)
+    assert providers.fundamentals.cutoff == CUTOFF
     assert providers.macro.args == (SESSIONS[-1], NOW)
     assert providers.crosscheck.args == ("AAPL", SESSIONS[0], SESSIONS[-1], NOW)
     # one provider and success: the merged snapshot is the provider's own object
@@ -533,7 +535,7 @@ def test_news_exception_log_names_the_provider_not_the_error_text(caplog) -> Non
 
 
 class FailingFundamentals(StubFundamentals):
-    def fetch_fundamentals(self, symbol, retrieved_at):
+    def fetch_fundamentals(self, symbol, retrieved_at, *, cutoff=None):
         raise TimeoutError(SECRET)
 
 

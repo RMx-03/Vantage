@@ -260,7 +260,7 @@ class FixtureProvider(
         )
 
     def fetch_fundamentals(
-        self, symbol: str, retrieved_at: datetime
+        self, symbol: str, retrieved_at: datetime, *, cutoff: datetime | None = None
     ) -> FundamentalsSnapshot:
         data = _load("fundamentals.json")
         return FundamentalsSnapshot(

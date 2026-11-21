@@ -57,7 +57,7 @@ class FundamentalsProvider(Protocol):
     name: str
 
     def fetch_fundamentals(
-        self, symbol: str, retrieved_at: datetime
+        self, symbol: str, retrieved_at: datetime, *, cutoff: datetime | None = None
     ) -> FundamentalsSnapshot: ...
 
 
