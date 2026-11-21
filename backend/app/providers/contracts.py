@@ -7,6 +7,7 @@ from app.domain.research import (
     FundamentalsSnapshot,
     MacroSnapshot,
     MarketSnapshot,
+    NewsItem,
     NewsSnapshot,
     PriceCrossCheckSnapshot,
     ResearchMetric,
@@ -56,7 +57,7 @@ class FundamentalsProvider(Protocol):
     name: str
 
     def fetch_fundamentals(
-        self, symbol: str, retrieved_at: datetime
+        self, symbol: str, retrieved_at: datetime, *, cutoff: datetime | None = None
     ) -> FundamentalsSnapshot: ...
 
 
@@ -86,5 +87,5 @@ class InterpretationProvider(Protocol):
     enabled: bool
 
     def interpret(
-        self, *, symbol: str, metrics: list[ResearchMetric], news: NewsSnapshot
+        self, *, symbol: str, metrics: list[ResearchMetric], evidence: list[NewsItem]
     ) -> AIInterpretation | None: ...

@@ -6,7 +6,9 @@ from app.domain.research import (
     ModelQuality,
     NewsSnapshot,
     OverallQuality,
+    RoleQuality,
 )
+from app.services.run_inputs import RunInputs
 
 COMPONENT_QUALITY_SEVERITY: dict[ComponentQuality, int] = {
     ComponentQuality.FRESH: 0,
@@ -27,8 +29,12 @@ def worse_component_quality(
 
 
 def assess_quality(
-    market: MarketSnapshot, news: NewsSnapshot, interpretation: AIInterpretation
+    market: MarketSnapshot,
+    news: NewsSnapshot,
+    interpretation: AIInterpretation,
+    inputs: RunInputs | None = None,
 ) -> DataQuality:
+    inputs = inputs if inputs is not None else RunInputs()
     # 1. Price Quality
     prices_quality = market.quality
     if market.error_code is not None:
@@ -76,6 +82,7 @@ def assess_quality(
             ComponentQuality.FAILED,
         )
         or model_quality in (ModelQuality.DEGRADED, ModelQuality.FAILED)
+        or inputs.role_quality("filings") == RoleQuality.FAILED
     ):
         overall_quality = OverallQuality.DEGRADED
     else:
@@ -86,4 +93,8 @@ def assess_quality(
         prices=prices_quality,
         news=news_quality,
         model=model_quality,
+        filings=inputs.role_quality("filings"),
+        fundamentals=inputs.role_quality("fundamentals"),
+        macro=inputs.role_quality("macro"),
+        crosscheck=inputs.role_quality("crosscheck"),
     )

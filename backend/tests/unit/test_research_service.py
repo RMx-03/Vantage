@@ -71,8 +71,12 @@ def test_unconfigured_market_fails_the_run() -> None:
         service.create(user_id=uuid4(), symbol="AAPL", now=now)
 
     assert exc.value.code == "MARKET_DATA_PROVIDER_FAILED"
+    assert exc.value.safe_message == "Market data provider is not configured."
     assert repo.finalize_failure.call_args.kwargs["error_code"] == (
         "MARKET_DATA_PROVIDER_FAILED"
+    )
+    assert repo.finalize_failure.call_args.kwargs["error_message_safe"] == (
+        "Market data provider is not configured."
     )
 
 
@@ -111,7 +115,7 @@ def test_run_without_news_provider_records_news_failed() -> None:
     market = MagicMock()
     market.name = "stub"
 
-    def fetch(symbol, start, end, now):
+    def fetch(symbol, start, end, now, **kwargs):
         return MarketSnapshot(
             symbol=symbol,
             bars=[],
@@ -147,7 +151,7 @@ def _market_stub():
     market = MagicMock()
     market.name = "stub"
 
-    def fetch(symbol, start, end, now):
+    def fetch(symbol, start, end, now, **kwargs):
         return MarketSnapshot(
             symbol=symbol,
             bars=[],
@@ -262,22 +266,25 @@ def test_all_providers_failing_persists_failed_news() -> None:
     assert "NEWS_PROVIDER_FAILED" in reasons
 
 
-def test_non_vantage_error_is_not_turned_into_a_failed_snapshot() -> None:
-    import pytest
-
-    from app.domain.errors import VantageError
+def test_non_vantage_error_becomes_a_failed_snapshot_not_a_failed_run() -> None:
+    from app.domain.research import ComponentQuality
 
     boom = _StubNews("alpaca", raises=RuntimeError("boom"))
-    with pytest.raises(VantageError) as exc:
-        _run([boom])
-    assert exc.value.code != "NEWS_PROVIDER_FAILED"
+    _, repo = _run([boom])
+
+    news = repo.save_snapshot.call_args.args[3]
+    assert news.quality == ComponentQuality.FAILED
+    assert news.error_code == "NEWS_PROVIDER_FAILED"
+    assert news.provider == "alpaca"
+    repo.finalize_failure.assert_not_called()
+    repo.finalize_success.assert_called_once()
 
 
 def test_single_provider_snapshot_is_saved_unchanged_with_same_hash() -> None:
     from dataclasses import replace
     from uuid import uuid4
 
-    from app.services import research_run
+    from app.services.evidence import merge_news
     from app.services.snapshots import combined_snapshot_hash
 
     only = _StubNews("yfinance", items=[_news_item("yfinance", "Story")])
@@ -298,7 +305,7 @@ def test_single_provider_snapshot_is_saved_unchanged_with_same_hash() -> None:
 
     market, news = repo.save_snapshot.call_args.args[2:4]
     assert news is returned["snap"]
-    assert research_run.merge_news([news], symbol="AAPL", limit=10) is news
+    assert merge_news([news], symbol="AAPL", limit=10) is news
     assert repo.save_snapshot.side_effect(1, None, market, news) == (
         combined_snapshot_hash(market, returned["snap"])
     )
@@ -311,7 +318,7 @@ def test_provider_request_spans_carry_role_and_provider_name(monkeypatch) -> Non
         InMemorySpanExporter,
     )
 
-    from app.services import research_run
+    from app.services import data_stage, research_run
     from app.telemetry.redaction import RedactingSpanProcessor
 
     exporter = InMemorySpanExporter()
@@ -320,6 +327,7 @@ def test_provider_request_spans_carry_role_and_provider_name(monkeypatch) -> Non
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     tracer = provider.get_tracer("test")
     monkeypatch.setattr(research_run, "get_tracer", lambda: tracer)
+    monkeypatch.setattr(data_stage, "get_tracer", lambda: tracer)
 
     _run([_StubNews("alpaca"), _StubNews("finnhub")])
 
@@ -328,7 +336,12 @@ def test_provider_request_spans_carry_role_and_provider_name(monkeypatch) -> Non
         (s.attributes["vantage.provider.role"], s.attributes["vantage.provider.name"])
         for s in spans
     ]
-    assert pairs == [("market", "stub"), ("news", "alpaca"), ("news", "finnhub")]
+    # The roles run concurrently, so span order is not fixed.
+    assert sorted(pairs) == [
+        ("market", "stub"),
+        ("news", "alpaca"),
+        ("news", "finnhub"),
+    ]
 
 
 def test_no_news_provider_opens_no_tagged_news_span(monkeypatch) -> None:
@@ -342,7 +355,7 @@ def test_no_news_provider_opens_no_tagged_news_span(monkeypatch) -> None:
     )
 
     from app.domain.errors import VantageError
-    from app.services import research_run
+    from app.services import data_stage, research_run
     from app.telemetry.redaction import RedactingSpanProcessor
 
     exporter = InMemorySpanExporter()
@@ -351,6 +364,7 @@ def test_no_news_provider_opens_no_tagged_news_span(monkeypatch) -> None:
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     tracer = provider.get_tracer("test")
     monkeypatch.setattr(research_run, "get_tracer", lambda: tracer)
+    monkeypatch.setattr(data_stage, "get_tracer", lambda: tracer)
 
     base = _provider_set(_market_stub(), object())
     service, repo, now = _service_with(replace(base, news=()))
@@ -366,3 +380,197 @@ def test_no_news_provider_opens_no_tagged_news_span(monkeypatch) -> None:
         if s.name == "provider_request"
     ]
     assert roles == ["market", None]
+
+
+# --- Data stage wiring, v3 outputs ------------------------------------------------
+
+
+class _StubLLM:
+    name = "stub-llm"
+    model = "stub-model"
+    enabled = True
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def interpret(self, *, symbol, metrics, evidence):
+        from app.domain.research import AIInterpretation
+
+        self.calls.append({"symbol": symbol, "metrics": metrics, "evidence": evidence})
+        filing = next((e for e in evidence if e.source_type == "filing"), evidence[0])
+        return AIInterpretation(
+            sentiment_label="neutral",
+            summary="Filings describe the company's own disclosures.",
+            evidence_ids=[filing.evidence_id],
+            attribution="company",
+        )
+
+
+def _full_set(*, news=(), filings="fixture", llm=None, **overrides):
+    from dataclasses import replace
+
+    from app.providers.fixture_provider import FixtureProvider
+    from app.providers.registry import ProviderSet
+
+    fixture = FixtureProvider()
+    base = ProviderSet(
+        market=fixture,
+        news=tuple(news),
+        filings=fixture if filings == "fixture" else filings,
+        fundamentals=fixture if filings == "fixture" else None,
+        macro=fixture,
+        crosscheck=None,
+        llm=llm or _StubLLM(),
+        not_configured=("crosscheck",),
+    )
+    return replace(base, **overrides)
+
+
+def _run_set(providers):
+    from uuid import uuid4
+
+    from app.services.snapshots import combined_snapshot_hash
+
+    service, repo, now = _service_with(providers)
+    repo.save_snapshot.side_effect = lambda _id, _uid, market, news, *a, **k: (
+        combined_snapshot_hash(market, news)
+    )
+    service.create(user_id=uuid4(), symbol="AAPL", now=now)
+    return service, repo
+
+
+def test_full_run_saves_v3_outputs_and_company_attribution() -> None:
+    from app.domain.research import RoleQuality
+    from app.prompts.research_interpretation import PROMPT_VERSION
+
+    llm = _StubLLM()
+    service, repo = _run_set(_full_set(news=(_StubNews("alpaca"),), llm=llm))
+
+    assert service.versions.metrics == "eod-metrics-v3"
+    assert service.versions.policy == "research-policy-v2"
+    assert service.versions.response_schema == "research-run-response-v3"
+    assert service.versions.workflow == "eod-research-v1"
+    assert PROMPT_VERSION == "research-interpretation-v3"
+
+    sources = repo.save_snapshot.call_args.args[4]
+    by_type = {s.source_type: s for s in sources}
+    assert {"filing", "insider_transaction"} <= set(by_type)
+    for kind in ("filing", "insider_transaction"):
+        assert by_type[kind].details is not None
+        assert by_type[kind].details.company_specific is True
+
+    kwargs = repo.save_snapshot.call_args.kwargs
+    assert len(kwargs["providers"]) == 6
+    assert kwargs["fundamentals"] is not None
+    assert kwargs["macro"] is not None
+
+    done = repo.finalize_success.call_args.kwargs
+    assert done["interpretation"].attribution == "company"
+    assert done["model_info"].prompt_version == "research-interpretation-v3"
+    assert done["data_quality"].filings == RoleQuality.FRESH
+    assert len(llm.calls) == 1
+    assert {e.evidence_id for e in llm.calls[0]["evidence"]} == {
+        s.evidence_id for s in sources
+    }
+
+
+def test_filing_only_evidence_still_calls_the_model() -> None:
+    llm = _StubLLM()
+    _, repo = _run_set(_full_set(news=(_StubNews("alpaca"),), llm=llm))
+
+    assert llm.calls, "filings alone are evidence"
+    assert repo.finalize_success.call_args.kwargs["interpretation"] is not None
+
+
+def test_no_evidence_skips_the_model() -> None:
+    from app.domain.research import ModelQuality
+
+    llm = _StubLLM()
+    providers = _full_set(
+        news=(_StubNews("alpaca"),),
+        filings=None,
+        fundamentals=None,
+        macro=None,
+        llm=llm,
+        not_configured=("filings", "fundamentals", "macro", "crosscheck"),
+    )
+    _, repo = _run_set(providers)
+
+    assert llm.calls == []
+    done = repo.finalize_success.call_args.kwargs
+    assert done["data_quality"].model == ModelQuality.NOT_RUN
+    assert done["interpretation"] is None
+    assert done["model_info"] is None
+
+
+def test_skip_text_names_missing_evidence() -> None:
+    from datetime import UTC, datetime
+
+    from app.agents.research_graph import create_research_graph
+    from app.providers.fixture_provider import FixtureProvider
+    from app.services.run_inputs import RunInputs
+    from app.services.sessions import (
+        latest_completed_xnys_close,
+        trailing_xnys_sessions,
+    )
+
+    now = datetime(2026, 11, 13, 22, 0, tzinfo=UTC)
+    cutoff = latest_completed_xnys_close(now)
+    sessions = trailing_xnys_sessions(cutoff.date())
+    fixture = FixtureProvider()
+    market = fixture.fetch_daily_snapshot("AAPL", sessions[0], sessions[-1], now)
+    market = market.model_copy(
+        update={"as_of": cutoff, "latest_completed_session": sessions[-1]}
+    )
+    news = _StubNews("alpaca").fetch_company_news("AAPL", cutoff, now, 7, 10)
+    state = create_research_graph(_StubLLM()).invoke(
+        {
+            "symbol": "AAPL",
+            "market": market,
+            "news": news,
+            "inputs": RunInputs(),
+            "evidence": [],
+        }
+    )
+    assert state["interpretation"].summary == (
+        "Automated interpretation was not run because no evidence was available."
+    )
+
+
+def test_filings_provider_failure_gives_review_and_the_run_succeeds() -> None:
+    from app.domain.errors import VantageError
+    from app.domain.research import ResearchStatus, RoleQuality
+
+    class _BrokenFilings:
+        name = "edgar"
+
+        def fetch_filing_evidence(self, *args, **kwargs):
+            raise VantageError(code="FILINGS_PROVIDER_FAILED", safe_message="down")
+
+    providers = _full_set(
+        news=(_StubNews("alpaca", items=[_news_item("alpaca", "Story")]),),
+        filings=_BrokenFilings(),
+    )
+    _, repo = _run_set(providers)
+
+    repo.finalize_failure.assert_not_called()
+    done = repo.finalize_success.call_args.kwargs
+    assert done["research_status"] == ResearchStatus.REVIEW
+    assert "FILINGS_PROVIDER_FAILED" in [r.code for r in done["reasons"]]
+    assert done["data_quality"].filings == RoleQuality.FAILED
+
+
+def test_constructor_overrides_reach_the_data_stage() -> None:
+    from unittest.mock import MagicMock
+
+    market, news = _market_stub(), _StubNews("override-news")
+    base = _provider_set(MagicMock(), MagicMock())
+    service, repo, now = _service_with(
+        base,
+        market_provider=market,
+        news_provider=news,
+    )
+    assert service.providers.market is market
+    assert service.providers.news == (news,)
+    assert service.market is market
+    assert service.news is news

@@ -1,11 +1,21 @@
 import type { AIInterpretation } from '../../types/research';
 import { Panel, PanelHeader } from '../../components/ui';
 
+const ATTRIBUTION_MEANINGS: Record<string, string> = {
+  market: 'The move tracked the broad market.',
+  sector: 'The move tracked the sector more than the broad market.',
+  company: 'Company-specific evidence explains the move.',
+  mixed: 'Both company evidence and market or sector movement are involved.',
+  unclear: 'The evidence does not support an attribution.',
+};
+
 interface InterpretationPanelProps {
   interpretation: AIInterpretation | null;
 }
 
 export default function InterpretationPanel({ interpretation }: InterpretationPanelProps) {
+  // Widened on purpose: a newer backend may send a value this build does not know.
+  const attribution: string | null | undefined = interpretation?.attribution;
   return (
     <Panel>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -45,6 +55,22 @@ export default function InterpretationPanel({ interpretation }: InterpretationPa
           <p className="text-sm text-on-surface-variant leading-relaxed max-w-3xl">
             {interpretation.summary}
           </p>
+
+          {typeof attribution === 'string' && attribution !== '' && (
+            <div>
+              <div className="text-xs font-label text-on-surface">
+                Attribution: {attribution}
+              </div>
+              {Object.hasOwn(ATTRIBUTION_MEANINGS, attribution) && (
+                <p
+                  data-testid="attribution-meaning"
+                  className="text-xs text-on-surface-variant mt-1"
+                >
+                  {ATTRIBUTION_MEANINGS[attribution]}
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <div className="text-xs font-medium text-outline uppercase tracking-wider mb-2 font-label">

@@ -23,6 +23,8 @@ FRED_LIMITER = RateLimiter(100, 60.0)
 
 OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
 MACRO_SERIES = ("DFF", "DGS10", "T10Y2Y", "VIXCLS")
+# These affect every series, so they fail the role; any other error costs one series.
+_ROLE_WIDE_KINDS = frozenset({"auth", "rejected", "rate_limited"})
 FRESH_WINDOW_SESSIONS = 6
 OBSERVATION_LIMIT = 10
 
@@ -31,7 +33,8 @@ MESSAGES = {
     "auth": "FRED refused the configured API key.",
     "rate_limited": "FRED rate limit was reached.",
     "unavailable": "Macro series could not be retrieved.",
-    "rejected": "Macro series could not be retrieved.",
+    # The series ids are fixed, so a 400 almost always means the key.
+    "rejected": "FRED refused the request; check the configured API key.",
     "not_found": "Macro series could not be retrieved.",
     "malformed": "Macro series could not be retrieved.",
 }
@@ -106,12 +109,28 @@ class FredMacroProvider:
         observations: list[MacroObservation] = []
         try:
             deadline = self._http.deadline()
+            errors: list[ProviderHttpError] = []
             for series_id in MACRO_SERIES:
-                observations.append(
-                    self._observation(
-                        series_id, end_session, oldest_fresh, retrieved_at, deadline
+                try:
+                    observations.append(
+                        self._observation(
+                            series_id, end_session, oldest_fresh, retrieved_at, deadline
+                        )
                     )
-                )
+                except ProviderHttpError as err:
+                    if err.kind in _ROLE_WIDE_KINDS:
+                        raise
+                    errors.append(err)
+                    observations.append(
+                        MacroObservation(
+                            series_id=series_id,
+                            value=None,
+                            observation_date=None,
+                            quality=ComponentQuality.MISSING,
+                        )
+                    )
+            if len(errors) == len(MACRO_SERIES):
+                raise errors[0]  # every series failed: the provider is down
         except ProviderHttpError as err:
             raise fail(ERROR_CODE, MESSAGES, err) from None
 

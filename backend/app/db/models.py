@@ -184,6 +184,9 @@ class ResearchSnapshotRow(Base):
     macro: Mapped[Any | None] = mapped_column(
         postgresql.JSONB(none_as_null=True), nullable=True
     )
+    crosscheck: Mapped[Any | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
 
     run: Mapped["ResearchRunRow"] = relationship(back_populates="snapshot")
     sources: Mapped[list["ResearchSourceRow"]] = relationship(

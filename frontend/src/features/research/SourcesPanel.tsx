@@ -34,6 +34,54 @@ function SourceTitle({ source }: { source: EvidenceSource }) {
   );
 }
 
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  news: 'News',
+  filing: 'SEC filing',
+  insider_transaction: 'Insider filing',
+};
+
+function typeLabel(sourceType: string | null | undefined): string {
+  return sourceType && Object.hasOwn(SOURCE_TYPE_LABELS, sourceType)
+    ? SOURCE_TYPE_LABELS[sourceType]
+    : 'News';
+}
+
+const CHIP =
+  'inline-flex items-center border border-outline-variant/50 bg-surface-container-highest text-on-surface-variant font-label text-[10px] uppercase tracking-widest px-2 py-0.5';
+
+function EvidenceFacts({ source }: { source: EvidenceSource }) {
+  const details = source.details;
+  if (!details) return null;
+  const chips: string[] = [];
+  if (source.source_type === 'filing') {
+    if (details.form_type) chips.push(details.form_type);
+    if (details.item_codes && details.item_codes.length > 0) {
+      chips.push(`Items ${details.item_codes.join(', ')}`);
+    }
+  }
+  if (source.source_type === 'insider_transaction') {
+    if (details.transaction_code) chips.push(`Transaction code ${details.transaction_code}`);
+    if (details.direction === 'acquired' || details.direction === 'disposed') {
+      chips.push(details.direction);
+    }
+    if (details.parse_state === 'unparsed') chips.push('Details not parsed');
+  }
+  if (details.company_specific === true) chips.push('Company-specific');
+  if (details.providers && details.providers.length > 1) {
+    chips.push(`Reported by ${details.providers.join(', ')}`);
+  }
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 mt-2">
+      {chips.map((chip) => (
+        <span key={chip} className="text-[11px] text-on-surface-variant font-label">
+          {chip}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 interface SourcesPanelProps {
   sources: EvidenceSource[];
 }
@@ -55,7 +103,10 @@ export default function SourcesPanel({ sources }: SourcesPanelProps) {
               className="border border-outline-variant/30 bg-surface-container-low p-4 transition-all hover:border-outline-variant"
             >
               <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 mb-1">
-                <div className="font-medium text-on-surface-variant">
+                <div className="font-medium text-on-surface-variant min-w-0 break-words">
+                  <span className={`${CHIP} mr-2 align-middle`}>
+                    {typeLabel(source.source_type)}
+                  </span>
                   <SourceTitle source={source} />
                 </div>
                 <div className="flex items-center gap-2 text-xs text-outline shrink-0">
@@ -64,6 +115,13 @@ export default function SourcesPanel({ sources }: SourcesPanelProps) {
                   <span>{source.provider}</span>
                 </div>
               </div>
+
+              {typeof source.summary === 'string' && source.summary !== '' && (
+                <p className="text-sm text-on-surface-variant mt-1 break-words whitespace-pre-line">
+                  {source.summary}
+                </p>
+              )}
+              <EvidenceFacts source={source} />
 
               <div className="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-outline font-label">
                 <span>ID: {source.evidence_id}</span>

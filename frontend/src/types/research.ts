@@ -5,7 +5,7 @@ export type ComponentQuality = 'fresh' | 'partial' | 'stale' | 'missing' | 'fail
 export type RoleQuality = ComponentQuality | 'not_configured';
 export type ModelQuality = 'healthy' | 'degraded' | 'failed' | 'not_run';
 
-export type MetricUnit = 'ratio' | 'percent' | 'usd' | 'count' | 'sessions';
+export type MetricUnit = 'ratio' | 'percent' | 'usd' | 'count' | 'sessions' | 'index';
 export type ReasonSeverity = 'info' | 'warning' | 'blocking';
 
 export interface ResearchMetric {
@@ -78,6 +78,7 @@ export interface AIInterpretation {
   warnings: string[];
   abstained: boolean;
   abstention_reason: string | null;
+  attribution?: 'market' | 'sector' | 'company' | 'mixed' | 'unclear' | null;
 }
 
 export type ProviderRole =

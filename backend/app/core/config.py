@@ -189,14 +189,15 @@ class Settings(BaseSettings):
     FRED_API_KEY: str = ""
     TIINGO_API_KEY: str = ""
     SEC_USER_AGENT: str = ""
-    # One provider per role. yfinance stays the default so nothing changes
-    # until an operator opts in; "none" switches an optional role off.
-    MARKET_PROVIDER: str = "yfinance"
+    # One provider per role. The free providers are the default; a role whose
+    # key is missing is reported as not configured. "none" switches an
+    # optional role off, and yfinance stays registered as an emergency fallback.
+    MARKET_PROVIDER: str = "alpaca"
     NEWS_PROVIDERS: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["yfinance"]
+        default_factory=lambda: ["alpaca", "finnhub"]
     )
-    FILINGS_PROVIDER: str = "none"
-    MACRO_PROVIDER: str = "none"
+    FILINGS_PROVIDER: str = "edgar"
+    MACRO_PROVIDER: str = "fred"
     PRICE_CROSSCHECK_PROVIDER: str = "none"
     PROVIDER_TIMEOUT_SECONDS: int = Field(default=6, gt=0)
 

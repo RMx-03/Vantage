@@ -7,6 +7,9 @@ import {
   insufficientRun,
   historicalRun,
   failedMarketRun,
+  informationalRunV3,
+  keylessRunV3,
+  storedProviderRegistryRun,
 } from '../../test/fixtures';
 
 describe('ResearchResult', () => {
@@ -213,5 +216,49 @@ describe('ResearchResult', () => {
     expect(
       screen.getByText(/Original as of:/, { selector: 'span' })
     ).toHaveTextContent('Original as of: Unavailable');
+  });
+
+  it('renders a v3 run with grouped metrics, role quality and the provider list', () => {
+    render(<ResearchResult run={informationalRunV3} historical={false} />);
+
+    expect(screen.getByRole('heading', { name: 'Macro' })).toBeVisible();
+    expect(screen.getByText('Price cross-check')).toBeVisible();
+    expect(screen.getByRole('list', { name: 'Providers by role' })).toBeVisible();
+  });
+
+  it('shows not-configured roles as absent, never as zero', () => {
+    render(<ResearchResult run={keylessRunV3} historical={false} />);
+
+    expect(screen.getAllByText('not configured').length).toBeGreaterThanOrEqual(8);
+    expect(screen.getAllByText('none')).toHaveLength(4);
+    expect(screen.queryByText(/FRED/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('16.00')).not.toBeInTheDocument();
+  });
+
+  it('renders a v2 run with no new headings, role rows or provider list', () => {
+    render(<ResearchResult run={informationalRun} historical={false} />);
+
+    for (const name of ['Relative', 'Fundamentals', 'Macro', 'Providers by role']) {
+      expect(screen.queryByRole('heading', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText('Filings')).not.toBeInTheDocument();
+    expect(screen.queryByText(/FRED/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('not configured')).not.toBeInTheDocument();
+  });
+
+  it('renders a run stored before metrics v3 with its provider list and no v3 sections', () => {
+    render(<ResearchResult run={storedProviderRegistryRun} historical />);
+
+    expect(screen.getByRole('heading', { name: 'Price' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Evidence and checks' })).toBeVisible();
+    for (const name of ['Relative', 'Fundamentals', 'Macro']) {
+      expect(screen.queryByRole('heading', { name })).not.toBeInTheDocument();
+    }
+    const list = screen.getByRole('list', { name: 'Providers by role' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(list).getAllByText('not configured')).toHaveLength(4);
+    expect(within(list).getAllByText('alpaca')).toHaveLength(2);
+    expect(screen.queryByText(/FRED/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Attribution/i)).not.toBeInTheDocument();
   });
 });

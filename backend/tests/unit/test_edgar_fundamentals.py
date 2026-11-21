@@ -307,6 +307,20 @@ def test_second_call_uses_the_cache_and_payload_is_reduced() -> None:
 
 
 @respx.mock
+def test_ticker_map_is_downloaded_once_across_filings_and_fundamentals() -> None:
+    # The run's cutoff is the previous session; its retrieval is the next day.
+    cutoff = datetime(2026, 11, 13, 21, 0, tzinfo=UTC)
+    retrieved = datetime(2026, 11, 14, 22, 0, tzinfo=UTC)
+    tickers = mock_tickers()
+    provider = make_provider()
+
+    provider.fetch_filing_evidence("zzzz", cutoff, retrieved, 30)
+    provider.fetch_fundamentals("zzzz", retrieved)
+
+    assert tickers.call_count == 1
+
+
+@respx.mock
 def test_cache_failure_is_a_miss(caplog: pytest.LogCaptureFixture) -> None:
     mock_tickers()
     mock_facts()
@@ -418,3 +432,46 @@ def test_registry_derives_the_fundamentals_role_from_edgar() -> None:
 
     assert isinstance(providers.fundamentals, EdgarProvider)
     assert providers.fundamentals is providers.filings
+
+
+def _two_years() -> dict[str, Any]:
+    fy24 = fact("2023-10-01", "2024-09-28", 90.0, filed="2024-11-01")
+    fy25 = fact("2024-09-29", "2025-09-27", 100.0, filed="2025-10-31")
+    fy26 = fact("2025-09-28", "2026-09-26", 120.0, filed="2026-11-20")
+    return doc(Revenues=[fy24, fy25, fy26])
+
+
+@respx.mock
+def test_annual_filed_after_the_cutoff_is_ignored() -> None:
+    mock_tickers()
+    mock_facts(_two_years())
+    cutoff = datetime(2026, 11, 13, 21, 0, tzinfo=UTC)
+
+    snapshot = make_provider().fetch_fundamentals("aapl", RETRIEVED, cutoff=cutoff)
+
+    assert snapshot.period_end == date(2025, 9, 27)
+    assert snapshot.revenue == 100.0
+    assert snapshot.prior_revenue == 90.0
+
+
+@respx.mock
+def test_cutoff_uses_the_new_york_date_of_the_cutoff() -> None:
+    mock_tickers()
+    mock_facts(_two_years())
+    # 2026-11-21 02:00 UTC is still 2026-11-20 in New York: filed that day counts.
+    cutoff = datetime(2026, 11, 21, 2, 0, tzinfo=UTC)
+
+    snapshot = make_provider().fetch_fundamentals("aapl", RETRIEVED, cutoff=cutoff)
+
+    assert snapshot.period_end == date(2026, 9, 26)
+    assert snapshot.revenue == 120.0
+
+
+@respx.mock
+def test_no_cutoff_keeps_the_latest_annual() -> None:
+    mock_tickers()
+    mock_facts(_two_years())
+
+    snapshot = fetch(make_provider())
+
+    assert snapshot.period_end == date(2026, 9, 26)

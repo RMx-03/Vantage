@@ -8,6 +8,7 @@ from urllib.parse import urlparse, urlunparse
 from app.domain.research import (
     ComponentQuality,
     EvidenceDetails,
+    FilingsSnapshot,
     NewsItem,
     NewsSnapshot,
 )
@@ -15,6 +16,36 @@ from app.domain.urls import normalize_url
 
 _TITLE_WINDOW = timedelta(hours=24)
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
+
+EVIDENCE_FILING_LIMIT = 10
+EVIDENCE_INSIDER_LIMIT = 10
+_MAX_TAGGED_SYMBOLS = 3
+_MIN_NAME_LENGTH = 3
+
+_STATE_MARKER = re.compile(r"\s*/[A-Za-z]{2}/?\s*$")
+_SUFFIXES = (
+    "inc",
+    "incorporated",
+    "corp",
+    "corporation",
+    "co",
+    "company",
+    "ltd",
+    "limited",
+    "plc",
+    "llc",
+    "lp",
+    "nv",
+    "sa",
+    "ag",
+    "se",
+)
+_SUFFIX = re.compile(
+    r"(?:[\s,]+&)?[\s,]+(?:"
+    + "|".join(r"\.?".join(suffix) for suffix in _SUFFIXES)
+    + r")\.?\s*$",
+    re.IGNORECASE,
+)
 
 
 def canonical_url(url: str | None) -> str | None:
@@ -131,3 +162,104 @@ def merge_news(
         quality=quality,
         error_code=error_code,
     )
+
+
+def company_search_name(name: str | None) -> str | None:
+    """The EDGAR name without a state marker or trailing legal suffixes."""
+    if name is None:
+        return None
+    result = _STATE_MARKER.sub("", name).strip(" ,")
+    while True:
+        stripped = _SUFFIX.sub("", result).strip(" ,")
+        if stripped == result:
+            break
+        result = stripped
+    result = result.strip(" ,&")
+    return result if len(result) >= _MIN_NAME_LENGTH else None
+
+
+def _share_class(symbol: str) -> str:
+    return symbol.strip().upper().replace("-", ".")
+
+
+def _whole(pattern: str, flags: int = 0) -> re.Pattern[str]:
+    return re.compile(rf"(?<![A-Za-z0-9])(?:{pattern})(?![A-Za-z0-9])", flags)
+
+
+def _mentions_ticker(text: str, symbol: str) -> bool:
+    ticker = symbol.strip().upper()
+    if len(ticker) < 2:
+        return False
+    forms = {ticker, ticker.replace(".", "-"), ticker.replace("-", ".")}
+    return (
+        _whole("|".join(re.escape(f) for f in sorted(forms))).search(text) is not None
+    )
+
+
+def is_company_specific(
+    item: NewsItem, *, symbol: str, company_name: str | None
+) -> bool:
+    """Whether an evidence item is about the company itself, decided in code."""
+    if item.source_type in ("filing", "insider_transaction"):
+        return True
+    if item.details is None:
+        return False
+    tagged = [_share_class(t) for t in item.details.tagged_symbols]
+    if (
+        not 1 <= len(tagged) <= _MAX_TAGGED_SYMBOLS
+        or _share_class(symbol) not in tagged
+    ):
+        return False
+    text = f"{item.title}\n{item.summary or ''}"
+    if _mentions_ticker(text, symbol):
+        return True
+    search_name = company_search_name(company_name)
+    return (
+        search_name is not None
+        and _whole(re.escape(search_name), re.IGNORECASE).search(text) is not None
+    )
+
+
+def _recency_key(item: NewsItem) -> tuple[bool, float, str]:
+    return (
+        item.event_time is None,
+        -(item.event_time.timestamp()) if item.event_time else 0.0,
+        item.evidence_id,
+    )
+
+
+def assemble_evidence(
+    news: NewsSnapshot, filings: FilingsSnapshot | None, *, symbol: str
+) -> list[NewsItem]:
+    """One evidence list: merged news, recent filings and recent insider filings."""
+    company_name: str | None = None
+    selected: list[NewsItem] = list(news.items)
+    if filings is not None and filings.quality not in (
+        ComponentQuality.FAILED,
+        ComponentQuality.MISSING,
+    ):
+        company_name = filings.company_name
+        filing_items = sorted(
+            (i for i in filings.items if i.source_type == "filing"), key=_recency_key
+        )
+        insider_items = sorted(
+            (
+                i
+                for i in filings.items
+                if i.source_type == "insider_transaction"
+                and not (i.details and i.details.parse_state == "not_fetched")
+            ),
+            key=_recency_key,
+        )
+        selected += filing_items[:EVIDENCE_FILING_LIMIT]
+        selected += insider_items[:EVIDENCE_INSIDER_LIMIT]
+
+    flagged: list[NewsItem] = []
+    for item in selected:
+        value = is_company_specific(item, symbol=symbol, company_name=company_name)
+        details = (item.details or EvidenceDetails()).model_copy(
+            update={"company_specific": value}
+        )
+        flagged.append(item.model_copy(update={"details": details}))
+    flagged.sort(key=_recency_key)
+    return flagged

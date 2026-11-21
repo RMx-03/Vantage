@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { informationalRun, reviewRun } from '../src/test/fixtures';
+import { informationalRunV3, reviewRun } from '../src/test/fixtures';
 
 async function mockAuth(page: Page) {
   await page.route('**/api/v1/auth/refresh', (route) =>
@@ -44,7 +44,7 @@ async function installAuthAndApiMocks(page: Page, postHeaders: string[] = []) {
 
   // A run is accepted as running; the first single-run read still reports it
   // running, and every later read returns the finished run.
-  const runningOf = (run: typeof informationalRun, symbol?: string) => ({
+  const runningOf = (run: typeof informationalRunV3, symbol?: string) => ({
     ...run,
     ...(symbol ? { symbol } : {}),
     workflow_status: 'running',
@@ -56,7 +56,7 @@ async function installAuthAndApiMocks(page: Page, postHeaders: string[] = []) {
   await page.route('**/api/v1/research-runs/*', async (route) => {
     const url = route.request().url();
     const degraded = url.includes('DEGRADED') || url.includes(reviewRun.run_id);
-    const finished = degraded ? { ...reviewRun, symbol: 'DEGRADED' } : informationalRun;
+    const finished = degraded ? { ...reviewRun, symbol: 'DEGRADED' } : informationalRunV3;
     const count = (reads.get(finished.run_id) ?? 0) + 1;
     reads.set(finished.run_id, count);
     await route.fulfill({
@@ -80,7 +80,7 @@ async function installAuthAndApiMocks(page: Page, postHeaders: string[] = []) {
         body: JSON.stringify(
           data.symbol === 'DEGRADED'
             ? runningOf(reviewRun, 'DEGRADED')
-            : runningOf(informationalRun)
+            : runningOf(informationalRunV3)
         ),
       });
     } else {
@@ -89,7 +89,7 @@ async function installAuthAndApiMocks(page: Page, postHeaders: string[] = []) {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          items: [informationalRun],
+          items: [informationalRunV3],
           next_cursor: null,
         }),
       });
@@ -131,6 +131,10 @@ test.describe('Research Run Browser Journey (first-party auth and API route-mock
     await expect(page.getByRole('heading', { name: 'Metrics' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Data quality' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Sources' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Macro' })).toBeVisible();
+    await expect(page.getByText('SEC filing', { exact: true })).toBeVisible();
+    await expect(page.getByText('Attribution: company')).toBeVisible();
+    await expect(page.getByText('Company-specific evidence explains the move.')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Run details' })).toBeVisible();
 
     // Confirm no forbidden language
@@ -141,7 +145,7 @@ test.describe('Research Run Browser Journey (first-party auth and API route-mock
 
     const runUrl = page.url();
     await page.reload();
-    await expect(page.getByText(informationalRun.summary!)).toBeVisible();
+    await expect(page.getByText(informationalRunV3.summary!)).toBeVisible();
     expect(page.url()).toBe(runUrl);
 
     // 3. Reopen historical run from history drawer

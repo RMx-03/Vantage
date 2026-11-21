@@ -213,6 +213,31 @@ def test_limiter_raises_when_wait_exceeds_cap() -> None:
 
 
 @respx.mock
+def test_limiter_wait_is_capped_by_the_time_left_on_the_deadline() -> None:
+    route = respx.get(URL).respond(200, json={})
+    t = FakeTime()
+    http = make_http(t, max_calls=1, max_wait=2.0)
+    http.get_json(URL)  # takes the only slot in the 1 s window
+    assert route.call_count == 1
+    with pytest.raises(ProviderHttpError) as info:
+        http.get_json(URL, deadline=t.clock() + 0.5)
+    assert info.value.kind == "rate_limited"
+    assert sum(t.sleeps) <= 0.5
+    assert route.call_count == 1
+
+
+@respx.mock
+def test_limiter_without_a_deadline_waits_up_to_its_own_cap() -> None:
+    route = respx.get(URL).respond(200, json={})
+    t = FakeTime()
+    http = make_http(t, max_calls=1, max_wait=2.0)
+    http.get_json(URL)
+    http.get_json(URL)
+    assert t.sleeps == [pytest.approx(1.0)]
+    assert route.call_count == 2
+
+
+@respx.mock
 def test_limiter_refusal_sends_no_request() -> None:
     route = respx.get(URL).respond(200, json={})
     http = make_http(FakeTime(), max_calls=1, max_wait=0)

@@ -456,7 +456,7 @@ def test_valid_output_round_trips(
     factory, metrics: list[ResearchMetric], news: NewsSnapshot
 ) -> None:
     provider = factory(response=valid_interpretation_json())
-    result = provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    result = provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert result.sentiment_label == "mixed"
     assert result.evidence_ids == ["news-1"]
     assert result.sentiment_score == 0.15
@@ -468,7 +468,7 @@ def test_failure_never_becomes_neutral(
 ) -> None:
     provider = gemini_factory(failure=failure)
     with pytest.raises(VantageError) as caught:
-        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+        provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert caught.value.code in {"MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"}
 
 
@@ -479,7 +479,7 @@ def test_unknown_evidence_id_is_rejected(
         response={**valid_interpretation_json(), "evidence_ids": ["invented"]}
     )
     with pytest.raises(VantageError) as caught:
-        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+        provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert caught.value.code == "MODEL_OUTPUT_INVALID"
 
 
@@ -500,7 +500,7 @@ def test_retry_succeeds_after_transient_failure(
     provider = GeminiInterpretationProvider(
         api_key="test-key", model="gemini-2.5-flash", client=mock_client
     )
-    result = provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    result = provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert result.sentiment_label == "mixed"
     assert mock_client.models.generate_content.call_count == 2
 
@@ -518,7 +518,7 @@ def test_retry_exhaustion_raises_error(
         api_key="test-key", model="gemini-2.5-flash", client=mock_client
     )
     with pytest.raises(VantageError) as caught:
-        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+        provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert caught.value.code == "MODEL_UNAVAILABLE"
     assert mock_client.models.generate_content.call_count == 2
 
@@ -535,7 +535,7 @@ def test_refusal_is_never_retried(
         api_key="test-key", model="gemini-2.5-flash", client=mock_client
     )
     with pytest.raises(VantageError) as caught:
-        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+        provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert caught.value.code in {"MODEL_UNAVAILABLE", "MODEL_OUTPUT_INVALID"}
     # Call count must be exactly 1, no retries on refusal
     assert mock_client.models.generate_content.call_count == 1
@@ -630,7 +630,7 @@ def test_each_adapter_retries_transient_failure(adapter, kind, metrics, news):
     provider, call, _ = build(
         [transport_error(name, kind), valid_interpretation_json()]
     )
-    result = provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    result = provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert result.sentiment_label == "mixed"
     assert result.evidence_ids == ["news-1"]
     assert call.call_count == 2
@@ -649,7 +649,7 @@ def test_each_adapter_exhausts_exact_retry_budget(
     )
     provider, call, _ = build([error] * 6, max_retries=max_retries)
     with pytest.raises(VantageError) as caught:
-        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+        provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert caught.value.code == "MODEL_UNAVAILABLE"
     assert call.call_count == max_retries + 1
 
@@ -661,7 +661,7 @@ def test_each_adapter_never_retries_permanent_errors(adapter, kind, metrics, new
         [transport_error(name, kind), valid_interpretation_json()]
     )
     with pytest.raises(VantageError):
-        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+        provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert call.call_count == 1
 
 
@@ -686,7 +686,7 @@ def test_each_adapter_never_retries_invalid_output(adapter, payload, metrics, ne
     _, build = adapter
     provider, call, _ = build([payload, valid_interpretation_json()])
     with pytest.raises(VantageError) as caught:
-        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+        provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert caught.value.code == "MODEL_OUTPUT_INVALID"
     assert call.call_count == 1
 
@@ -694,7 +694,7 @@ def test_each_adapter_never_retries_invalid_output(adapter, payload, metrics, ne
 def test_each_adapter_applies_timeout_and_disables_sdk_retries(adapter, metrics, news):
     name, build = adapter
     provider, call, constructor = build([valid_interpretation_json()])
-    provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     options = constructor.call_args.kwargs
     if name == "gemini":
         assert options["http_options"].timeout == 7000
@@ -714,7 +714,9 @@ def test_disabled_provider_is_first_class(metrics, news):
     assert provider.name == "disabled"
     assert provider.model == "none"
     assert provider.enabled is False
-    assert provider.interpret(symbol="AAPL", metrics=metrics, news=news) is None
+    assert (
+        provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items) is None
+    )
 
 
 @pytest.mark.parametrize(
@@ -737,14 +739,14 @@ def test_ollama_http_status_controls_retry(adapter, status, metrics, news):
     if status == 429 or status >= 500:
         assert (
             provider.interpret(
-                symbol="AAPL", metrics=metrics, news=news
+                symbol="AAPL", metrics=metrics, evidence=news.items
             ).sentiment_label
             == "mixed"
         )
         assert call.call_count == 2
     else:
         with pytest.raises(VantageError):
-            provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+            provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
         assert call.call_count == 1
 
 
@@ -752,7 +754,7 @@ def test_ollama_http_status_controls_retry(adapter, status, metrics, news):
 def test_every_provider_refusal_is_not_retried(factory, metrics, news):
     provider = factory(failure="refusal")
     with pytest.raises(VantageError) as caught:
-        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+        provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert caught.value.code == "MODEL_OUTPUT_INVALID"
     client = provider._client
     call = {
@@ -768,7 +770,7 @@ def test_default_groq_llama_uses_json_object_mode(adapter, metrics, news):
     _, build = adapter
     provider, call, _ = build([valid_interpretation_json()])
 
-    provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
 
     assert call.call_args.kwargs["response_format"] == {"type": "json_object"}
 
@@ -781,7 +783,7 @@ def test_groq_uses_strict_schema_for_supported_models(model, metrics, news):
     provider = groq_factory()
     provider.model = model
 
-    provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+    provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
 
     response_format = provider._client.chat.completions.create.call_args.kwargs[
         "response_format"
@@ -797,7 +799,7 @@ def test_groq_no_choices_is_not_retried(adapter, metrics, news):
         [SimpleNamespace(choices=[]), valid_interpretation_json()]
     )
     with pytest.raises(VantageError) as caught:
-        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+        provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert caught.value.code == "MODEL_OUTPUT_INVALID"
     assert call.call_count == 1
 
@@ -813,6 +815,178 @@ def test_ollama_invalid_envelope_is_not_retried(adapter, body, metrics, news):
     )
     provider, call, _ = build([response, valid_interpretation_json()])
     with pytest.raises(VantageError) as caught:
-        provider.interpret(symbol="AAPL", metrics=metrics, news=news)
+        provider.interpret(symbol="AAPL", metrics=metrics, evidence=news.items)
     assert caught.value.code == "MODEL_OUTPUT_INVALID"
     assert call.call_count == 1
+
+
+WARNING_TEXT = (
+    "Attribution was set to unclear because no company-specific evidence was cited."
+)
+
+
+def test_abstained_reply_drops_attribution() -> None:
+    result = validate_interpretation(
+        {**abstained_interpretation_json(), "attribution": "market"}, {"news-1"}
+    )
+    assert result.attribution is None
+
+
+def test_missing_attribution_becomes_unclear() -> None:
+    result = validate_interpretation(valid_interpretation_json(), {"news-1"})
+    assert result.attribution == "unclear"
+
+
+@pytest.mark.parametrize("value", ["market", "sector", "unclear"])
+def test_market_sector_unclear_pass_through(value: str) -> None:
+    result = validate_interpretation(
+        {**valid_interpretation_json(), "attribution": value}, {"news-1"}
+    )
+    assert result.attribution == value
+    assert result.warnings == []
+
+
+@pytest.mark.parametrize("value", ["company", "mixed"])
+def test_company_or_mixed_without_company_evidence_is_downgraded(value: str) -> None:
+    result = validate_interpretation(
+        {**valid_interpretation_json(), "attribution": value}, {"news-1"}
+    )
+    assert result.attribution == "unclear"
+    assert result.warnings == [WARNING_TEXT]
+
+
+@pytest.mark.parametrize("value", ["company", "mixed"])
+def test_company_or_mixed_with_company_evidence_is_kept(value: str) -> None:
+    result = validate_interpretation(
+        {**valid_interpretation_json(), "attribution": value},
+        {"news-1"},
+        company_specific_ids={"news-1"},
+    )
+    assert result.attribution == value
+    assert result.warnings == []
+
+
+def test_company_specific_id_must_be_cited() -> None:
+    result = validate_interpretation(
+        {**valid_interpretation_json(), "attribution": "company"},
+        {"news-1", "news-2"},
+        company_specific_ids={"news-2"},
+    )
+    assert result.attribution == "unclear"
+
+
+NO_SECTOR_WARNING = (
+    "Attribution was set to unclear because no sector comparison was available."
+)
+NO_MARKET_WARNING = (
+    "Attribution was set to unclear because no market comparison was available."
+)
+
+
+def test_sector_without_sector_comparison_is_downgraded() -> None:
+    result = validate_interpretation(
+        {**valid_interpretation_json(), "attribution": "sector"},
+        {"news-1"},
+        sector_comparison_available=False,
+    )
+    assert result.attribution == "unclear"
+    assert result.warnings == [NO_SECTOR_WARNING]
+
+
+def test_market_without_market_comparison_is_downgraded() -> None:
+    result = validate_interpretation(
+        {**valid_interpretation_json(), "attribution": "market"},
+        {"news-1"},
+        market_comparison_available=False,
+    )
+    assert result.attribution == "unclear"
+    assert result.warnings == [NO_MARKET_WARNING]
+
+
+@pytest.mark.parametrize("value", ["market", "sector"])
+def test_market_and_sector_are_kept_when_the_comparison_exists(value: str) -> None:
+    result = validate_interpretation(
+        {**valid_interpretation_json(), "attribution": value},
+        {"news-1"},
+        market_comparison_available=True,
+        sector_comparison_available=True,
+    )
+    assert result.attribution == value
+    assert result.warnings == []
+
+
+def _relative_metric(key: str, value: float | None, now: datetime) -> ResearchMetric:
+    return ResearchMetric(
+        key=key,
+        label=key,
+        value=value,
+        unit="ratio",
+        window_sessions=20,
+        as_of=now,
+        calculation_version="eod-metrics-v3",
+        quality=ComponentQuality.FRESH
+        if value is not None
+        else ComponentQuality.MISSING,
+    )
+
+
+def test_comparison_availability_reads_the_relative_metrics(
+    fixed_now: datetime,
+) -> None:
+    from app.providers.llm import comparison_availability
+
+    none = [
+        _relative_metric("excess_return_5_vs_spy", None, fixed_now),
+        _relative_metric("excess_return_20_vs_spy", None, fixed_now),
+        _relative_metric("excess_return_20_vs_sector", None, fixed_now),
+    ]
+    assert comparison_availability(none) == {
+        "market_comparison_available": False,
+        "sector_comparison_available": False,
+    }
+    some = [
+        _relative_metric("excess_return_5_vs_spy", None, fixed_now),
+        _relative_metric("excess_return_20_vs_spy", 0.01, fixed_now),
+        _relative_metric("excess_return_20_vs_sector", 0.02, fixed_now),
+    ]
+    assert comparison_availability(some) == {
+        "market_comparison_available": True,
+        "sector_comparison_available": True,
+    }
+
+
+@pytest.mark.parametrize("factory", [gemini_factory, groq_factory, ollama_factory])
+def test_providers_downgrade_sector_when_no_comparison_exists(
+    factory, metrics: list[ResearchMetric], news: NewsSnapshot
+) -> None:
+    reply = {**valid_interpretation_json(), "attribution": "sector"}
+    result = factory(response=reply).interpret(
+        symbol="AAPL", metrics=metrics, evidence=news.items
+    )
+    assert result.attribution == "unclear"
+    assert result.warnings == [NO_SECTOR_WARNING]
+
+
+def test_stored_v2_interpretation_still_validates() -> None:
+    parsed = AIInterpretation.model_validate(valid_interpretation_json())
+    assert parsed.attribution is None
+
+
+@pytest.mark.parametrize("factory", [gemini_factory, groq_factory, ollama_factory])
+def test_providers_return_attribution_using_company_specific_items(
+    factory, metrics: list[ResearchMetric], news: NewsSnapshot
+) -> None:
+    from app.domain.research import EvidenceDetails
+
+    item = news.items[0].model_copy(
+        update={"details": EvidenceDetails(company_specific=True)}
+    )
+    reply = {**valid_interpretation_json(), "attribution": "company"}
+    result = factory(response=reply).interpret(
+        symbol="AAPL", metrics=metrics, evidence=[item]
+    )
+    assert result.attribution == "company"
+    downgraded = factory(response=reply).interpret(
+        symbol="AAPL", metrics=metrics, evidence=news.items
+    )
+    assert downgraded.attribution == "unclear"

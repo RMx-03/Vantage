@@ -65,7 +65,14 @@ class RateLimiter:
         self._lock = threading.Lock()
         self._calls: deque[float] = deque()
 
-    def acquire(self) -> None:
+    def acquire(self, max_wait_seconds: float | None = None) -> None:
+        """Take a slot, waiting at most the smaller of the two caps.
+
+        A non-positive cap means do not wait: take a free slot or refuse at once.
+        """
+        cap = self._max_wait
+        if max_wait_seconds is not None:
+            cap = min(cap, max_wait_seconds)
         waited = 0.0
         while True:
             with self._lock:
@@ -76,7 +83,7 @@ class RateLimiter:
                     self._calls.append(now)
                     return
                 wait = self._calls[0] + self._period - now
-            if waited + wait > self._max_wait:
+            if waited + wait > cap:
                 raise _error("rate_limited")
             self._sleep(wait)
             waited += wait
@@ -159,7 +166,10 @@ class ProviderHttp:
         while True:
             if deadline is not None and deadline - self._clock() <= 0:
                 raise _error("unavailable")
-            self._limiter.acquire()
+            if deadline is None:
+                self._limiter.acquire()
+            else:
+                self._limiter.acquire(deadline - self._clock())
             remaining = self._timeout - (self._clock() - start)
             if deadline is not None:
                 remaining = min(remaining, deadline - self._clock())

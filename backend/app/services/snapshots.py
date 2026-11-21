@@ -1,5 +1,6 @@
 import hashlib
 import json
+from collections.abc import Sequence
 from typing import Any
 
 from app.domain.research import (
@@ -7,7 +8,9 @@ from app.domain.research import (
     FundamentalsSnapshot,
     MacroSnapshot,
     MarketSnapshot,
+    NewsItem,
     NewsSnapshot,
+    PriceCrossCheckSnapshot,
 )
 
 
@@ -42,8 +45,10 @@ def combined_snapshot_hash(
     market: MarketSnapshot,
     news: NewsSnapshot,
     *,
+    evidence: Sequence[NewsItem] | None = None,
     fundamentals: FundamentalsSnapshot | None = None,
     macro: MacroSnapshot | None = None,
+    crosscheck: PriceCrossCheckSnapshot | None = None,
 ) -> str:
     """Hash accepted inputs independent of provider item ordering.
 
@@ -51,7 +56,10 @@ def combined_snapshot_hash(
     payload only when present, so existing-shape snapshots hash as they always did.
     """
     news_items: list[dict[str, Any]] = []
-    for item in sorted(news.items, key=lambda value: value.evidence_id):
+    for item in sorted(
+        news.items if evidence is None else evidence,
+        key=lambda value: value.evidence_id,
+    ):
         entry: dict[str, Any] = {
             "evidence_id": item.evidence_id,
             "provider": item.provider,
@@ -108,5 +116,12 @@ def combined_snapshot_hash(
             }
         )
         payload["macro"] = _without_retrieved_at(ordered.model_dump(mode="json"))
+    if crosscheck is not None:
+        ordered_checks = crosscheck.model_copy(
+            update={"closes": sorted(crosscheck.closes, key=lambda c: c.session_date)}
+        )
+        payload["crosscheck"] = _without_retrieved_at(
+            ordered_checks.model_dump(mode="json")
+        )
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
