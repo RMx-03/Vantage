@@ -6,12 +6,13 @@ user-chosen list of US equities. Nothing here is advice or an order.
 
 import hashlib
 import json
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Literal, Self
+from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 
-from app.domain.research import ResearchStatus, StrictModel, Symbol
+from app.domain.research import ResearchStatus, StrictModel, Symbol, WorkflowStatus
 
 MAX_SYMBOLS = 50
 MAX_CANDIDATES = 12
@@ -196,3 +197,37 @@ class ExperimentPlan(StrictModel):
     candidates: int
     engine_invocations: int
     warnings: list[str]
+
+
+class ExperimentRecord(StrictModel):
+    """A saved experiment as its owner sees it; frozen inputs are read separately."""
+
+    id: UUID
+    status: WorkflowStatus
+    research_status: ResearchStatus | None
+    error_code: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime
+    completed_at: datetime | None = None
+    spec: ExperimentSpec
+    spec_hash: str
+    inputs_hash: str | None = None
+    inputs_bytes: int = 0
+    result: ExperimentResult | None = None
+    versions: dict[str, str]
+    replay_of: UUID | None = None
+    label: str = SURVIVORSHIP_LABEL
+
+
+class ExperimentSummary(StrictModel):
+    id: UUID
+    status: WorkflowStatus
+    research_status: ResearchStatus | None
+    created_at: datetime
+    question: str
+    template: str
+    symbols: list[str]
+    start: date
+    end: date | None
+    replay_of: UUID | None = None

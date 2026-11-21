@@ -265,3 +265,73 @@ class ProviderCacheRow(Base):
     immutable: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+
+
+class ExperimentRow(Base):
+    """Research Workbench experiment: spec, frozen inputs and result (ADR-0008)."""
+
+    __tablename__ = "experiments"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running','succeeded','failed')",
+            name="ck_experiments_status",
+        ),
+        CheckConstraint(
+            "research_status IS NULL OR research_status IN "
+            "('informational','review','insufficient_data','failed')",
+            name="ck_experiments_research_status",
+        ),
+        CheckConstraint(
+            "completed_at IS NULL OR completed_at >= started_at",
+            name="ck_experiments_completed_after_started",
+        ),
+        Index(
+            "ix_experiments_user_created_id",
+            "user_id",
+            text("created_at DESC"),
+            text("id DESC"),
+        ),
+        Index(
+            "ix_experiments_running_started",
+            "started_at",
+            postgresql_where=text("status = 'running'"),
+        ),
+        {"schema": "vantage_app"},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    public_id: Mapped[UUID] = mapped_column(
+        postgresql.UUID(as_uuid=True), nullable=False, unique=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        postgresql.UUID(as_uuid=True),
+        ForeignKey("vantage_auth.users.public_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    research_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message_safe: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    spec: Mapped[Any] = mapped_column(postgresql.JSONB, nullable=False)
+    spec_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    inputs: Mapped[bytes | None] = mapped_column(postgresql.BYTEA, nullable=True)
+    inputs_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    inputs_bytes: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
+    result: Mapped[Any | None] = mapped_column(postgresql.JSONB, nullable=True)
+    versions: Mapped[Any] = mapped_column(postgresql.JSONB, nullable=False)
+    replay_of: Mapped[UUID | None] = mapped_column(
+        postgresql.UUID(as_uuid=True),
+        ForeignKey("vantage_app.experiments.public_id", ondelete="SET NULL"),
+        nullable=True,
+    )
