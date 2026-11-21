@@ -18,10 +18,11 @@ Copy `.env.example` to `.env` and set:
 | Variable | Purpose |
 |---|---|
 | `VITE_API_URL` | Backend origin, such as `http://localhost:8000` (local dev only) |
+| `VITE_RESEARCH_WORKBENCH_ENABLED` | `true` shows the Workbench nav item and its routes. Default off; the backend needs `RESEARCH_WORKBENCH_ENABLED=true` as well |
 
 Leave `VITE_API_URL` unset for the Vercel build. API calls then go to the same origin, and the rewrite in `vercel.json` proxies `/api/*` to the Heroku backend.
 
-Vite values are build-time configuration. The Docker image accepts `VITE_API_URL` as a build argument through Docker Compose.
+Vite values are build-time configuration. The Docker image accepts `VITE_API_URL` and `VITE_RESEARCH_WORKBENCH_ENABLED` as build arguments through Docker Compose. On Vercel, set the flag in the project's environment variables and redeploy.
 
 ## Run and verify
 
@@ -62,6 +63,9 @@ Results use only the backend contract states: `informational`, `review`, `insuff
 | `/app` | redirects to `/app/research` |
 | `/app/research` | Research terminal, empty |
 | `/app/research/:runId` | A specific run — shareable |
+| `/app/workbench` | Research workbench: experiment form, plan preview, history (flag only) |
+| `/app/workbench/:id` | One simulation result, with replay and CSV/JSON export (flag only) |
+| `/app/workbench/compare?ids=` | 2 to 4 results side by side (flag only) |
 | `/app/settings` | redirects to `/app/settings/profile` |
 | `/app/settings/profile` | Operator profile |
 | `/app/settings/runs` | Durable research run log |
@@ -69,6 +73,10 @@ Results use only the backend contract states: `informational`, `review`, `insuff
 Navigation destinations live in one place: `src/components/nav/navItems.ts`.
 Add a destination there and both the sidebar and the mobile bottom bar pick it
 up. Items with `to: null` render as disabled placeholders for destinations not built yet.
+
+## Research workbench
+
+Behind `VITE_RESEARCH_WORKBENCH_ENABLED`. The form mirrors the backend spec rules in `src/features/workbench/specBuilder.ts`, so each error names its field; the server checks again. Preview calls the plan route only. A running experiment is polled on the research-run schedule (`runPolling.ts`); after about 150 seconds polling stops and the page offers "Check again". Exports are fetched with the access token and saved as a file. The chart is a hand-written SVG (`src/components/ui/LineChart.tsx`) with a data table of the same numbers; a missing value leaves a gap rather than a joined line. Every workbench page shows the survivorship label.
 
 ## Design system
 

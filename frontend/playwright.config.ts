@@ -32,5 +32,7 @@ export default defineConfig({
         url: 'http://localhost:5173',
         reuseExistingServer: !process.env.CI,
         timeout: 120000,
+        // The workbench ships dark; its journey needs the flag on the dev server.
+        env: { VITE_RESEARCH_WORKBENCH_ENABLED: 'true' },
       },
 });

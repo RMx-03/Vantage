@@ -124,7 +124,7 @@ Other settings that matter in a deployment:
 | `PROVIDER_TIMEOUT_SECONDS` | Time budget for one provider call, covering all of its requests and the retry (default `6`). |
 | `APP_BASE_URL` | The frontend origin that links in emails point to. |
 | `EMAIL_VERIFICATION_TTL_SECONDS`, `PASSWORD_RESET_TTL_SECONDS` | Link lifetimes; the email text states the same values. |
-| `RESEARCH_WORKBENCH_ENABLED` | Turns on the `/api/v1/experiments` routes. Default `false`. |
+| `RESEARCH_WORKBENCH_ENABLED` | Turns on the `/api/v1/experiments` routes. Default `false`. The frontend has its own `VITE_RESEARCH_WORKBENCH_ENABLED`. |
 | `EXPERIMENT_EXECUTOR_MAX_WORKERS`, `EXPERIMENT_DEADLINE_SECONDS` | Concurrent simulations per process (default `1`) and the time limit for one (default `300`). |
 | `EXPERIMENT_MAX_PER_OWNER`, `EXPERIMENT_STORAGE_LIMIT_MB` | Saved experiments per account (default `25`) and the total stored inputs across all accounts (default `300` MB, sized for a 1 GB Postgres plan). |
 
