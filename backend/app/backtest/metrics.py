@@ -16,9 +16,11 @@ LIQUIDITY_WINDOW = 20
 
 
 def compute_metrics(
-    ledger: Ledger, sessions: list[date], start: int = 0
+    ledger: Ledger, sessions: list[date], start: int = 0, end: int | None = None
 ) -> SimulationMetrics:
-    nav = ledger.nav[start:]
+    """Metrics over sessions [start, end); returns start after the start session."""
+    stop = len(ledger.nav) if end is None else end
+    nav = ledger.nav[start:stop]
     returns = nav[1:] / nav[:-1] - 1
     n = len(returns)
     growth = float(nav[-1] / nav[0])
@@ -50,9 +52,9 @@ def compute_metrics(
         max_drawdown=float(drawdown[trough]),
         max_drawdown_start=dd_start,
         max_drawdown_end=dd_end,
-        turnover=float(ledger.traded[start + 1 :].sum() / nav.mean()),
-        costs=float(ledger.costs[start + 1 :].sum() / nav[0]),
-        exposure=float(np.mean(1 - ledger.cash[start:] / nav)),
+        turnover=float(ledger.traded[start + 1 : stop].sum() / nav.mean()),
+        costs=float(ledger.costs[start + 1 : stop].sum() / nav[0]),
+        exposure=float(np.mean(1 - ledger.cash[start:stop] / nav)),
     )
 
 
