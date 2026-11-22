@@ -10,6 +10,11 @@ from importlib import resources
 import hashlib
 import json
 from typing import Any
+import zlib
+
+import numpy as np
+
+from app.backtest.inputs import HistoryInputs
 
 from app.domain.research import (
     ComponentQuality,
@@ -69,6 +74,15 @@ def _bars(
     ]
 
 
+def _fixture_walk(symbol: str, n: int) -> tuple[np.ndarray, np.ndarray]:
+    """A deterministic adjusted open/close walk seeded by the symbol alone."""
+    rng = np.random.default_rng(zlib.crc32(symbol.encode()))
+    level = 20 + 180 * rng.random()
+    closes = level * np.exp(np.cumsum(rng.normal(0.0003, 0.015, n)))
+    opens = closes * np.exp(rng.normal(0, 0.004, n))
+    return opens, closes
+
+
 class FixtureProvider(
     MarketDataProvider,
     NewsProvider,
@@ -77,6 +91,29 @@ class FixtureProvider(
     MacroProvider,
 ):
     name: str = "fixture"
+
+    def fetch_daily_history(
+        self,
+        symbols: tuple[str, ...],
+        benchmark: str,
+        start: date,
+        end: date,
+        retrieved_at: datetime,
+    ) -> HistoryInputs:
+        grid = [s.date() for s in XNYS.sessions_in_range(start, end)]
+        names = (*symbols, benchmark)
+        walks = [_fixture_walk(name, len(grid)) for name in names]
+        closes = np.column_stack([c for _, c in walks])
+        return HistoryInputs(
+            symbols=tuple(symbols),
+            benchmark=benchmark,
+            sessions=np.array(grid, dtype="datetime64[D]"),
+            open_adj=np.column_stack([o for o, _ in walks]),
+            close_adj=closes,
+            dollar_volume=closes * 2e7,
+            provider=self.name,
+            retrieved_at=retrieved_at,
+        )
 
     def fetch_daily_snapshot(
         self,

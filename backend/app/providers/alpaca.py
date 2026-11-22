@@ -9,6 +9,7 @@ Keys travel only in request headers. They are held by the HTTP client and appear
 attribute, repr, message or log line.
 """
 
+import math
 import time
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
@@ -16,7 +17,9 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
+import numpy as np
 
+from app.backtest.inputs import HistoryInputs
 from app.domain.errors import VantageError
 from app.domain.research import DailyBar, MarketSnapshot, NewsItem, NewsSnapshot
 from app.providers.http import ProviderHttp, ProviderHttpError, RateLimiter, fail
@@ -48,6 +51,8 @@ ERROR_CODE = "MARKET_DATA_PROVIDER_FAILED"
 SIP_DELAY = timedelta(minutes=16)
 ADJUSTMENT_STATE = "split_and_dividend_adjusted"
 _MAX_PAGES = 20
+_HISTORY_MAX_PAGES = 100  # 51 names x 10 years is about 15 pages of 10,000 bars
+HISTORY_BUDGET_SECONDS = 90.0
 _NY = ZoneInfo("America/New_York")
 
 _MESSAGES = {
@@ -61,6 +66,16 @@ _MESSAGES = {
 _EMPTY_MESSAGE = "No market prices were available for the requested symbol."
 
 _Bars = dict[str, list[dict[str, Any]]]
+
+
+def _number(value: object, *, allow_zero: bool = False) -> float:
+    """A finite positive number from a bar field, else the response is unreadable."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ProviderHttpError("malformed")
+    number = float(value)
+    if not math.isfinite(number) or number < 0 or (number == 0 and not allow_zero):
+        raise ProviderHttpError("malformed")
+    return number
 
 
 def _parse_session(value: object) -> date | None:
@@ -162,6 +177,74 @@ class AlpacaMarketProvider:
                 context[name] = validated
         return snapshot.model_copy(update={"context_bars": context})
 
+    def fetch_daily_history(
+        self,
+        symbols: tuple[str, ...],
+        benchmark: str,
+        start: date,
+        end: date,
+        retrieved_at: datetime,
+    ) -> HistoryInputs:
+        """Daily history for a simulation: adjusted prices and raw dollar volume.
+
+        Sessions come from the XNYS calendar; a name without a bar on a session is
+        NaN there. Gaps, late listings and early ends are judged by the experiment,
+        not here, so every caller sees the same rules.
+        """
+        unique = list(dict.fromkeys((*symbols, benchmark)))
+        session_close = XNYS.session_close(end).to_pydatetime().astimezone(UTC)
+        clamp = min(session_close, self._now().astimezone(UTC) - SIP_DELAY)
+        effective_end = (
+            end if clamp >= session_close else latest_completed_xnys_session(clamp)
+        )
+        grid = [s.date() for s in XNYS.sessions_in_range(start, effective_end)]
+        index = {session: i for i, session in enumerate(grid)}
+        try:
+            deadline = self._http.deadline(HISTORY_BUDGET_SECONDS)
+            raw = self._fetch(unique, start, clamp, "raw", deadline, _HISTORY_MAX_PAGES)
+            adjusted = self._fetch(
+                unique, start, clamp, "all", deadline, _HISTORY_MAX_PAGES
+            )
+            columns = {
+                name: self._history_columns(raw, adjusted, name, index)
+                for name in unique
+            }
+        except ProviderHttpError as err:
+            raise fail(ERROR_CODE, _MESSAGES, err) from None
+        names = (*symbols, benchmark)
+        return HistoryInputs(
+            symbols=tuple(symbols),
+            benchmark=benchmark,
+            sessions=np.array(grid, dtype="datetime64[D]"),
+            open_adj=np.column_stack([columns[n][0] for n in names]),
+            close_adj=np.column_stack([columns[n][1] for n in names]),
+            dollar_volume=np.column_stack([columns[n][2] for n in names]),
+            provider=self.name,
+            retrieved_at=retrieved_at,
+        )
+
+    @staticmethod
+    def _history_columns(
+        raw: _Bars, adjusted: _Bars, symbol: str, index: dict[date, int]
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        opens, closes, dollar_volume = (np.full(len(index), np.nan) for _ in range(3))
+        for source, is_raw in ((adjusted, False), (raw, True)):
+            for bar in source.get(symbol, []):
+                if not isinstance(bar, dict):
+                    raise ProviderHttpError("malformed")
+                session = _parse_session(bar.get("t"))
+                if session is None:
+                    raise ProviderHttpError("malformed")
+                i = index.get(session)
+                if i is None:
+                    continue
+                if is_raw:
+                    volume = _number(bar.get("v"), allow_zero=True)
+                    dollar_volume[i] = _number(bar.get("c")) * volume
+                else:
+                    opens[i], closes[i] = _number(bar.get("o")), _number(bar.get("c"))
+        return opens, closes, dollar_volume
+
     def _fetch(
         self,
         symbols: list[str],
@@ -169,6 +252,7 @@ class AlpacaMarketProvider:
         end: datetime,
         adjustment: str,
         deadline: float,
+        max_pages: int = _MAX_PAGES,
     ) -> _Bars:
         params = {
             "symbols": ",".join(symbols),
@@ -181,7 +265,7 @@ class AlpacaMarketProvider:
             "adjustment": adjustment,
         }
         merged: _Bars = {}
-        for _ in range(_MAX_PAGES):
+        for _ in range(max_pages):
             payload = self._http.get_json(BARS_URL, params=params, deadline=deadline)
             if not isinstance(payload, dict):
                 raise ProviderHttpError("malformed")

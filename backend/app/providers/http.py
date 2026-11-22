@@ -127,9 +127,9 @@ class ProviderHttp:
     def close(self) -> None:
         self._client.close()
 
-    def deadline(self) -> float:
+    def deadline(self, seconds: float | None = None) -> float:
         """Absolute clock time that ends one provider call made of several requests."""
-        return self._clock() + self._timeout
+        return self._clock() + (self._timeout if seconds is None else seconds)
 
     def get_json(
         self,

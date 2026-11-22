@@ -14,6 +14,7 @@ from app.core.config import Settings
 from app.domain.errors import VantageError
 from app.providers.alpaca import AlpacaMarketProvider, AlpacaNewsProvider
 from app.providers.contracts import (
+    HistoryProvider,
     FilingsProvider,
     FundamentalsProvider,
     InterpretationProvider,
@@ -169,6 +170,11 @@ def _tiingo(s: Settings) -> object | None:
     return TiingoCrossCheckProvider(
         creds[0], timeout_seconds=float(s.PROVIDER_TIMEOUT_SECONDS)
     )
+
+
+def history_provider(market: object | None) -> HistoryProvider | None:
+    """The configured market provider, when it can serve simulation history."""
+    return market if isinstance(market, HistoryProvider) else None
 
 
 @lru_cache(maxsize=1)
