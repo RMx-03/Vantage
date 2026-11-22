@@ -56,6 +56,41 @@ The other two appear as `error_code` on a failed run, which is still read with H
 
 Errors use the shared `SafeError` envelope. The incompatible legacy `/api/v1/analyze` route is intentionally absent.
 
+### Research simulations — `/api/v1/experiments`
+
+Off by default. Every route returns `404` until `RESEARCH_WORKBENCH_ENABLED=true`, so the feature can be switched off again without touching saved data. ADR-0008 sets the boundary: long-only, unlevered simulations of three fixed templates (`buy_and_hold`, `sma_crossover`, `momentum_top_k`) over at most 50 symbols and a benchmark ETF, end of day, at most ten years.
+
+- `POST /api/v1/experiments/plan` sizes an experiment (sessions, warm-up, walk-forward windows, engine invocations). It calls no provider and saves nothing
+- `POST /api/v1/experiments` returns `202` with a `running` experiment and a `Location` header. Needs a verified email address
+- `GET /api/v1/experiments/{id}` returns the spec, result, findings and versions
+- `GET /api/v1/experiments?limit=1..50` lists the owner's experiments, newest first, as summaries
+- `POST /api/v1/experiments/{id}/replay` returns `202`; it re-runs a finished experiment from its saved inputs with no provider call, linked by `replay_of`. Needs a verified email address
+- `GET /api/v1/experiments/{id}/export?format=json|csv` downloads derived data only: spec, metrics, daily NAV series, trades, findings and versions, never provider bars. CSV text cells that start with `=`, `+`, `-` or `@` are prefixed with `'`
+- `DELETE /api/v1/experiments/{id}` deletes one experiment and frees its quota
+
+Every route is owner-scoped; another account's experiment is `404`. Experiments run on their own one-slot executor, so they never take capacity from research runs.
+
+How a simulation is computed:
+
+- Decisions are taken at a session's close and filled at the next session's open, on total-return adjusted prices (`adjustment=all`). Raw close × volume measures liquidity.
+- Costs are a flat `cost_bps` per side (default 10). Every result also shows the metrics at 0.5×, 1× and 2× that cost.
+- With candidate parameters, a walk-forward evaluation (756 training, 126 test sessions, at least three windows) picks by training Sharpe and reports one continuous out-of-sample curve. Sharpe uses a 0% risk-free rate.
+- Every result carries the label "Exploratory: list chosen today, survivorship bias possible". The symbol list is chosen today, so delisted names are missing from history. The label is part of the payload and cannot be dismissed.
+
+Failures are saved on the experiment as `error_code`, read with HTTP 200:
+
+- `SYMBOL_NOT_FOUND`, `INSTRUMENT_DATA_ENDED` (a name's history ends before the end date; the engine never exits at a last quote) and `INSUFFICIENT_HISTORY` (more than 5% of sessions missing)
+- the provider's own typed failure, for example `MARKET_DATA_PROVIDER_FAILED`
+- `EXPERIMENT_DEADLINE_EXCEEDED`, `EXPERIMENT_INTERRUPTED` (restart) and `EXPERIMENT_FAILED`
+
+Starting or replaying can be refused with an HTTP error, and no experiment is created:
+
+- `409`: `EXPERIMENT_IN_FLIGHT` (one running experiment per owner), `EXPERIMENT_QUOTA_REACHED`, `EXPERIMENT_STORAGE_FULL`, `EXPERIMENT_NOT_REPLAYABLE`
+- `429` `RUN_CAPACITY_EXCEEDED` and `503` `SERVICE_DRAINING`, with `Retry-After: 5`
+- `503` `PROVIDER_NOT_CONFIGURED`: the market provider cannot serve daily history
+
+A finished experiment stores its inputs (compressed, hashed) in Postgres so replay is exact. The `versions` map records the engine, metrics and template versions, code revision, provider, retrieval time and both hashes. The question, hypothesis and notes never reach logs, traces or a model.
+
 ## Deterministic results
 
 The metrics registry currently emits one-, five-, and twenty-session return; twenty-session annualized volatility; twenty-session maximum drawdown; twenty-session average dollar volume; accepted, missing, and duplicate price counts; accepted news count; and distinct publisher count.
@@ -89,6 +124,9 @@ Other settings that matter in a deployment:
 | `PROVIDER_TIMEOUT_SECONDS` | Time budget for one provider call, covering all of its requests and the retry (default `6`). |
 | `APP_BASE_URL` | The frontend origin that links in emails point to. |
 | `EMAIL_VERIFICATION_TTL_SECONDS`, `PASSWORD_RESET_TTL_SECONDS` | Link lifetimes; the email text states the same values. |
+| `RESEARCH_WORKBENCH_ENABLED` | Turns on the `/api/v1/experiments` routes. Default `false`. |
+| `EXPERIMENT_EXECUTOR_MAX_WORKERS`, `EXPERIMENT_DEADLINE_SECONDS` | Concurrent simulations per process (default `1`) and the time limit for one (default `300`). |
+| `EXPERIMENT_MAX_PER_OWNER`, `EXPERIMENT_STORAGE_LIMIT_MB` | Saved experiments per account (default `25`) and the total stored inputs across all accounts (default `300` MB, sized for a 1 GB Postgres plan). |
 
 Provider credentials are needed only for the selected `LLM_PROVIDER`, and Langfuse keys only when `TRACE_EXPORT_ENABLED=true`.
 

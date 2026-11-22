@@ -89,6 +89,13 @@ class Settings(BaseSettings):
     RUN_EXECUTOR_MAX_WORKERS: int = Field(default=4, gt=0)
     RUN_DEADLINE_SECONDS: int = Field(default=120, gt=0)
     RUN_SHUTDOWN_GRACE_SECONDS: int = Field(default=25, gt=0)
+    # Research Workbench (ADR-0008): off by default; experiments get their own
+    # executor so they never take research-run capacity.
+    RESEARCH_WORKBENCH_ENABLED: bool = False
+    EXPERIMENT_EXECUTOR_MAX_WORKERS: int = Field(default=1, gt=0)
+    EXPERIMENT_DEADLINE_SECONDS: int = Field(default=300, gt=0)
+    EXPERIMENT_MAX_PER_OWNER: int = Field(default=25, gt=0)
+    EXPERIMENT_STORAGE_LIMIT_MB: int = Field(default=300, ge=0)
     LLM_MAX_RETRIES: int = Field(default=1, ge=0)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "vantage-fin"
