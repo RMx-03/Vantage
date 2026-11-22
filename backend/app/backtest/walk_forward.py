@@ -93,7 +93,9 @@ def walk_forward(
     for i, params in enumerate(candidates):
         try:
             rows = targets(params, inputs, first_decision)
-            runs.append((rows, simulate(rows, inputs, spec.cost_bps)))
+            runs.append(
+                (rows, simulate(rows, inputs, spec.cost_bps, record_trades=False))
+            )
             trials.append(CandidateTrial(index=i, params=params, status="succeeded"))
         except ValueError as exc:
             runs.append(None)
@@ -145,7 +147,7 @@ def walk_forward(
         rows = run[0]
         combined[w.test_start : w.test_end] = rows[w.test_start : w.test_end]
         combined[w.test_start - 1] = _state(rows, w.test_start - 1)
-    oos = simulate(combined, inputs, spec.cost_bps)
+    oos = simulate(combined, inputs, spec.cost_bps, record_trades=False)
     start, stop = windows[0].test_start - 1, windows[-1].test_end
     return WalkForwardResult(
         status="complete",

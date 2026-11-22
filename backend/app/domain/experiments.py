@@ -179,7 +179,8 @@ class ExperimentResult(StrictModel):
     metrics: SimulationMetrics | None = None
     benchmark_metrics: SimulationMetrics | None = None
     series: SimulationSeries | None = None
-    trades: list[SimulatedTrade] = Field(default_factory=list)
+    trades: list[SimulatedTrade] = Field(default_factory=list)  # the first fills only
+    trade_count: int | None = None  # every fill the simulation made
     cost_stress: list[CostStress] = Field(default_factory=list)
     walk_forward: WalkForwardResult | None = None
     findings: list[Finding] = Field(default_factory=list)

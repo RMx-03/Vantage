@@ -27,6 +27,8 @@ from app.domain.experiments import (
 from app.domain.research import ResearchStatus
 
 ENGINE_VERSION = "backtest-engine-v1"
+# A busy 50-name run makes ~67k fills; storing them all costs ~9 MB per result.
+MAX_STORED_TRADES = 10_000
 MIN_EVAL_SESSIONS = 21
 MAX_MISSING_SHARE = 0.05
 COST_MULTIPLIERS = (0.5, 1.0, 2.0)
@@ -121,9 +123,17 @@ def run_experiment(spec: ExperimentSpec, inputs: HistoryInputs) -> ExperimentRes
         )
 
     rows = targets(spec.strategy, inputs, first_decision)
-    ledgers = {m: simulate(rows, inputs, spec.cost_bps * m) for m in COST_MULTIPLIERS}
+    ledgers = {
+        m: simulate(rows, inputs, spec.cost_bps * m, record_trades=m == 1.0)
+        for m in COST_MULTIPLIERS
+    }
     main = ledgers[1.0]
-    bench = simulate(benchmark_targets(inputs, first_decision), inputs, spec.cost_bps)
+    bench = simulate(
+        benchmark_targets(inputs, first_decision),
+        inputs,
+        spec.cost_bps,
+        record_trades=False,
+    )
     findings += liquidity_findings(main, inputs)
     if not main.trades:
         findings.append(
@@ -166,8 +176,9 @@ def run_experiment(spec: ExperimentSpec, inputs: HistoryInputs) -> ExperimentRes
                 price=t.price,
                 notional=t.notional,
             )
-            for t in main.trades
+            for t in main.trades[:MAX_STORED_TRADES]
         ],
+        trade_count=len(main.trades),
         cost_stress=[
             CostStress(
                 multiplier=m,

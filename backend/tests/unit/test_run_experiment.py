@@ -152,3 +152,22 @@ def test_short_walk_forward_is_a_finding() -> None:
     assert result.walk_forward is not None
     assert result.walk_forward.status == "insufficient_data"
     assert "WALK_FORWARD_INSUFFICIENT_DATA" in {f.code for f in result.findings}
+
+
+def test_stored_trades_are_capped_but_counted(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.backtest as backtest
+
+    inputs = _inputs(_walk(300, names=6))
+    spec = _spec(
+        inputs,
+        start_index=1,
+        strategy={"template": "sma_crossover", "fast": 5, "slow": 20},
+    )
+    full = run_experiment(spec, inputs)
+    assert full.trade_count == len(full.trades) > 4
+
+    monkeypatch.setattr(backtest, "MAX_STORED_TRADES", 4)
+    capped = run_experiment(spec, inputs)
+    assert capped.trades == full.trades[:4]
+    assert capped.trade_count == full.trade_count
+    assert capped.metrics == full.metrics
