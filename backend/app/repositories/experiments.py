@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.orm import defer
 
 from app.db.models import ExperimentRow
 from app.db.session import SessionFactory
@@ -115,7 +116,9 @@ class ExperimentRepository:
     def get_owned(self, user_id: UUID, public_id: UUID) -> ExperimentRecord | None:
         with SessionFactory() as session:
             row = session.scalars(
-                select(ExperimentRow).where(
+                select(ExperimentRow)
+                .options(defer(ExperimentRow.inputs))  # ~3 MB; only replay reads it
+                .where(
                     ExperimentRow.public_id == public_id,
                     ExperimentRow.user_id == user_id,
                 )
@@ -190,14 +193,13 @@ class ExperimentRepository:
         with SessionFactory() as session:
             return int(session.scalar(select(func.count()).where(*conditions)) or 0)
 
-    def total_input_bytes(self) -> int:
+    def total_stored_bytes(self) -> int:
+        """Frozen inputs plus stored results, as Postgres stores them."""
+        stored = ExperimentRow.inputs_bytes + func.coalesce(
+            func.pg_column_size(ExperimentRow.result), 0
+        )
         with SessionFactory() as session:
-            return int(
-                session.scalar(
-                    select(func.coalesce(func.sum(ExperimentRow.inputs_bytes), 0))
-                )
-                or 0
-            )
+            return int(session.scalar(select(func.coalesce(func.sum(stored), 0))) or 0)
 
     def list_stale_running(self, *, started_before: datetime) -> list[UUID]:
         with SessionFactory() as session:

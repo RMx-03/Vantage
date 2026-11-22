@@ -282,3 +282,15 @@ def test_lifespan_drains_the_experiment_executor() -> None:
     with pytest.raises(VantageError) as err:
         executor.reserve()
     assert err.value.code == SERVICE_DRAINING
+
+
+def test_building_the_service_resolves_no_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.services.experiments as module
+
+    def explode() -> None:
+        raise AssertionError("resolved a provider for a read")
+
+    monkeypatch.setattr(module, "_configured_history", explode)
+    module.ExperimentService()  # GET, list and plan build one per request

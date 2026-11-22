@@ -354,6 +354,17 @@
               }
             ]
           },
+          "trade_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade Count"
+          },
           "trades": {
             "items": {
               "$ref": "#/components/schemas/SimulatedTrade"

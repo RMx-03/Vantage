@@ -22,7 +22,7 @@ from app.backtest import (
 )
 from app.backtest.inputs import inputs_hash, pack_inputs, unpack_inputs
 from app.backtest.metrics import METRICS_VERSION
-from app.backtest.plan import plan_experiment
+from app.backtest.plan import PlanRangeError, plan_experiment
 from app.core.config import settings
 from app.domain.errors import VantageError
 from app.domain.experiments import (
@@ -76,8 +76,15 @@ class ExperimentService:
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self.repo = repo or ExperimentRepository()
-        self.history = _configured_history() if history is _UNSET else history
+        self._history = history
         self._now = now
+
+    @property
+    def history(self) -> HistoryProvider | None:
+        # Resolved on first use: reads build a service per request and need none.
+        if self._history is _UNSET:
+            self._history = _configured_history()
+        return self._history
 
     # -- reading -----------------------------------------------------------
 
@@ -190,7 +197,7 @@ class ExperimentService:
                 "VALIDATION_ERROR", "The end date must be a completed trading session."
             )
         try:
-            return ExperimentSpec.model_validate(
+            resolved = ExperimentSpec.model_validate(
                 {**spec.model_dump(mode="json"), "end": end.isoformat()}
             )
         except ValidationError:
@@ -198,6 +205,11 @@ class ExperimentService:
                 "VALIDATION_ERROR",
                 "The dates are invalid: end must follow start, within ten years.",
             ) from None
+        try:
+            plan_experiment(resolved)  # refuse an unusable range before any row exists
+        except PlanRangeError as exc:
+            raise _error("VALIDATION_ERROR", str(exc)) from None
+        return resolved
 
     def _check_limits(self, user_id: UUID) -> None:
         if self.repo.running_count_owned(user_id):
@@ -211,7 +223,7 @@ class ExperimentService:
                 "The saved-experiment limit is reached. Delete one to run another.",
             )
         limit = settings.EXPERIMENT_STORAGE_LIMIT_MB * 1024 * 1024
-        if self.repo.total_input_bytes() >= limit:
+        if self.repo.total_stored_bytes() >= limit:
             raise _error(
                 "EXPERIMENT_STORAGE_FULL",
                 "Experiment storage is full on this instance.",

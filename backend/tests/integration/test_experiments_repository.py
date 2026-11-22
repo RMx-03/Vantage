@@ -1,5 +1,6 @@
 """Experiments table and owner-scoped repository (Research Workbench)."""
 
+import re
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -90,13 +91,14 @@ def test_failure_counts_list_and_delete(make_user) -> None:
 def test_stale_running_and_storage_total(make_user) -> None:
     repo = ExperimentRepository()
     owner = make_user("exp-stale")
-    before = repo.total_input_bytes()
+    before = repo.total_stored_bytes()
     row = repo.create_running(owner, SPEC, VERSIONS)
     later = datetime.now(UTC) + timedelta(seconds=1)
     assert row.id in repo.list_stale_running(started_before=later)
     assert row.id not in repo.list_stale_running(started_before=row.started_at)
     repo.save_success(row.id, b"12345", "h", _result(), VERSIONS)
-    assert repo.total_input_bytes() == before + 5
+    # Five input bytes plus the stored result, which counts too.
+    assert repo.total_stored_bytes() > before + 5
     assert row.id not in repo.list_stale_running(started_before=later)
 
 
@@ -119,3 +121,27 @@ def test_0007_downgrade_and_upgrade_round_trip() -> None:
         assert inspect(engine).has_table("experiments", schema="vantage_app")
     finally:
         _alembic("upgrade", "head")
+
+
+def test_reading_an_experiment_does_not_load_its_inputs(make_user) -> None:
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+
+    repo = ExperimentRepository()
+    owner = make_user("exp-lean-read")
+    row = repo.create_running(owner, SPEC, VERSIONS)
+    repo.save_success(row.id, b"frozen", "h", _result(), VERSIONS)
+    statements: list[str] = []
+
+    def capture(conn, cursor, statement, *args) -> None:  # noqa: ANN001
+        statements.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", capture)
+    try:
+        assert repo.get_owned(owner, row.id) is not None
+    finally:
+        event.remove(Engine, "before_cursor_execute", capture)
+    assert statements
+    # The BYTEA column ("inputs"), not inputs_hash or inputs_bytes.
+    assert not any(re.search(r"[.]inputs[, ]", s) for s in statements)
+    assert repo.get_inputs_owned(owner, row.id) == b"frozen"

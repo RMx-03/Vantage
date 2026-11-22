@@ -268,3 +268,23 @@ def test_capacity_and_draining_send_retry_after(client, make_user) -> None:
         full.shutdown()
     assert (busy.status_code, draining.status_code) == (429, 503)
     assert busy.headers["Retry-After"] == draining.headers["Retry-After"] == "5"
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "message"),
+    [
+        ("2024-03-29", "2024-03-31", "no trading sessions"),
+        ("2000-01-03", "2009-12-31", "on or after"),
+    ],
+)
+def test_unusable_dates_are_explained_and_create_nothing(
+    client, make_user, start: str, end: str, message: str
+) -> None:
+    user = make_user(f"api-exp-dates-{start}")
+    spec = {**SPEC, "start": start, "end": end}
+    for path in (f"{BASE}/plan", BASE):
+        response = client.post(path, json=spec, headers=_headers(user))
+        assert response.status_code == 400, response.text
+        assert response.json()["detail"]["code"] == "VALIDATION_ERROR"
+        assert message in response.json()["detail"]["message"]
+    assert client.get(BASE, headers=_headers(user)).json() == []
