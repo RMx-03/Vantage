@@ -10,6 +10,10 @@ import ResetPassword from './pages/ResetPassword';
 
 import ResearchWorkspace from './features/research/ResearchWorkspace';
 import UserSettingsPanel from './components/UserSettingsPanel';
+import WorkbenchPage from './features/workbench/WorkbenchPage';
+import ComparePage from './features/workbench/ComparePage';
+import ExperimentResult from './features/workbench/ExperimentResult';
+import { workbenchEnabled } from './lib/flags';
 
 export default function App() {
   return (
@@ -33,6 +37,13 @@ export default function App() {
               <Route index element={<Navigate to="research" replace />} />
               <Route path="research" element={<ResearchWorkspace />} />
               <Route path="research/:runId" element={<ResearchWorkspace />} />
+              {workbenchEnabled() && (
+                <>
+                  <Route path="workbench" element={<WorkbenchPage />} />
+                  <Route path="workbench/compare" element={<ComparePage />} />
+                  <Route path="workbench/:experimentId" element={<ExperimentResult />} />
+                </>
+              )}
               <Route path="settings" element={<Navigate to="profile" replace />} />
               <Route path="settings/:tab" element={<UserSettingsPanel />} />
             </Route>

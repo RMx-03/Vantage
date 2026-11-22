@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { NAV_ITEMS } from './navItems';
+import { navItems } from './navItems';
 
 const BASE = 'flex flex-col items-center justify-center p-2 flex-1 h-full transition-colors';
 const LABEL = 'font-label text-[10px] uppercase tracking-widest mt-1';
@@ -7,7 +7,7 @@ const LABEL = 'font-label text-[10px] uppercase tracking-widest mt-1';
 export default function BottomNav() {
   return (
     <nav className="lg:hidden w-full z-50 flex justify-around items-center h-16 bg-[#0e0e0e] border-t border-[#191a1a] shrink-0">
-      {NAV_ITEMS.map((item) =>
+      {navItems().map((item) =>
         item.to ? (
           <NavLink
             key={item.label}

@@ -44,6 +44,8 @@ services:
       # Immutable build identity reported as versions.code. CI supplies the
       # commit SHA; local runs fall back to "development".
       CODE_REVISION: ${CODE_REVISION:-development}
+      # Research workbench (ADR-0008); pair with VITE_RESEARCH_WORKBENCH_ENABLED.
+      RESEARCH_WORKBENCH_ENABLED: ${RESEARCH_WORKBENCH_ENABLED:-false}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
@@ -87,6 +89,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-${VITE_API_BASE_URL:-http://localhost:8000}}
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_RESEARCH_WORKBENCH_ENABLED: ${VITE_RESEARCH_WORKBENCH_ENABLED:-false}
     ports:
       - "5173:80"
     depends_on:

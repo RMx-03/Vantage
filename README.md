@@ -92,7 +92,7 @@ Vantage is under active development.
 
 - **Research runs:** working end to end, from ticker to saved, reopenable result.
 - **Accounts:** first-party sign-up, sign-in, email verification, and password reset, replacing the earlier hosted auth provider.
-- **Research workbench:** historical simulations through the API, behind `RESEARCH_WORKBENCH_ENABLED` (off by default). See `backend/README.md`.
+- **Research workbench:** historical simulations behind `RESEARCH_WORKBENCH_ENABLED` (backend) and `VITE_RESEARCH_WORKBENCH_ENABLED` (frontend), both off by default. See `backend/README.md`.
 - **Planned areas** such as portfolio and risk views appear in the navigation as disabled placeholders.
 
 ## Quick start
