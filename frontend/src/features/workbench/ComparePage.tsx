@@ -8,6 +8,12 @@ import MetricsTable from './MetricsTable';
 import { describeStrategy, num } from './format';
 
 const ASSUMPTIONS: [string, (e: Experiment) => string][] = [
+  ['Research status', (e) => e.research_status ?? e.status],
+  [
+    'Findings',
+    (e) =>
+      !e.result ? '—' : e.result.findings.map((f) => f.message).join(' ') || 'None',
+  ],
   ['Template', (e) => describeStrategy(e.spec.strategy)],
   ['Symbols', (e) => e.spec.symbols.join(', ')],
   ['Benchmark', (e) => e.spec.benchmark ?? 'SPY'],

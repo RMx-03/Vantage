@@ -10,9 +10,12 @@ import ComparePage from './ComparePage';
 const other = {
   ...succeeded,
   id: 'exp-2',
+  research_status: 'informational' as const,
   spec: { ...succeeded.spec, question: 'Same list, higher cost', cost_bps: 20 },
   result: {
     ...succeeded.result!,
+    research_status: 'informational' as const,
+    findings: [],
     series: { ...succeeded.result!.series!, dates: ['2024-01-03', '2024-01-04', '2024-01-05'] },
   },
 };
@@ -54,5 +57,17 @@ describe('ComparePage', () => {
     expect(screen.getByText(SURVIVORSHIP_LABEL)).toBeVisible();
     expect(screen.getByRole('table', { name: /Metrics/ })).toHaveTextContent('12.34%');
     expect(screen.getByRole('img', { name: /Value rebased to 100/ })).toBeVisible();
+  });
+
+  it('shows each research status and its findings side by side', async () => {
+    renderCompare('?ids=exp-1,exp-2');
+    const table = await screen.findByRole('table', { name: /Assumptions/ });
+    const status = await within(table).findByRole('row', { name: /Research status/ });
+    expect(status).toHaveTextContent(/review/);
+    expect(status).toHaveTextContent(/informational/);
+    expect(status).toHaveTextContent(/differs/i);
+    const findings = within(table).getByRole('row', { name: /Findings/ });
+    expect(findings).toHaveTextContent('MSFT is missing 2 sessions.');
+    expect(findings).toHaveTextContent('None');
   });
 });

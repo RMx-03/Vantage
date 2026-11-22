@@ -119,6 +119,30 @@ describe('ExperimentResult', () => {
     await waitFor(() => expect(api.getExperiment).toHaveBeenCalledWith('exp-2'));
   });
 
+  it('says how many fills there were when only the first are stored', async () => {
+    const result = { ...succeeded.result!, trade_count: 12345 };
+    renderResult({ ...succeeded, result });
+    expect(await screen.findByText(/Showing 1 of 12,345 simulated fills/)).toBeVisible();
+    expect(screen.getByText(/exports hold the first 1/)).toBeVisible();
+  });
+
+  it('releases the export link only after the download has started', async () => {
+    vi.spyOn(api, 'exportExperiment').mockResolvedValue({
+      blob: new Blob(['x']),
+      filename: 'experiment-exp-1.csv',
+    });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x');
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    let revokedDuringClick: boolean | null = null;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+      queueMicrotask(() => (revokedDuringClick = revoke.mock.calls.length > 0));
+    });
+    renderResult(succeeded);
+    await userEvent.click(await screen.findByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:x'));
+    expect(revokedDuringClick).toBe(false);
+  });
+
   it('has research actions only, never trade actions', async () => {
     renderResult(succeeded);
     await screen.findByRole('heading', { name: succeeded.spec.question });

@@ -9,7 +9,7 @@ const BUTTON =
   'px-6 py-3 text-xs font-bold font-label uppercase tracking-widest transition-opacity disabled:opacity-50 disabled:cursor-not-allowed';
 
 const TEMPLATES: { value: Template; label: string }[] = [
-  { value: 'buy_and_hold', label: 'Buy and hold, equal weight' },
+  { value: 'buy_and_hold', label: 'Equal-weight hold' },
   { value: 'sma_crossover', label: 'Moving-average crossover' },
   { value: 'momentum_top_k', label: 'Momentum, top k monthly' },
 ];

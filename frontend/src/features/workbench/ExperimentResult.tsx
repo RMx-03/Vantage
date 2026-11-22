@@ -34,7 +34,8 @@ function download(blob: Blob, filename: string) {
   link.href = url;
   link.download = filename;
   link.click();
-  URL.revokeObjectURL(url);
+  // Revoking in the same task can cancel the download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export default function ExperimentResult() {
@@ -264,7 +265,7 @@ function ResultBody({ experiment }: { experiment: Experiment }) {
 
       <Panel className="flex flex-col gap-4">
         <PanelHeader icon="swap_vert">Simulated trades</PanelHeader>
-        <TradesTable trades={result.trades} />
+        <TradesTable trades={result.trades} total={result.trade_count ?? undefined} />
       </Panel>
 
       <Panel className="flex flex-col gap-3">

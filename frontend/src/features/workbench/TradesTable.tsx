@@ -4,7 +4,14 @@ import { num } from './format';
 
 const SHOWN = 200;
 
-export default function TradesTable({ trades }: { trades: SimulatedTrade[] }) {
+export default function TradesTable({
+  trades,
+  total = trades.length,
+}: {
+  trades: SimulatedTrade[];
+  total?: number;
+}) {
+  const shown = Math.min(SHOWN, trades.length);
   if (trades.length === 0)
     return <p className="text-sm text-outline font-body">The simulation made no position changes.</p>;
   return (
@@ -34,10 +41,12 @@ export default function TradesTable({ trades }: { trades: SimulatedTrade[] }) {
           </tbody>
         </table>
       </div>
-      {trades.length > SHOWN && (
+      {total > shown && (
         <MicroLabel className="normal-case tracking-normal">
-          Showing the first {SHOWN} of {trades.length.toLocaleString('en-US')}. The CSV export has
-          all of them.
+          Showing {shown} of {total.toLocaleString('en-US')} simulated fills.{' '}
+          {total > trades.length
+            ? `Saved results and exports hold the first ${trades.length.toLocaleString('en-US')}.`
+            : 'The CSV export has all of them.'}
         </MicroLabel>
       )}
     </div>

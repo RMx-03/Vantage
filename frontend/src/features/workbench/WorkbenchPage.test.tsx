@@ -74,6 +74,13 @@ describe('WorkbenchPage', () => {
     expect(api.listExperiments).toHaveBeenCalledWith(50);
   });
 
+  it('names the hold template without trade words', async () => {
+    renderPage();
+    await screen.findByRole('link', { name: /Earlier question/ });
+    expect(screen.getByRole('option', { name: /Equal-weight hold/ })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\b(buy|sell)\b/i);
+  });
+
   it('shows field errors that name the field and calls nothing', async () => {
     const planSpy = vi.spyOn(api, 'planExperiment');
     renderPage();
@@ -148,4 +155,3 @@ describe('WorkbenchPage', () => {
     );
   });
 });
-

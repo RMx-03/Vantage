@@ -14,5 +14,5 @@ export function describeStrategy(params: StrategyParams): string {
     return `MA crossover ${params.fast}/${params.slow}`;
   if (params.template === 'momentum_top_k')
     return `Momentum top ${params.k}, ${params.lookback}-session lookback`;
-  return 'Buy and hold, equal weight';
+  return 'Equal-weight hold';
 }

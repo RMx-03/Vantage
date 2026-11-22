@@ -119,7 +119,7 @@ export function buildSpec(form: ExperimentForm): BuiltSpec {
   const lines = form.candidates.split('\n').map((l) => l.trim()).filter(Boolean);
   const candidates: StrategyParams[] = [];
   if (lines.length > 0 && form.template === 'buy_and_hold')
-    errors.candidates = 'Candidates: buy and hold has no parameters to compare.';
+    errors.candidates = 'Candidates: the equal-weight hold has no parameters to compare.';
   else if (lines.length > MAX_CANDIDATES)
     errors.candidates = `Candidates: at most ${MAX_CANDIDATES} lines.`;
   else {

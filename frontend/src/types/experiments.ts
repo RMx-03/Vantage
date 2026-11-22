@@ -8,7 +8,7 @@ export const SURVIVORSHIP_LABEL =
 export type Template = 'buy_and_hold' | 'sma_crossover' | 'momentum_top_k';
 
 export const TEMPLATE_LABELS: Record<Template, string> = {
-  buy_and_hold: 'Buy and hold',
+  buy_and_hold: 'Equal-weight hold',
   sma_crossover: 'MA crossover',
   momentum_top_k: 'Momentum top k',
 };
@@ -121,7 +121,8 @@ export interface ExperimentResult {
   metrics?: SimulationMetrics | null;
   benchmark_metrics?: SimulationMetrics | null;
   series?: SimulationSeries | null;
-  trades: SimulatedTrade[];
+  trades: SimulatedTrade[]; // the first fills only
+  trade_count?: number | null; // every fill the simulation made
   cost_stress: CostStress[];
   walk_forward?: WalkForwardResult | null;
   findings: Finding[];
