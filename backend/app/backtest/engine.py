@@ -5,8 +5,10 @@ session t+1. A row of NaN means "no new decision". Prices are total-return
 adjusted, so splits and dividends need no separate handling. Costs are
 ``cost_bps`` of traded notional, paid out of the same capital the weights
 apply to:  x_i = w_i * (V_open - c * sum_j |x_j - h_j|).
-A name without an open at the fill session keeps its pending weight until it
-has one; holdings without a close are valued at their last close.
+If a name the decision holds or would hold has no open at the fill session, the
+whole decision waits for the next session where they all do, so sales always
+fund purchases and cash never goes negative. Holdings without a close are
+valued at their last close.
 """
 
 from dataclasses import dataclass
@@ -66,7 +68,10 @@ def simulate(
     inputs: HistoryInputs,
     cost_bps: float,
     capital: float = DEFAULT_CAPITAL,
+    record_trades: bool = True,
 ) -> Ledger:
+    """Simulate the targets; ``record_trades=False`` keeps memory flat for runs
+    whose fills nobody reads (walk-forward candidates, cost stress, benchmark)."""
     opens, closes = inputs.open_adj, inputs.close_adj
     n_sessions, n_names = closes.shape
     _check_targets(targets, (n_sessions, n_names))
@@ -84,31 +89,31 @@ def simulate(
     cash = capital
     last_close = np.full(n_names, np.nan)
     pending: np.ndarray | None = None
-    pending_mask = np.zeros(n_names, dtype=bool)
 
     for t in range(n_sessions):
         if pending is not None:
             has_open = ~np.isnan(opens[t])
-            fill = pending_mask & has_open
-            waiting = pending_mask & ~has_open
-            mark = np.where(has_open, opens[t], last_close)
-            values = np.where(shares != 0, shares * mark, 0.0)
-            open_value = cash + float(values.sum())
-            w, held = pending[fill], values[fill]
-            cost = _solve_cost(w, held, open_value, c)
-            target_values = w * (open_value - cost)
-            delta = target_values - held
-            prices = opens[t][fill]
-            shares[fill] = target_values / prices
-            cash -= float(delta.sum()) + cost
-            costs[t], traded[t] = cost, float(np.abs(delta).sum())
-            for idx, d, p in zip(np.flatnonzero(fill), delta, prices, strict=True):
-                if abs(d) > 1e-9:
-                    trades.append(Trade(t, int(idx), float(d / p), float(p), float(d)))
-            deferred_fills[waiting] += 1
+            involved = (pending > 0) | (shares != 0)
+            waiting = involved & ~has_open
             if waiting.any():
-                pending_mask = waiting
+                deferred_fills[waiting] += 1
             else:
+                fill = involved
+                values = shares * np.where(has_open, opens[t], 0.0)
+                open_value = cash + float(values.sum())
+                w, held = pending[fill], values[fill]
+                cost = _solve_cost(w, held, open_value, c)
+                target_values = w * (open_value - cost)
+                delta = target_values - held
+                prices = opens[t][fill]
+                shares[fill] = target_values / prices
+                cash -= float(delta.sum()) + cost
+                costs[t], traded[t] = cost, float(np.abs(delta).sum())
+                for idx, d, p in zip(np.flatnonzero(fill), delta, prices, strict=True):
+                    if record_trades and abs(d) > 1e-9:
+                        trades.append(
+                            Trade(t, int(idx), float(d / p), float(p), float(d))
+                        )
                 pending = None
 
         last_close = np.where(np.isnan(closes[t]), last_close, closes[t])
@@ -119,7 +124,6 @@ def simulate(
 
         if not np.isnan(targets[t]).all():
             pending = targets[t].copy()
-            pending_mask = np.ones(n_names, dtype=bool)
 
     return Ledger(
         nav=nav,

@@ -113,17 +113,61 @@ def test_weights_below_one_leave_cash() -> None:
     assert ledger.cash.min() >= 0
 
 
-def test_missing_open_defers_that_name_only() -> None:
+def test_missing_open_makes_the_whole_decision_wait() -> None:
     opens = [[10, 20, 1], [10, NAN, 1], [10, 25, 1]]
     closes = [[10, 20, 1], [10, 21, 1], [10, 26, 1]]
     targets = _targets([[0.5, 0.5, 0], None, None], 3)
     ledger = simulate(targets, _inputs(opens, closes), 0)
-    np.testing.assert_allclose(ledger.holdings[1], [5_000, 0, 0], atol=TOL)
-    np.testing.assert_allclose(ledger.cash[1], 50_000, atol=TOL)
-    # Session 2: the deferred half fills at 25 from the cash held back.
+    # Session 1: S1 has no open, so nothing fills and capital stays in cash.
+    np.testing.assert_allclose(ledger.holdings[1], [0, 0, 0], atol=TOL)
+    np.testing.assert_allclose(ledger.cash[1], CAP, atol=TOL)
+    # Session 2: both halves fill together.
     np.testing.assert_allclose(ledger.holdings[2], [5_000, 50_000 / 25, 0], atol=TOL)
     np.testing.assert_allclose(ledger.nav[2], 5_000 * 10 + 2_000 * 26, atol=TOL)
     assert ledger.deferred_fills[1] == 1
+
+
+def test_a_sale_waiting_for_an_open_never_borrows() -> None:
+    # Hold S0 fully, then rotate into S1 on a session where S0 has no open.
+    opens = [[10, 20, 1], [10, 20, 1], [NAN, 20, 1], [10, 20, 1]]
+    closes = [[10, 20, 1], [10, 20, 1], [10, 20, 1], [10, 20, 1]]
+    targets = _targets([[1, 0, 0], [0, 1, 0], None, None], 3)
+    ledger = simulate(targets, _inputs(opens, closes), 0)
+    np.testing.assert_allclose(ledger.holdings[2], [CAP / 10, 0, 0], atol=TOL)
+    np.testing.assert_allclose(ledger.holdings[3], [0, CAP / 20, 0], atol=TOL)
+    assert ledger.cash.min() >= -TOL
+    assert ledger.deferred_fills[0] == 1
+
+
+def test_random_gaps_never_borrow_or_go_short() -> None:
+    rng = np.random.default_rng(7)
+    n_sessions, n_names = 120, 5
+    prices = 50 * np.exp(np.cumsum(rng.normal(0, 0.02, (n_sessions, n_names)), axis=0))
+    opens = prices * np.exp(rng.normal(0, 0.005, prices.shape))
+    opens[rng.random(prices.shape) < 0.08] = NAN
+    rows: list[list[float] | None] = []
+    for _ in range(n_sessions):
+        if rng.random() < 0.3:
+            w = rng.random(n_names) * (rng.random(n_names) < 0.6)
+            rows.append(list(w / max(w.sum(), 1.0)))
+        else:
+            rows.append(None)
+    ledger = simulate(
+        _targets(rows, n_names), _inputs(opens.tolist(), prices.tolist()), 25
+    )
+    assert ledger.cash.min() >= -1e-6
+    assert ledger.holdings.min() >= -1e-9
+
+
+def test_trades_can_be_skipped_without_changing_any_value() -> None:
+    opens = [[10, 20, 1], [10, 20, 1], [12, 18, 1], [11, 19, 1]]
+    closes = [[10, 20, 1], [11, 19, 1], [12, 18, 1], [11, 20, 1]]
+    targets = _targets([[1, 0, 0], [0, 1, 0], [0.5, 0.5, 0], None], 3)
+    full = simulate(targets, _inputs(opens, closes), 10)
+    lean = simulate(targets, _inputs(opens, closes), 10, record_trades=False)
+    assert full.trades and lean.trades == []
+    for field in ("nav", "gross_nav", "cash", "traded", "costs"):
+        np.testing.assert_array_equal(getattr(lean, field), getattr(full, field))
 
 
 def test_missing_close_values_at_the_last_close() -> None:
@@ -143,7 +187,8 @@ def test_name_without_any_price_yet_cannot_be_bought() -> None:
     closes = [[NAN, 10, 1], [NAN, 10, 1], [20, 10, 1]]
     targets = _targets([[0.5, 0.5, 0], None, None], 3)
     ledger = simulate(targets, _inputs(opens, closes), 0)
-    np.testing.assert_allclose(ledger.holdings[1], [0, 5_000, 0], atol=TOL)
+    # The decision waits until every name it holds has an open.
+    np.testing.assert_allclose(ledger.holdings[1], [0, 0, 0], atol=TOL)
     np.testing.assert_allclose(ledger.holdings[2], [50_000 / 20, 5_000, 0], atol=TOL)
 
 
