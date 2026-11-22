@@ -172,12 +172,12 @@ def _tiingo(s: Settings) -> object | None:
     )
 
 
-@lru_cache(maxsize=1)
 def history_provider(market: object | None) -> HistoryProvider | None:
     """The configured market provider, when it can serve simulation history."""
     return market if isinstance(market, HistoryProvider) else None
 
 
+@lru_cache(maxsize=1)
 def default_registry() -> ProviderRegistry:
     registry = ProviderRegistry()
     registry.register("market", "alpaca", _alpaca_market)

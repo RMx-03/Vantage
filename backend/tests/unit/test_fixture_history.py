@@ -57,3 +57,10 @@ def test_history_provider_is_the_market_provider_when_it_supports_history() -> N
     assert history_provider(alpaca) is alpaca
     assert history_provider(None) is None
     assert history_provider(object()) is None
+
+
+def test_the_default_registry_stays_cached_and_history_lookup_does_not() -> None:
+    from app.providers.registry import default_registry, history_provider
+
+    assert default_registry() is default_registry()
+    assert not hasattr(history_provider, "cache_clear")
