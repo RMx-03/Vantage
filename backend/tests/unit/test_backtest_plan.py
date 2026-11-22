@@ -1,7 +1,10 @@
-from datetime import date
+from datetime import date, timedelta
 
-from app.backtest.plan import plan_experiment
+import pytest
+
+from app.backtest.plan import PlanRangeError, fetch_warmup, plan_experiment
 from app.domain.experiments import SURVIVORSHIP_LABEL, ExperimentSpec
+from app.services.sessions import XNYS
 
 
 def _spec(**extra: object) -> ExperimentSpec:
@@ -60,3 +63,45 @@ def test_plan_resolves_a_missing_end_to_the_given_session() -> None:
         ExperimentSpec.model_validate(raw), default_end=date(2024, 12, 31)
     )
     assert plan.end == date(2024, 12, 31)
+
+
+def _range_spec(start: date, end: date, **strategy: object) -> ExperimentSpec:
+    return ExperimentSpec(
+        question="Does the plan explain an unusable range?",
+        symbols=["AAA", "BBB", "CCC"],
+        start=start,
+        end=end,
+        strategy=strategy or {"template": "buy_and_hold"},
+    )
+
+
+def test_a_range_without_sessions_is_explained() -> None:
+    # Good Friday to Easter Sunday 2024: no trading session at all.
+    with pytest.raises(PlanRangeError, match="no trading sessions"):
+        plan_experiment(_range_spec(date(2024, 3, 29), date(2024, 3, 31)))
+
+
+def test_a_start_before_the_calendar_is_explained() -> None:
+    first = XNYS.first_session.date()
+    with pytest.raises(PlanRangeError, match="on or after"):
+        plan_experiment(
+            _range_spec(first - timedelta(days=400), first + timedelta(days=30))
+        )
+
+
+def test_a_start_without_room_for_warm_up_names_the_earliest_start() -> None:
+    first = XNYS.first_session.date()
+    spec = _range_spec(
+        first + timedelta(days=10),
+        first + timedelta(days=900),
+        template="momentum_top_k",
+        lookback=252,
+        k=2,
+    )
+    earliest = XNYS.sessions[fetch_warmup(spec)].date()
+    with pytest.raises(PlanRangeError, match=earliest.isoformat()):
+        plan_experiment(spec)
+    assert (
+        plan_experiment(spec.model_copy(update={"start": earliest})).fetch_start
+        == first
+    )

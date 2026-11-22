@@ -8,6 +8,10 @@ from app.domain.experiments import SURVIVORSHIP_LABEL, ExperimentPlan, Experimen
 from app.services.sessions import XNYS
 
 
+class PlanRangeError(ValueError):
+    """The dates cannot be simulated; the message is safe to show a user."""
+
+
 def fetch_warmup(spec: ExperimentSpec) -> int:
     """Sessions fetched before ``start`` so the first decision has full history."""
     return max(1, *(warmup_sessions(p) for p in (spec.strategy, *spec.candidates)))
@@ -19,8 +23,20 @@ def plan_experiment(
     end = spec.end or default_end
     if end is None:
         raise ValueError("an end session is required")
-    sessions = XNYS.sessions_in_range(spec.start, end)
     warmup = fetch_warmup(spec)
+    # The XNYS calendar covers about the last 20 years; warm-up needs room inside it.
+    earliest = XNYS.sessions[warmup].date()
+    if spec.start < earliest:
+        raise PlanRangeError(
+            f"The start date must be on or after {earliest.isoformat()}: the trading "
+            f"calendar covers about the last 20 years, and this strategy needs "
+            f"{warmup} session{'' if warmup == 1 else 's'} of history before the start."
+        )
+    sessions = XNYS.sessions_in_range(spec.start, end)
+    if len(sessions) == 0:
+        raise PlanRangeError(
+            "There are no trading sessions between the start and end dates."
+        )
     fetch_start = XNYS.sessions_window(sessions[0], -(warmup + 1))[0].date()
     n_candidates = len(spec.candidates)
     windows = (
